@@ -22,8 +22,9 @@ function normalise(str) {
   return str
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[\u00bf\u00a1]/g, '')
     .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
     .trim()
 }
 
