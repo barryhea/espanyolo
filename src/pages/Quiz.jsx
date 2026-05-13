@@ -18,9 +18,20 @@ function levenshtein(a, b) {
   return dp[m][n]
 }
 
+function normalise(str) {
+  return str
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function fuzzyMatch(typed, correct) {
-  const a = typed.trim().toLowerCase()
-  const b = correct.trim().toLowerCase()
+  const a = normalise(typed)
+  const b = normalise(correct)
   if (a === b) return true
   const maxLen = Math.max(a.length, b.length)
   if (maxLen === 0) return true
@@ -144,14 +155,22 @@ export default function Quiz() {
     const progMap = {}
     const hiddenWordIds = new Set()
     for (const p of progress ?? []) {
-      progMap[p.word_id] = {
-        stage: p.stage ?? 1,
-        consecutive_correct: p.consecutive_correct ?? 0,
-        hidden: p.hidden ?? false,
-        db_id: p.id,
+      const existing = progMap[p.word_id]
+      // If duplicate rows exist (missing unique constraint), keep the most advanced
+      if (!existing || p.stage > existing.stage ||
+          (p.stage === existing.stage && p.consecutive_correct > existing.consecutive_correct)) {
+        progMap[p.word_id] = {
+          stage: p.stage ?? 1,
+          consecutive_correct: p.consecutive_correct ?? 0,
+          hidden: p.hidden ?? false,
+          db_id: p.id,
+        }
       }
       if (p.hidden) hiddenWordIds.add(p.word_id)
     }
+    console.log('[loadQuiz] progress loaded:', Object.fromEntries(
+      Object.entries(progMap).map(([id, p]) => [id, `S${p.stage} C${p.consecutive_correct}`])
+    ))
     progressRef.current = progMap
     setHiddenWords(hiddenWordIds)
 
@@ -179,20 +198,28 @@ export default function Quiz() {
   async function saveProgress(wordId) {
     const prog = progressRef.current[wordId]
     if (!prog) return
-    const payload = {
-      user_id: user.id,
-      word_id: wordId,
-      stage: prog.stage,
-      consecutive_correct: prog.consecutive_correct,
-      hidden: prog.hidden ?? false,
+    const { stage, consecutive_correct, hidden, db_id } = prog
+    console.log('[saveProgress]', { wordId, stage, consecutive_correct, db_id: db_id ?? 'none' })
+
+    if (db_id) {
+      const { error } = await supabase
+        .from('user_word_progress')
+        .update({ stage, consecutive_correct, hidden: hidden ?? false })
+        .eq('id', db_id)
+      if (error) console.error('[saveProgress] UPDATE error', error)
+      else console.log('[saveProgress] UPDATE ok → stage', stage, 'consec', consecutive_correct)
+    } else {
+      const { data, error } = await supabase
+        .from('user_word_progress')
+        .insert({ user_id: user.id, word_id: wordId, stage, consecutive_correct, hidden: hidden ?? false })
+        .select('id')
+        .single()
+      if (error) console.error('[saveProgress] INSERT error', error)
+      else {
+        console.log('[saveProgress] INSERT ok → id', data.id, 'stage', stage, 'consec', consecutive_correct)
+        progressRef.current[wordId] = { ...prog, db_id: data.id }
+      }
     }
-    const { data, error } = await supabase
-      .from('user_word_progress')
-      .upsert(payload, { onConflict: 'user_id,word_id' })
-      .select('id')
-      .single()
-    if (error) console.error('[saveProgress] upsert error', error)
-    if (data) progressRef.current[wordId] = { ...prog, db_id: data.id }
   }
 
   async function toggleHidden(wordId) {
@@ -230,19 +257,24 @@ export default function Quiz() {
     const wordId = question.word.id
     const prog = progressRef.current[wordId] ?? { stage: 1, consecutive_correct: 0, hidden: false, db_id: null }
 
+    let newProg
     if (correct) {
       const newConsec = prog.consecutive_correct + 1
       const threshold = prog.stage === 1 ? 3 : 5
       if (newConsec >= threshold && prog.stage < 3) {
-        progressRef.current[wordId] = { ...prog, stage: prog.stage + 1, consecutive_correct: 0 }
+        newProg = { ...prog, stage: prog.stage + 1, consecutive_correct: 0 }
+        console.log(`[handleAnswer] word ${wordId} GRADUATED S${prog.stage} → S${prog.stage + 1}`)
       } else {
-        progressRef.current[wordId] = { ...prog, consecutive_correct: newConsec }
+        newProg = { ...prog, consecutive_correct: newConsec }
+        console.log(`[handleAnswer] word ${wordId} correct — S${prog.stage} consec ${prog.consecutive_correct} → ${newConsec} (need ${threshold})`)
       }
     } else {
-      progressRef.current[wordId] = { ...prog, consecutive_correct: 0 }
+      newProg = { ...prog, consecutive_correct: 0 }
+      console.log(`[handleAnswer] word ${wordId} incorrect — S${prog.stage} consec reset to 0`)
     }
 
-    saveProgress(wordId)
+    progressRef.current[wordId] = newProg
+    saveProgress(wordId)  // async, runs in background while feedback shows
     setIsCorrect(correct)
     setSelectedOption(answer)
     setResults(r => [...r, { word: question.word, correct, stage: question.stage }])
