@@ -459,7 +459,7 @@ export default function Quiz() {
                 value={typedAnswer}
                 onChange={e => setTypedAnswer(e.target.value)}
                 onKeyDown={e => {
-                  if (e.key === 'Enter' && phase === 'question' && typedAnswer.trim()) {
+                  if (e.key === 'Enter' && phase === 'question') {
                     handleAnswer(typedAnswer)
                   }
                 }}
@@ -469,11 +469,10 @@ export default function Quiz() {
               />
               {phase === 'question' && (
                 <button
-                  style={{ ...styles.primaryBtn, opacity: typedAnswer.trim() ? 1 : 0.4 }}
-                  onClick={() => typedAnswer.trim() && handleAnswer(typedAnswer)}
-                  disabled={!typedAnswer.trim()}
+                  style={typedAnswer.trim() ? styles.primaryBtn : styles.passBtn}
+                  onClick={() => handleAnswer(typedAnswer)}
                 >
-                  Check
+                  {typedAnswer.trim() ? 'Check' : 'Pass'}
                 </button>
               )}
             </div>
@@ -620,6 +619,17 @@ const styles = {
     fontWeight: 600,
     backgroundColor: '#3b82f6',
     color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    alignSelf: 'flex-start',
+  },
+  passBtn: {
+    padding: '0.75rem 1.25rem',
+    fontSize: '1rem',
+    fontWeight: 600,
+    backgroundColor: '#f3f4f6',
+    color: '#6b7280',
     border: 'none',
     borderRadius: '8px',
     cursor: 'pointer',
