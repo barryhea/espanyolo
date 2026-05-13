@@ -262,7 +262,7 @@ export default function Quiz() {
     let newProg
     if (correct) {
       const newConsec = prog.consecutive_correct + 1
-      const threshold = prog.stage === 1 ? 3 : 5
+      const threshold = 3
       if (newConsec >= threshold && prog.stage < 3) {
         newProg = { ...prog, stage: prog.stage + 1, consecutive_correct: 0, consecutive_incorrect: 0 }
         console.log(`[handleAnswer] word ${wordId} GRADUATED S${prog.stage} → S${prog.stage + 1}`)
