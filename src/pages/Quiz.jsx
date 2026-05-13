@@ -67,9 +67,12 @@ function buildQuestion(word, allWords, progressMap) {
   const stage = progressMap[word.id]?.stage ?? 1
   if (stage === 1 && allWords.length >= 4) {
     const options = shuffle([word.spanish, ...pickDistractors(word, allWords)])
-    return { type: 'mc', word, options, correct: word.spanish, stage }
+    return { type: 'mc', word, options, prompt: word.english, promptLabel: 'What is the Spanish for:', correct: word.spanish, stage }
   }
-  return { type: 'typed', word, correct: word.spanish, stage }
+  if (stage === 2) {
+    return { type: 'typed', word, prompt: word.spanish, promptLabel: 'What is the English for:', correct: word.english, stage }
+  }
+  return { type: 'typed', word, prompt: word.english, promptLabel: 'What is the Spanish for:', correct: word.spanish, stage }
 }
 
 function EyeSlashIcon() {
@@ -416,8 +419,8 @@ export default function Quiz() {
 
         <div style={styles.card}>
           <p style={styles.stageLabel}>Stage {question.stage}</p>
-          <p style={styles.prompt}>What is the Spanish for:</p>
-          <p style={styles.word}>{question.word.english}</p>
+          <p style={styles.prompt}>{question.promptLabel}</p>
+          <p style={styles.word}>{question.prompt}</p>
 
           {question.type === 'mc' && (
             <div style={styles.optionGrid}>
