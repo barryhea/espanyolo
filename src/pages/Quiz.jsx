@@ -165,6 +165,7 @@ export default function Quiz() {
           consecutive_correct: p.consecutive_correct ?? 0,
           hidden: p.hidden ?? false,
           db_id: p.id,
+          consecutive_incorrect: 0,
         }
       }
       if (p.hidden) hiddenWordIds.add(p.word_id)
@@ -263,15 +264,21 @@ export default function Quiz() {
       const newConsec = prog.consecutive_correct + 1
       const threshold = prog.stage === 1 ? 3 : 5
       if (newConsec >= threshold && prog.stage < 3) {
-        newProg = { ...prog, stage: prog.stage + 1, consecutive_correct: 0 }
+        newProg = { ...prog, stage: prog.stage + 1, consecutive_correct: 0, consecutive_incorrect: 0 }
         console.log(`[handleAnswer] word ${wordId} GRADUATED S${prog.stage} → S${prog.stage + 1}`)
       } else {
-        newProg = { ...prog, consecutive_correct: newConsec }
+        newProg = { ...prog, consecutive_correct: newConsec, consecutive_incorrect: 0 }
         console.log(`[handleAnswer] word ${wordId} correct — S${prog.stage} consec ${prog.consecutive_correct} → ${newConsec} (need ${threshold})`)
       }
     } else {
-      newProg = { ...prog, consecutive_correct: 0 }
-      console.log(`[handleAnswer] word ${wordId} incorrect — S${prog.stage} consec reset to 0`)
+      const newConsecIncorrect = (prog.consecutive_incorrect ?? 0) + 1
+      if (prog.stage === 2 && newConsecIncorrect >= 2) {
+        newProg = { ...prog, stage: 1, consecutive_correct: 0, consecutive_incorrect: 0 }
+        console.log(`[handleAnswer] word ${wordId} REGRESSED S2 → S1 (2 consecutive incorrect)`)
+      } else {
+        newProg = { ...prog, consecutive_correct: 0, consecutive_incorrect: newConsecIncorrect }
+        console.log(`[handleAnswer] word ${wordId} incorrect — S${prog.stage} consec_correct reset, consec_incorrect: ${newConsecIncorrect}`)
+      }
     }
 
     progressRef.current[wordId] = newProg
