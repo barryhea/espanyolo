@@ -20,12 +20,10 @@ function levenshtein(a, b) {
 
 function normalise(str) {
   return str
-    .trim()
-    .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s]/g, '')
-    .replace(/\s+/g, ' ')
+    .replace(/[\u00bf\u00a1]/g, '')
+    .toLowerCase()
     .trim()
 }
 
