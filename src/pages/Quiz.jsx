@@ -30,10 +30,10 @@ function normalise(str) {
 function fuzzyMatch(typed, correct) {
   const a = normalise(typed)
   const b = normalise(correct)
-  if (a === b) return true
+  if (a === b) return 'exact'
   const maxLen = Math.max(a.length, b.length)
-  if (maxLen === 0) return true
-  return (1 - levenshtein(a, b) / maxLen) >= 0.9
+  if (maxLen === 0) return 'exact'
+  return (1 - levenshtein(a, b) / maxLen) >= 0.9 ? 'close' : 'wrong'
 }
 
 function shuffle(arr) {
@@ -119,7 +119,7 @@ export default function Quiz() {
   const [question, setQuestion] = useState(null)
   const [selectedOption, setSelectedOption] = useState(null)
   const [typedAnswer, setTypedAnswer] = useState('')
-  const [isCorrect, setIsCorrect] = useState(null)
+  const [matchResult, setMatchResult] = useState(null)
   const [results, setResults] = useState([])
   const [hiddenWords, setHiddenWords] = useState(new Set())
 
@@ -186,7 +186,7 @@ export default function Quiz() {
     setResults([])
     setSelectedOption(null)
     setTypedAnswer('')
-    setIsCorrect(null)
+    setMatchResult(null)
 
     if (!sess.length) {
       setPhase('empty')
@@ -255,12 +255,13 @@ export default function Quiz() {
   }
 
   function handleAnswer(answer) {
-    const correct = fuzzyMatch(answer, question.correct)
+    const result = fuzzyMatch(answer, question.correct)
+    const isCorrect = result !== 'wrong'
     const wordId = question.word.id
     const prog = progressRef.current[wordId] ?? { stage: 1, consecutive_correct: 0, hidden: false, db_id: null }
 
     let newProg
-    if (correct) {
+    if (isCorrect) {
       const newConsec = prog.consecutive_correct + 1
       const threshold = 3
       if (newConsec >= threshold && prog.stage < 3) {
@@ -283,9 +284,9 @@ export default function Quiz() {
 
     progressRef.current[wordId] = newProg
     saveProgress(wordId)  // async, runs in background while feedback shows
-    setIsCorrect(correct)
+    setMatchResult(result)
     setSelectedOption(answer)
-    setResults(r => [...r, { word: question.word, correct, stage: question.stage }])
+    setResults(r => [...r, { word: question.word, correct: isCorrect, result, stage: question.stage }])
     setPhase('feedback')
   }
 
@@ -299,7 +300,7 @@ export default function Quiz() {
     setQuestion(buildQuestion(session[nextIdx], allWords, progressRef.current))
     setSelectedOption(null)
     setTypedAnswer('')
-    setIsCorrect(null)
+    setMatchResult(null)
     setPhase('question')
   }
 
@@ -343,7 +344,7 @@ export default function Quiz() {
 
   if (phase === 'summary') {
     const correctCount = results.filter(r => r.correct).length
-    const resultByWordId = Object.fromEntries(results.map(r => [r.word.id, r.correct]))
+    const resultByWordId = Object.fromEntries(results.map(r => [r.word.id, r.result]))
     return (
       <div style={styles.page}>
         <header style={styles.header}>
@@ -381,8 +382,8 @@ export default function Quiz() {
                   const s2done = stage >= 3
                   const s3done = stage === 3 && consec >= 5
                   const isHidden = hiddenWords.has(word.id)
-                  const wasCorrect = resultByWordId[word.id]
-                  const textColor = wasCorrect === true ? '#16a34a' : wasCorrect === false ? '#dc2626' : '#333'
+                  const wordResult = resultByWordId[word.id]
+                  const textColor = wordResult === 'exact' ? '#16a34a' : wordResult === 'close' ? '#d97706' : wordResult === 'wrong' ? '#dc2626' : '#333'
                   return (
                     <tr key={word.id} style={styles.tableRow}>
                       <td style={{ ...styles.tdEn, color: textColor }}>{word.english}</td>
@@ -479,9 +480,15 @@ export default function Quiz() {
           )}
 
           {phase === 'feedback' && (
-            <div style={{ ...styles.feedbackBanner, backgroundColor: isCorrect ? '#dcfce7' : '#fee2e2' }}>
-              <span style={{ color: isCorrect ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
-                {isCorrect ? 'Correct!' : `Incorrect — ${question.correct}`}
+            <div style={{
+              ...styles.feedbackBanner,
+              backgroundColor: matchResult === 'exact' ? '#dcfce7' : matchResult === 'close' ? '#fef3c7' : '#fee2e2',
+            }}>
+              <span style={{
+                color: matchResult === 'exact' ? '#16a34a' : matchResult === 'close' ? '#d97706' : '#dc2626',
+                fontWeight: 600,
+              }}>
+                {matchResult === 'exact' ? 'Correct!' : matchResult === 'close' ? `Close — ${question.correct}` : `Incorrect — ${question.correct}`}
               </span>
               <button style={styles.nextBtn} onClick={handleNext}>
                 {currentIdx + 1 >= session.length ? 'Finish' : 'Next →'}
