@@ -57,9 +57,9 @@ function buildSession(words, progressMap) {
     byStage[stage].push(word)
   }
   return [
-    ...shuffle(byStage[1]),
-    ...shuffle(byStage[2]),
     ...shuffle(byStage[3]),
+    ...shuffle(byStage[2]),
+    ...shuffle(byStage[1]),
   ].slice(0, 5)
 }
 
