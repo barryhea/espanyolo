@@ -362,7 +362,35 @@ export default function Dashboard() {
               <div style={styles.modalBody}>
                 {modalLoading
                   ? <p style={styles.emptyMsg}>Loading…</p>
-                  : <WordTable words={modalWords} progressMap={modalProgress} onToggleHidden={toggleHiddenInModal} />
+                  : (() => {
+                      const masteredWords = modalWords.filter(w => {
+                        const p = modalProgress[w.id]
+                        return (p?.mastered) || (p?.stage === 3 && (p?.consecutive_correct ?? 0) >= 5)
+                      })
+                      const hiddenWords = modalWords.filter(w => modalProgress[w.id]?.hidden)
+                      const sortedWords = [...modalWords].sort((a, b) => {
+                        const rank = w => {
+                          const p = modalProgress[w.id]
+                          const stage = p?.stage ?? 1
+                          const consec = p?.consecutive_correct ?? 0
+                          if ((p?.mastered) || (stage === 3 && consec >= 5) || p?.hidden) return 0
+                          if (stage >= 3) return 1
+                          if (stage >= 2) return 2
+                          return 3
+                        }
+                        const diff = rank(a) - rank(b)
+                        if (diff !== 0) return diff
+                        return a.english.localeCompare(b.english)
+                      })
+                      return (
+                        <>
+                          <p style={styles.progressSummary}>
+                            {modalWords.length} words · {masteredWords.length} mastered · {hiddenWords.length} hidden
+                          </p>
+                          <WordTable words={sortedWords} progressMap={modalProgress} onToggleHidden={toggleHiddenInModal} />
+                        </>
+                      )
+                    })()
                 }
               </div>
             )}
@@ -650,6 +678,13 @@ const styles = {
     padding: '1.5rem',
     color: '#888',
     fontSize: '0.9rem',
+  },
+  progressSummary: {
+    margin: 0,
+    padding: '0.65rem 1rem',
+    fontSize: '0.78rem',
+    color: '#888',
+    borderBottom: '1px solid #f0f0f0',
   },
 
   // Word table (shared by Progress and Hidden views)
