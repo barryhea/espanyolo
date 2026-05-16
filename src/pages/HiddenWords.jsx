@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
+import NavBar from '../components/NavBar'
 
 function EyeIcon() {
   return (
@@ -43,9 +44,7 @@ export default function HiddenWords() {
 
   return (
     <div style={styles.page}>
-      <header style={styles.header}>
-        <h1 style={styles.logo}>espanyolo</h1>
-      </header>
+      <NavBar />
       <main style={styles.main}>
         <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back to themes</button>
         <h2 style={styles.title}>Hidden Words</h2>
@@ -96,19 +95,6 @@ const styles = {
     minHeight: '100vh',
     backgroundColor: '#f8f8f6',
     fontFamily: 'system-ui, sans-serif',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '1rem 2rem',
-    borderBottom: '1px solid #e5e5e5',
-    backgroundColor: '#fff',
-  },
-  logo: {
-    margin: 0,
-    fontSize: '1.4rem',
-    fontWeight: 700,
-    letterSpacing: '-0.5px',
   },
   main: {
     maxWidth: '780px',

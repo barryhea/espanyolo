@@ -1,26 +1,12 @@
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../utils/supabaseClient'
-import { useAuth } from '../hooks/useAuth'
+import NavBar from '../components/NavBar'
 
 export default function Home() {
-  const { user } = useAuth()
   const navigate = useNavigate()
-
-  async function handleSignOut() {
-    await supabase.auth.signOut()
-    navigate('/login', { replace: true })
-  }
 
   return (
     <div style={styles.page}>
-      <header style={styles.header}>
-        <h1 style={styles.logo}>espanyolo</h1>
-        <div style={styles.headerRight}>
-          <span style={styles.email}>{user?.email}</span>
-          <button style={styles.signOutBtn} onClick={handleSignOut}>Sign out</button>
-        </div>
-      </header>
-
+      <NavBar />
       <main style={styles.main}>
         <h2 style={styles.heading}>What would you like to practise?</h2>
         <div style={styles.cardRow}>
@@ -43,37 +29,6 @@ const styles = {
     minHeight: '100vh',
     backgroundColor: '#f8f8f6',
     fontFamily: 'system-ui, sans-serif',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '1rem 2rem',
-    borderBottom: '1px solid #e5e5e5',
-    backgroundColor: '#fff',
-  },
-  logo: {
-    margin: 0,
-    fontSize: '1.4rem',
-    fontWeight: 700,
-    letterSpacing: '-0.5px',
-  },
-  headerRight: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1rem',
-  },
-  email: {
-    fontSize: '0.85rem',
-    color: '#666',
-  },
-  signOutBtn: {
-    padding: '0.35rem 0.85rem',
-    fontSize: '0.85rem',
-    border: '1px solid #ccc',
-    borderRadius: '6px',
-    background: '#fff',
-    cursor: 'pointer',
   },
   main: {
     maxWidth: '700px',

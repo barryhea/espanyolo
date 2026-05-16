@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
-import { VOCAB_THEMES } from '../utils/courseData'
 import NavBar from '../components/NavBar'
 
 function levenshtein(a, b) {
@@ -51,19 +50,6 @@ function pickDistractors(word, allWords, count = 3) {
   return pool.slice(0, count).map(w => w.spanish)
 }
 
-function buildSession(words, progressMap) {
-  const byStage = { 1: [], 2: [], 3: [] }
-  for (const word of words) {
-    const stage = progressMap[word.id]?.stage ?? 1
-    byStage[stage].push(word)
-  }
-  return [
-    ...shuffle(byStage[3]),
-    ...shuffle(byStage[2]),
-    ...shuffle(byStage[1]),
-  ].slice(0, 5)
-}
-
 function buildQuestion(word, allWords, progressMap) {
   const stage = progressMap[word.id]?.stage ?? 1
   if (stage === 1 && allWords.length >= 4) {
@@ -76,46 +62,38 @@ function buildQuestion(word, allWords, progressMap) {
   return { type: 'typed', word, prompt: word.english, promptLabel: 'What is the Spanish for:', correct: word.spanish, placeholder: 'Type the Spanish word…', stage }
 }
 
-function EyeSlashIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-      <line x1="1" y1="1" x2="23" y2="23" />
-    </svg>
-  )
+function buildCustomSession(words, progressMap) {
+  const target = Math.min(20, Math.max(5, words.length))
+  const byStage = { 1: [], 2: [], 3: [] }
+  for (const word of words) {
+    const stage = Math.max(1, Math.min(3, progressMap[word.id]?.stage ?? 1))
+    byStage[stage].push(word)
+  }
+  const ordered = [
+    ...shuffle(byStage[3]),
+    ...shuffle(byStage[2]),
+    ...shuffle(byStage[1]),
+  ]
+  if (!ordered.length) return []
+  const session = []
+  let i = 0
+  while (session.length < target) {
+    session.push(ordered[i % ordered.length])
+    i++
+  }
+  return session
 }
 
-function EyeIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  )
-}
-
-function StageCell({ done }) {
-  return (
-    <td style={styles.stageCell}>
-      <span style={{ color: done ? '#16a34a' : '#d1d5db', fontWeight: 700 }}>
-        {done ? '✓' : '✗'}
-      </span>
-    </td>
-  )
-}
-
-export default function Quiz() {
-  const { themeId } = useParams()
+export default function CustomQuiz() {
+  const location = useLocation()
   const navigate = useNavigate()
   const { user } = useAuth()
 
-  const theme = VOCAB_THEMES.find(t => t.id === Number(themeId))
+  const words = location.state?.words ?? []
   const progressRef = useRef({})
   const inputRef = useRef(null)
 
   const [phase, setPhase] = useState('loading')
-  const [allWords, setAllWords] = useState([])
   const [session, setSession] = useState([])
   const [currentIdx, setCurrentIdx] = useState(0)
   const [question, setQuestion] = useState(null)
@@ -123,34 +101,18 @@ export default function Quiz() {
   const [typedAnswer, setTypedAnswer] = useState('')
   const [matchResult, setMatchResult] = useState(null)
   const [results, setResults] = useState([])
-  const [hiddenWords, setHiddenWords] = useState(new Set())
 
   useEffect(() => {
-    if (theme && user) loadQuiz()
-  }, [theme?.id, user?.id])
+    if (user && words.length) loadCustomQuiz()
+    else if (user && !words.length) setPhase('error')
+  }, [user?.id])
 
   useEffect(() => {
     if (question?.type === 'typed') inputRef.current?.focus({ preventScroll: true })
   }, [question])
 
-  async function ensureProfile() {
-    await supabase
-      .from('profiles')
-      .upsert({ id: user.id, email: user.email }, { onConflict: 'id' })
-  }
-
-  async function loadQuiz() {
+  async function loadCustomQuiz() {
     setPhase('loading')
-    await ensureProfile()
-    const { data: words, error } = await supabase
-      .from('words')
-      .select('id, english, spanish')
-      .eq('theme', theme.title)
-
-    if (error || !words?.length) {
-      setPhase('error')
-      return
-    }
 
     const wordIds = words.map(w => w.id)
     const { data: progress } = await supabase
@@ -160,8 +122,6 @@ export default function Quiz() {
       .in('word_id', wordIds)
 
     const progMap = {}
-    const hiddenWordIds = new Set()
-    const masteredWordIds = new Set()
     for (const p of progress ?? []) {
       const existing = progMap[p.word_id]
       if (!existing || p.stage > existing.stage ||
@@ -175,19 +135,11 @@ export default function Quiz() {
           consecutive_incorrect: 0,
         }
       }
-      if (p.hidden) hiddenWordIds.add(p.word_id)
-      if (p.mastered) masteredWordIds.add(p.word_id)
     }
-    console.log('[loadQuiz] progress loaded:', Object.fromEntries(
-      Object.entries(progMap).map(([id, p]) => [id, `S${p.stage} C${p.consecutive_correct} M${p.mastered}`])
-    ))
+
     progressRef.current = progMap
-    setHiddenWords(hiddenWordIds)
+    const sess = buildCustomSession(words, progMap)
 
-    const visibleWords = words.filter(w => !hiddenWordIds.has(w.id) && !masteredWordIds.has(w.id))
-    const sess = buildSession(visibleWords, progMap)
-
-    setAllWords(words)
     setSession(sess)
     setCurrentIdx(0)
     setResults([])
@@ -208,94 +160,48 @@ export default function Quiz() {
     const prog = progressRef.current[wordId]
     if (!prog) return
     const { stage, consecutive_correct, hidden, mastered, db_id } = prog
-    console.log('[saveProgress]', { wordId, stage, consecutive_correct, mastered, db_id: db_id ?? 'none' })
 
     if (db_id) {
-      const { error } = await supabase
+      await supabase
         .from('user_word_progress')
         .update({ stage, consecutive_correct, hidden: hidden ?? false, mastered: mastered ?? false })
         .eq('id', db_id)
-      if (error) console.error('[saveProgress] UPDATE error', error)
-      else console.log('[saveProgress] UPDATE ok → stage', stage, 'consec', consecutive_correct, 'mastered', mastered)
     } else {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('user_word_progress')
-        .insert({ user_id: user.id, word_id: wordId, stage, consecutive_correct, hidden: hidden ?? false, mastered: mastered ?? false })
+        .insert({ user_id: user.id, word_id: wordId, stage, consecutive_correct, hidden: false, mastered: false })
         .select('id')
         .single()
-      if (error) console.error('[saveProgress] INSERT error', error)
-      else {
-        console.log('[saveProgress] INSERT ok → id', data.id, 'stage', stage, 'consec', consecutive_correct)
-        progressRef.current[wordId] = { ...prog, db_id: data.id }
-      }
+      if (data) progressRef.current[wordId] = { ...prog, db_id: data.id }
     }
-  }
-
-  async function toggleHidden(wordId) {
-    const willBeHidden = !hiddenWords.has(wordId)
-
-    setHiddenWords(prev => {
-      const next = new Set(prev)
-      willBeHidden ? next.add(wordId) : next.delete(wordId)
-      return next
-    })
-
-    const prog = progressRef.current[wordId]
-    progressRef.current[wordId] = { ...(prog ?? { stage: 1, consecutive_correct: 0, mastered: false, db_id: null }), hidden: willBeHidden }
-
-    const currentProg = progressRef.current[wordId]
-    const { data } = await supabase
-      .from('user_word_progress')
-      .upsert(
-        {
-          user_id: user.id,
-          word_id: wordId,
-          stage: currentProg?.stage ?? 1,
-          consecutive_correct: currentProg?.consecutive_correct ?? 0,
-          hidden: willBeHidden,
-          mastered: currentProg?.mastered ?? false,
-        },
-        { onConflict: 'user_id,word_id' }
-      )
-      .select('id')
-      .single()
-    if (data) progressRef.current[wordId] = { ...progressRef.current[wordId], db_id: data.id }
   }
 
   function handleAnswer(answer) {
     const result = fuzzyMatch(answer, question.correct)
     const isCorrect = result !== 'wrong'
     const wordId = question.word.id
-    const prog = progressRef.current[wordId] ?? { stage: 1, consecutive_correct: 0, hidden: false, db_id: null }
+    const prog = progressRef.current[wordId] ?? { stage: 1, consecutive_correct: 0, hidden: false, db_id: null, consecutive_incorrect: 0 }
 
     let newProg
     if (isCorrect) {
       const newConsec = prog.consecutive_correct + 1
-      const threshold = 3
-      if (newConsec >= threshold && prog.stage < 3) {
+      if (newConsec >= 3 && prog.stage < 3) {
         newProg = { ...prog, stage: prog.stage + 1, consecutive_correct: 0, consecutive_incorrect: 0 }
-        console.log(`[handleAnswer] word ${wordId} GRADUATED S${prog.stage} → S${prog.stage + 1}`)
       } else if (prog.stage === 3 && newConsec >= 5) {
         newProg = { ...prog, consecutive_correct: newConsec, consecutive_incorrect: 0, mastered: true }
-        console.log(`[handleAnswer] word ${wordId} MASTERED at S3 (${newConsec} consecutive correct)`)
       } else {
         newProg = { ...prog, consecutive_correct: newConsec, consecutive_incorrect: 0 }
-        console.log(`[handleAnswer] word ${wordId} correct — S${prog.stage} consec ${prog.consecutive_correct} → ${newConsec}`)
       }
     } else {
       const newConsecIncorrect = (prog.consecutive_incorrect ?? 0) + 1
       if (prog.stage === 2 && newConsecIncorrect >= 2) {
         newProg = { ...prog, stage: 1, consecutive_correct: 0, consecutive_incorrect: 0 }
-        console.log(`[handleAnswer] word ${wordId} REGRESSED S2 → S1 (2 consecutive incorrect)`)
       } else if (prog.stage === 3 && newConsecIncorrect >= 2) {
         newProg = { ...prog, consecutive_correct: 0, consecutive_incorrect: 0 }
-        console.log(`[handleAnswer] word ${wordId} S3 counter reset (2 consecutive incorrect)`)
       } else if (prog.stage === 3) {
         newProg = { ...prog, consecutive_incorrect: newConsecIncorrect }
-        console.log(`[handleAnswer] word ${wordId} S3 forgiveness — cc preserved at ${prog.consecutive_correct}, ci: ${newConsecIncorrect}`)
       } else {
         newProg = { ...prog, consecutive_correct: 0, consecutive_incorrect: newConsecIncorrect }
-        console.log(`[handleAnswer] word ${wordId} incorrect — S${prog.stage} consec_correct reset, consec_incorrect: ${newConsecIncorrect}`)
       }
     }
 
@@ -314,47 +220,25 @@ export default function Quiz() {
       return
     }
     setCurrentIdx(nextIdx)
-    setQuestion(buildQuestion(session[nextIdx], allWords, progressRef.current))
+    setQuestion(buildQuestion(session[nextIdx], words, progressRef.current))
     setSelectedOption(null)
     setTypedAnswer('')
     setMatchResult(null)
     setPhase('question')
   }
 
-  if (!theme) {
-    return (
-      <div style={styles.page}>
-        <NavBar />
-        <p style={{ padding: '2rem' }}>Theme not found.</p>
-        <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back</button>
-      </div>
-    )
-  }
-
   if (phase === 'loading') {
     return <div style={styles.page}><NavBar /><p style={styles.loadingMsg}>Loading…</p></div>
   }
 
-  if (phase === 'error') {
+  if (phase === 'error' || (phase !== 'loading' && !words.length)) {
     return (
       <div style={styles.page}>
         <NavBar />
-        <p style={{ padding: '2rem', color: '#c00' }}>
-          Could not load words. Make sure both migrations have been run in Supabase.
-        </p>
-        <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back</button>
-      </div>
-    )
-  }
-
-  if (phase === 'empty') {
-    return (
-      <div style={styles.page}>
-        <NavBar rightContent={<span style={styles.headerTheme}>{theme.title}</span>} />
         <main style={styles.main}>
           <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back to themes</button>
           <div style={styles.card}>
-            <p style={{ margin: 0, color: '#555' }}>All words in this theme are hidden or mastered. Unhide some words to continue.</p>
+            <p style={{ margin: 0, color: '#555' }}>No words selected. Go back and select some words to practise.</p>
           </div>
         </main>
       </div>
@@ -363,10 +247,17 @@ export default function Quiz() {
 
   if (phase === 'summary') {
     const correctCount = results.filter(r => r.correct).length
-    const resultByWordId = Object.fromEntries(results.map(r => [r.word.id, r.result]))
+    const uniqueResults = []
+    const seen = new Set()
+    for (let i = results.length - 1; i >= 0; i--) {
+      if (!seen.has(results[i].word.id)) {
+        uniqueResults.unshift(results[i])
+        seen.add(results[i].word.id)
+      }
+    }
     return (
       <div style={styles.page}>
-        <NavBar rightContent={<span style={styles.headerTheme}>{theme.title}</span>} />
+        <NavBar rightContent={<span style={styles.headerLabel}>Custom Quiz</span>} />
         <main style={{ ...styles.main, maxWidth: '820px' }}>
           <div style={styles.summaryHeader}>
             <h2 style={styles.summaryTitle}>Session complete</h2>
@@ -379,39 +270,20 @@ export default function Quiz() {
                 <tr>
                   <th style={styles.thLeft}>English</th>
                   <th style={styles.thLeft}>Spanish</th>
-                  <th style={styles.thCenter}>🥉</th>
-                  <th style={styles.thCenter}>🥈</th>
-                  <th style={styles.thCenter}>🥇</th>
-                  <th style={styles.thRight}></th>
+                  <th style={styles.thResult}></th>
                 </tr>
               </thead>
               <tbody>
-                {session.map(word => {
-                  const prog = progressRef.current[word.id]
-                  const stage = prog?.stage ?? 1
-                  const consec = prog?.consecutive_correct ?? 0
-                  const isMastered = prog?.mastered ?? false
-                  const s1done = stage >= 2 || isMastered
-                  const s2done = stage >= 3 || isMastered
-                  const s3done = isMastered || (stage === 3 && consec >= 5)
-                  const isHidden = hiddenWords.has(word.id)
-                  const wordResult = resultByWordId[word.id]
-                  const textColor = wordResult === 'exact' ? '#16a34a' : wordResult === 'close' ? '#d97706' : wordResult === 'wrong' ? '#dc2626' : '#333'
+                {uniqueResults.map(({ word, result }) => {
+                  const textColor = result === 'exact' ? '#16a34a' : result === 'close' ? '#d97706' : result === 'wrong' ? '#dc2626' : '#333'
                   return (
                     <tr key={word.id} style={styles.tableRow}>
                       <td style={{ ...styles.tdEn, color: textColor }}>{word.english}</td>
                       <td style={{ ...styles.tdEs, color: textColor }}>{word.spanish}</td>
-                      <StageCell done={s1done} />
-                      <StageCell done={s2done} />
-                      <StageCell done={s3done} />
-                      <td style={styles.tdHide}>
-                        <button
-                          style={{ ...styles.hideBtn, color: isHidden ? '#3b82f6' : '#bbb' }}
-                          onClick={() => toggleHidden(word.id)}
-                          title={isHidden ? 'Unhide this word' : 'Hide this word'}
-                        >
-                          {isHidden ? <EyeIcon /> : <EyeSlashIcon />}
-                        </button>
+                      <td style={styles.tdResult}>
+                        {result === 'exact' && <span style={{ color: '#16a34a', fontWeight: 700 }}>✓</span>}
+                        {result === 'close' && <span style={{ color: '#d97706', fontWeight: 700 }}>~</span>}
+                        {result === 'wrong' && <span style={{ color: '#dc2626', fontWeight: 700 }}>✗</span>}
                       </td>
                     </tr>
                   )
@@ -421,14 +293,8 @@ export default function Quiz() {
           </div>
 
           <div style={styles.summaryActions}>
-            <button style={{ ...styles.primaryBtn, width: '100%', alignSelf: 'auto', textAlign: 'center' }} onClick={loadQuiz}>
+            <button style={{ ...styles.primaryBtn, width: '100%', textAlign: 'center' }} onClick={loadCustomQuiz}>
               Play again
-            </button>
-            <button style={styles.secondaryBtn} onClick={() => navigate('/vocabulary', { state: { openThemeId: theme.id, openView: 'progress' } })}>
-              Progress
-            </button>
-            <button style={styles.secondaryBtn} onClick={() => navigate('/vocabulary', { state: { openThemeId: theme.id, openView: 'hidden' } })}>
-              Hidden Words
             </button>
             <button style={styles.summaryBackLink} onClick={() => navigate('/vocabulary')}>
               ← Back to themes
@@ -441,7 +307,7 @@ export default function Quiz() {
 
   return (
     <div style={styles.page}>
-      <NavBar rightContent={<span style={styles.headerTheme}>{theme.title}</span>} />
+      <NavBar rightContent={<span style={styles.headerLabel}>Custom Quiz</span>} />
       <main style={styles.main}>
         <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back to themes</button>
 
@@ -485,11 +351,7 @@ export default function Quiz() {
                 type="text"
                 value={typedAnswer}
                 onChange={e => setTypedAnswer(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && phase === 'question') {
-                    handleAnswer(typedAnswer)
-                  }
-                }}
+                onKeyDown={e => { if (e.key === 'Enter' && phase === 'question') handleAnswer(typedAnswer) }}
                 disabled={phase === 'feedback'}
                 placeholder={question.placeholder}
                 autoComplete="off"
@@ -544,7 +406,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
   },
-  headerTheme: {
+  headerLabel: {
     fontSize: '0.9rem',
     color: '#555',
   },
@@ -702,18 +564,6 @@ const styles = {
     gap: '0.75rem',
     paddingTop: '0.25rem',
   },
-  secondaryBtn: {
-    padding: '0.75rem 1.25rem',
-    fontSize: '1rem',
-    fontWeight: 600,
-    backgroundColor: '#fff',
-    color: '#111',
-    border: '1px solid #e5e5e5',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    width: '100%',
-    textAlign: 'center',
-  },
   summaryBackLink: {
     padding: '0.5rem',
     fontSize: '0.875rem',
@@ -744,18 +594,8 @@ const styles = {
     borderBottom: '1px solid #f0f0f0',
     backgroundColor: '#fafafa',
   },
-  thCenter: {
-    padding: '0.5rem 0.25rem',
-    textAlign: 'center',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-    color: '#888',
-    borderBottom: '1px solid #f0f0f0',
-    backgroundColor: '#fafafa',
-    width: '28px',
-  },
-  thRight: {
-    padding: '0.65rem 0.5rem',
+  thResult: {
+    padding: '0.65rem 0.75rem',
     borderBottom: '1px solid #f0f0f0',
     backgroundColor: '#fafafa',
     width: '36px',
@@ -778,21 +618,8 @@ const styles = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  stageCell: {
-    padding: '0.6rem 0.25rem',
-    textAlign: 'center',
-  },
-  tdHide: {
-    padding: '0.6rem 0.5rem',
+  tdResult: {
+    padding: '0.6rem 0.75rem',
     textAlign: 'right',
-  },
-  hideBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: '2px',
-    lineHeight: 0,
-    borderRadius: '4px',
-    transition: 'color 0.15s',
   },
 }

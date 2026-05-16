@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { VOCAB_THEMES } from '../utils/courseData'
+import NavBar from '../components/NavBar'
 
 function ringColor(pct) {
   if (pct === 100) return '#22c55e'
@@ -129,12 +130,21 @@ export default function Dashboard() {
   const [themeProgress, setThemeProgress] = useState({})
   const [masteredCount, setMasteredCount] = useState(0)
 
-  // Modal state
+  // Theme modal state
   const [modalTheme, setModalTheme] = useState(null)
   const [modalView, setModalView] = useState('menu')
   const [modalWords, setModalWords] = useState([])
   const [modalProgress, setModalProgress] = useState({})
   const [modalLoading, setModalLoading] = useState(false)
+
+  // Custom Quiz selector state
+  const [selectorOpen, setSelectorOpen] = useState(false)
+  const [selectorSourceTheme, setSelectorSourceTheme] = useState(null)
+  const [selectorThemeId, setSelectorThemeId] = useState(null)
+  const [selectorWords, setSelectorWords] = useState([])
+  const [selectorLoading, setSelectorLoading] = useState(false)
+  const [selectedWordIds, setSelectedWordIds] = useState(new Set())
+  const [selectedWordMap, setSelectedWordMap] = useState({})
 
   useEffect(() => {
     if (user) loadProgress()
@@ -148,9 +158,9 @@ export default function Dashboard() {
   }, [user?.id, location.state?.openThemeId, location.state?.openView])
 
   useEffect(() => {
-    document.body.style.overflow = modalTheme ? 'hidden' : ''
+    document.body.style.overflow = (modalTheme || selectorOpen) ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
-  }, [modalTheme])
+  }, [modalTheme, selectorOpen])
 
   async function loadProgress() {
     const [{ data: allWords }, { data: done }] = await Promise.all([
@@ -167,7 +177,6 @@ export default function Dashboard() {
       totals[w.theme] = (totals[w.theme] || 0) + 1
     }
 
-    // Count unique word_ids that are mastered or hidden per theme (avoid double-counting)
     const doneByTheme = {}
     for (const p of done ?? []) {
       const t = p.words?.theme
@@ -263,22 +272,55 @@ export default function Dashboard() {
     }
   }
 
-  async function handleSignOut() {
-    await supabase.auth.signOut()
-    navigate('/login', { replace: true })
+  async function openSelector(theme) {
+    setSelectorSourceTheme(theme)
+    closeModal()
+    setSelectedWordIds(new Set())
+    setSelectedWordMap({})
+    setSelectorOpen(true)
+    await loadSelectorTheme(theme.id)
+  }
+
+  async function loadSelectorTheme(themeId) {
+    setSelectorThemeId(themeId)
+    setSelectorLoading(true)
+    const theme = VOCAB_THEMES.find(t => t.id === themeId)
+    const { data: words } = await supabase
+      .from('words')
+      .select('id, english, spanish')
+      .eq('theme', theme.title)
+      .order('english')
+    const wordList = words ?? []
+    setSelectorWords(wordList)
+    setSelectedWordMap(prev => {
+      const next = { ...prev }
+      for (const w of wordList) if (!next[w.id]) next[w.id] = w
+      return next
+    })
+    setSelectorLoading(false)
+  }
+
+  function toggleWordSelection(wordId) {
+    setSelectedWordIds(prev => {
+      const next = new Set(prev)
+      next.has(wordId) ? next.delete(wordId) : next.add(wordId)
+      return next
+    })
+  }
+
+  function startCustomQuiz() {
+    const words = [...selectedWordIds].map(id => selectedWordMap[id]).filter(Boolean)
+    setSelectorOpen(false)
+    setSelectedWordIds(new Set())
+    setSelectedWordMap({})
+    navigate('/custom-quiz', { state: { words } })
   }
 
   const hiddenWords = modalWords.filter(w => modalProgress[w.id]?.hidden)
 
   return (
     <div style={styles.page}>
-      <header style={styles.header}>
-        <h1 style={styles.logo}>espanyolo</h1>
-        <div style={styles.headerRight}>
-          <span style={styles.email}>{user?.email}</span>
-          <button style={styles.signOutBtn} onClick={handleSignOut}>Sign out</button>
-        </div>
-      </header>
+      <NavBar />
 
       <main style={styles.main}>
         <button style={styles.backBtn} onClick={() => navigate('/')}>← Back</button>
@@ -327,6 +369,7 @@ export default function Dashboard() {
         </section>
       </main>
 
+      {/* Theme modal */}
       {modalTheme && (
         <div style={styles.backdrop} onClick={closeModal}>
           <div style={styles.modalBox} onClick={e => e.stopPropagation()}>
@@ -347,6 +390,13 @@ export default function Dashboard() {
                 >
                   <span style={styles.menuOptionLabel}>Start Quiz</span>
                   <span style={styles.menuOptionDesc}>Practice words in this theme</span>
+                </button>
+                <button
+                  style={styles.menuOption}
+                  onClick={() => openSelector(modalTheme)}
+                >
+                  <span style={styles.menuOptionLabel}>Custom Quiz</span>
+                  <span style={styles.menuOptionDesc}>Select specific words to practise</span>
                 </button>
                 <button
                   style={styles.menuOption}
@@ -380,7 +430,7 @@ export default function Dashboard() {
                         const p = modalProgress[w.id]
                         return (p?.mastered) || (p?.stage === 3 && (p?.consecutive_correct ?? 0) >= 5)
                       })
-                      const hiddenWords = modalWords.filter(w => modalProgress[w.id]?.hidden)
+                      const hiddenWordsList = modalWords.filter(w => modalProgress[w.id]?.hidden)
                       const sortedWords = [...modalWords].sort((a, b) => {
                         const rank = w => {
                           const p = modalProgress[w.id]
@@ -399,7 +449,7 @@ export default function Dashboard() {
                       return (
                         <>
                           <p style={styles.progressSummary}>
-                            {modalWords.length} words · {masteredWords.length} mastered · {hiddenWords.length} hidden
+                            {modalWords.length} words · {masteredWords.length} mastered · {hiddenWordsList.length} hidden
                           </p>
                           <WordTable words={sortedWords} progressMap={modalProgress} onToggleHidden={toggleHiddenInModal} />
                         </>
@@ -423,6 +473,62 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Custom Quiz word selector */}
+      {selectorOpen && (
+        <div style={styles.selectorOverlay}>
+          <div style={styles.selectorHeader}>
+            <button
+              style={styles.selectorBackBtn}
+              onClick={() => { setSelectorOpen(false); if (selectorSourceTheme) openModal(selectorSourceTheme) }}
+            >
+              ←
+            </button>
+            <div style={styles.selectorThemeWrap}>
+              <select
+                style={styles.selectorThemeSelect}
+                value={selectorThemeId ?? ''}
+                onChange={e => loadSelectorTheme(Number(e.target.value))}
+              >
+                {VOCAB_THEMES.map(t => (
+                  <option key={t.id} value={t.id}>{t.title}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              style={selectedWordIds.size > 0 ? styles.startQuizBtn : styles.startQuizBtnDisabled}
+              disabled={selectedWordIds.size === 0}
+              onClick={startCustomQuiz}
+            >
+              {selectedWordIds.size > 0 ? `Start (${selectedWordIds.size})` : 'Start'}
+            </button>
+          </div>
+          <div style={styles.selectorBody}>
+            {selectorLoading ? (
+              <p style={styles.selectorEmptyMsg}>Loading…</p>
+            ) : selectorWords.length === 0 ? (
+              <p style={styles.selectorEmptyMsg}>No words found.</p>
+            ) : (
+              selectorWords.map(word => (
+                <button
+                  key={word.id}
+                  style={{
+                    ...styles.selectorRow,
+                    backgroundColor: selectedWordIds.has(word.id) ? '#dcfce7' : '#fff',
+                  }}
+                  onClick={() => toggleWordSelection(word.id)}
+                >
+                  <span style={styles.selectorEn}>{word.english}</span>
+                  <span style={styles.selectorEs}>{word.spanish}</span>
+                  {selectedWordIds.has(word.id) && (
+                    <span style={styles.selectorCheck}>✓</span>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -432,37 +538,6 @@ const styles = {
     minHeight: '100vh',
     backgroundColor: '#f8f8f6',
     fontFamily: 'system-ui, sans-serif',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '1rem 2rem',
-    borderBottom: '1px solid #e5e5e5',
-    backgroundColor: '#fff',
-  },
-  logo: {
-    margin: 0,
-    fontSize: '1.4rem',
-    fontWeight: 700,
-    letterSpacing: '-0.5px',
-  },
-  headerRight: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '1rem',
-  },
-  email: {
-    fontSize: '0.85rem',
-    color: '#666',
-  },
-  signOutBtn: {
-    padding: '0.35rem 0.85rem',
-    fontSize: '0.85rem',
-    border: '1px solid #ccc',
-    borderRadius: '6px',
-    background: '#fff',
-    cursor: 'pointer',
   },
   main: {
     maxWidth: '900px',
@@ -595,7 +670,7 @@ const styles = {
     cursor: 'pointer',
   },
 
-  // Modal
+  // Theme modal
   backdrop: {
     position: 'fixed',
     inset: 0,
@@ -776,5 +851,113 @@ const styles = {
     lineHeight: 0,
     borderRadius: '4px',
     transition: 'color 0.15s',
+  },
+
+  // Custom Quiz selector overlay
+  selectorOverlay: {
+    position: 'fixed',
+    inset: 0,
+    backgroundColor: '#f8f8f6',
+    zIndex: 150,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  selectorHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    padding: '0 1rem',
+    height: '56px',
+    borderBottom: '1px solid #e5e5e5',
+    backgroundColor: '#fff',
+    flexShrink: 0,
+  },
+  selectorBackBtn: {
+    background: 'none',
+    border: 'none',
+    fontSize: '1.2rem',
+    color: '#555',
+    cursor: 'pointer',
+    padding: '0.5rem 0.25rem',
+    flexShrink: 0,
+    lineHeight: 1,
+  },
+  selectorThemeWrap: {
+    flex: 1,
+    display: 'flex',
+    justifyContent: 'center',
+  },
+  selectorThemeSelect: {
+    border: 'none',
+    background: 'none',
+    fontSize: '0.95rem',
+    fontWeight: 600,
+    color: '#111',
+    cursor: 'pointer',
+    outline: 'none',
+    maxWidth: '200px',
+    textAlign: 'center',
+    fontFamily: 'system-ui, sans-serif',
+  },
+  startQuizBtn: {
+    padding: '0.4rem 0.875rem',
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    backgroundColor: '#3b82f6',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '20px',
+    cursor: 'pointer',
+    flexShrink: 0,
+  },
+  startQuizBtnDisabled: {
+    padding: '0.4rem 0.875rem',
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    backgroundColor: '#e5e5e5',
+    color: '#aaa',
+    border: 'none',
+    borderRadius: '20px',
+    cursor: 'default',
+    flexShrink: 0,
+  },
+  selectorBody: {
+    flex: 1,
+    overflowY: 'auto',
+  },
+  selectorRow: {
+    display: 'flex',
+    alignItems: 'center',
+    width: '100%',
+    padding: '0.75rem 1.25rem',
+    border: 'none',
+    borderBottom: '1px solid #f0f0f0',
+    cursor: 'pointer',
+    textAlign: 'left',
+    gap: '0.75rem',
+    transition: 'background-color 0.1s',
+  },
+  selectorEn: {
+    flex: 1,
+    fontSize: '0.9rem',
+    color: '#333',
+  },
+  selectorEs: {
+    flex: 1,
+    fontSize: '0.9rem',
+    fontWeight: 500,
+    color: '#111',
+  },
+  selectorCheck: {
+    fontSize: '0.9rem',
+    color: '#16a34a',
+    fontWeight: 700,
+    flexShrink: 0,
+  },
+  selectorEmptyMsg: {
+    padding: '1.5rem',
+    color: '#888',
+    fontSize: '0.9rem',
+    margin: 0,
   },
 }

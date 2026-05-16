@@ -6,6 +6,7 @@ import VerbTrainer from './pages/VerbTrainer'
 import Quiz from './pages/Quiz'
 import HiddenWords from './pages/HiddenWords'
 import Polish from './pages/Polish'
+import CustomQuiz from './pages/CustomQuiz'
 import AuthCallback from './pages/AuthCallback'
 import ProtectedRoute from './components/ProtectedRoute'
 
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/quiz/:themeId" element={<Protected><Quiz /></Protected>} />
         <Route path="/hidden" element={<Protected><HiddenWords /></Protected>} />
         <Route path="/polish" element={<Protected><Polish /></Protected>} />
+        <Route path="/custom-quiz" element={<Protected><CustomQuiz /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

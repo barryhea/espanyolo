@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
+import NavBar from '../components/NavBar'
 
 function levenshtein(a, b) {
   const m = a.length, n = b.length
@@ -169,15 +170,20 @@ export default function Polish() {
     setPhase('question')
   }
 
+  const headerRight = <span style={styles.headerMode}>Polish</span>
+
   if (phase === 'loading') {
-    return <div style={styles.page}><p style={styles.loadingMsg}>Loading…</p></div>
+    return <div style={styles.page}><NavBar rightContent={headerRight} /><p style={styles.loadingMsg}>Loading…</p></div>
   }
 
   if (phase === 'error') {
     return (
       <div style={styles.page}>
-        <p style={{ padding: '2rem', color: '#c00' }}>Could not load mastered words.</p>
-        <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back</button>
+        <NavBar rightContent={headerRight} />
+        <main style={styles.main}>
+          <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back</button>
+          <p style={{ color: '#c00' }}>Could not load mastered words.</p>
+        </main>
       </div>
     )
   }
@@ -185,7 +191,7 @@ export default function Polish() {
   if (phase === 'empty') {
     return (
       <div style={styles.page}>
-        <header style={styles.header}><h1 style={styles.logo}>espanyolo</h1></header>
+        <NavBar rightContent={headerRight} />
         <main style={styles.main}>
           <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back to themes</button>
           <div style={styles.card}>
@@ -201,10 +207,7 @@ export default function Polish() {
     const resultByWordId = Object.fromEntries(results.map(r => [r.word.wordId, r.result]))
     return (
       <div style={styles.page}>
-        <header style={styles.header}>
-          <h1 style={styles.logo}>espanyolo</h1>
-          <span style={styles.headerMode}>Polish</span>
-        </header>
+        <NavBar rightContent={headerRight} />
         <main style={{ ...styles.main, maxWidth: '820px' }}>
           <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back to themes</button>
           <div style={styles.summaryHeader}>
@@ -252,10 +255,7 @@ export default function Polish() {
 
   return (
     <div style={styles.page}>
-      <header style={styles.header}>
-        <h1 style={styles.logo}>espanyolo</h1>
-        <span style={styles.headerMode}>Polish</span>
-      </header>
+      <NavBar rightContent={headerRight} />
       <main style={styles.main}>
         <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back to themes</button>
 
@@ -329,20 +329,8 @@ const styles = {
     overflow: 'auto',
     backgroundColor: '#f8f8f6',
     fontFamily: 'system-ui, sans-serif',
-  },
-  header: {
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '1rem 2rem',
-    borderBottom: '1px solid #e5e5e5',
-    backgroundColor: '#fff',
-  },
-  logo: {
-    margin: 0,
-    fontSize: '1.4rem',
-    fontWeight: 700,
-    letterSpacing: '-0.5px',
+    flexDirection: 'column',
   },
   headerMode: {
     fontSize: '0.9rem',
@@ -356,6 +344,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '1rem',
+    width: '100%',
   },
   backLink: {
     padding: '0.35rem 0',
