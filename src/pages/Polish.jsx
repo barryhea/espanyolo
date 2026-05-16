@@ -277,8 +277,9 @@ export default function Polish() {
               autoFocus
               placeholder="Type the Spanish word…"
               autoComplete="off"
-              autoCorrect="on"
-              spellCheck="true"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck="false"
               data-form-type="other"
             />
             {phase === 'question' && (

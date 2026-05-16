@@ -493,8 +493,9 @@ export default function Quiz() {
                 autoFocus
                 placeholder={question.placeholder}
                 autoComplete="off"
-                autoCorrect="on"
-                spellCheck="true"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
                 data-form-type="other"
               />
               {phase === 'question' && (
