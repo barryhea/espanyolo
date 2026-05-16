@@ -18,7 +18,7 @@ function ProgressRing({ pct }) {
   const empty = 100 - filled
   const r = 15.9155
   return (
-    <svg viewBox="0 0 36 36" style={{ width: '100%', height: 'auto', display: 'block' }}>
+    <svg viewBox="-2 -2 40 40" style={{ width: '100%', maxWidth: '44px', height: 'auto', display: 'block' }}>
       <circle cx="18" cy="18" r={r} fill="none" stroke="#ececec" strokeWidth="3" />
       {filled > 0 && (
         <circle
@@ -602,7 +602,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '10px',
+    padding: '8px 10px',
   },
   themeTitle: {
     fontSize: '0.875rem',
