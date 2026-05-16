@@ -111,6 +111,7 @@ export default function Quiz() {
 
   const theme = VOCAB_THEMES.find(t => t.id === Number(themeId))
   const progressRef = useRef({})
+  const inputRef = useRef(null)
 
   const [phase, setPhase] = useState('loading')
   const [allWords, setAllWords] = useState([])
@@ -126,6 +127,10 @@ export default function Quiz() {
   useEffect(() => {
     if (theme && user) loadQuiz()
   }, [theme?.id, user?.id])
+
+  useEffect(() => {
+    if (question?.type === 'typed') inputRef.current?.focus()
+  }, [question])
 
   async function ensureProfile() {
     await supabase
@@ -480,6 +485,7 @@ export default function Quiz() {
           {question.type === 'typed' && (
             <div style={styles.typedArea}>
               <input
+                ref={inputRef}
                 style={styles.typedInput}
                 type="text"
                 value={typedAnswer}
@@ -490,7 +496,6 @@ export default function Quiz() {
                   }
                 }}
                 disabled={phase === 'feedback'}
-                autoFocus
                 placeholder={question.placeholder}
                 autoComplete="off"
                 autoCorrect="off"

@@ -61,6 +61,7 @@ export default function Polish() {
   const { user } = useAuth()
 
   const polishStatsRef = useRef({})
+  const inputRef = useRef(null)
 
   const [phase, setPhase] = useState('loading')
   const [session, setSession] = useState([])
@@ -72,6 +73,10 @@ export default function Polish() {
   useEffect(() => {
     if (user) loadPolish()
   }, [user?.id])
+
+  useEffect(() => {
+    if (phase === 'question') inputRef.current?.focus()
+  }, [currentIdx, phase])
 
   async function loadPolish() {
     setPhase('loading')
@@ -273,8 +278,8 @@ export default function Polish() {
               onKeyDown={e => {
                 if (e.key === 'Enter' && phase === 'question') handleAnswer(typedAnswer)
               }}
+              ref={inputRef}
               disabled={phase === 'feedback'}
-              autoFocus
               placeholder="Type the Spanish word…"
               autoComplete="off"
               autoCorrect="off"
