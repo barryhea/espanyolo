@@ -323,11 +323,9 @@ export default function Dashboard() {
       <NavBar />
 
       <main style={styles.main}>
-        <button style={styles.backBtn} onClick={() => navigate('/')}>← Back</button>
+        <div style={styles.heroSpace} />
 
         <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>Vocabulary Trainer</h2>
-          <p style={styles.sectionSubtitle}>Choose a theme to practise</p>
           <div style={styles.themeGrid}>
             {VOCAB_THEMES.map((theme) => (
               <button
@@ -546,6 +544,9 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '3rem',
+  },
+  heroSpace: {
+    minHeight: '5rem',
   },
   section: {},
   sectionTitle: {
