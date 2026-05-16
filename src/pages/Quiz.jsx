@@ -499,7 +499,7 @@ export default function Quiz() {
               />
               {phase === 'question' && (
                 <button
-                  style={typedAnswer.trim() ? styles.primaryBtn : styles.passBtn}
+                  style={{ ...styles.typedBtn, backgroundColor: typedAnswer.trim() ? '#3b82f6' : '#f3f4f6', color: typedAnswer.trim() ? '#fff' : '#6b7280' }}
                   onClick={() => handleAnswer(typedAnswer)}
                 >
                   {typedAnswer.trim() ? 'Check' : 'Pass'}
@@ -639,6 +639,7 @@ const styles = {
   },
   typedArea: {
     display: 'flex',
+    flexDirection: 'column',
     gap: '0.75rem',
   },
   typedInput: {
@@ -670,6 +671,15 @@ const styles = {
     borderRadius: '8px',
     cursor: 'pointer',
     alignSelf: 'flex-start',
+  },
+  typedBtn: {
+    padding: '0.75rem 1.25rem',
+    fontSize: '1rem',
+    fontWeight: 600,
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    width: '100%',
   },
   feedbackBanner: {
     display: 'flex',

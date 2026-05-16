@@ -283,7 +283,7 @@ export default function Polish() {
             />
             {phase === 'question' && (
               <button
-                style={typedAnswer.trim() ? styles.primaryBtn : styles.passBtn}
+                style={{ backgroundColor: typedAnswer.trim() ? '#d97706' : '#f3f4f6', color: typedAnswer.trim() ? '#fff' : '#6b7280', padding: '0.75rem 1.25rem', fontSize: '1rem', fontWeight: 600, border: 'none', borderRadius: '8px', cursor: 'pointer', width: '100%' }}
                 onClick={() => handleAnswer(typedAnswer)}
               >
                 {typedAnswer.trim() ? 'Check' : 'Pass'}
@@ -408,6 +408,7 @@ const styles = {
   },
   typedArea: {
     display: 'flex',
+    flexDirection: 'column',
     gap: '0.75rem',
   },
   typedInput: {
@@ -424,17 +425,6 @@ const styles = {
     fontWeight: 600,
     backgroundColor: '#d97706',
     color: '#fff',
-    border: 'none',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    alignSelf: 'flex-start',
-  },
-  passBtn: {
-    padding: '0.75rem 1.25rem',
-    fontSize: '1rem',
-    fontWeight: 600,
-    backgroundColor: '#f3f4f6',
-    color: '#6b7280',
     border: 'none',
     borderRadius: '8px',
     cursor: 'pointer',
