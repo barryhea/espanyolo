@@ -350,7 +350,7 @@ export default function Quiz() {
   if (phase === 'empty') {
     return (
       <div style={styles.page}>
-        <NavBar rightContent={<span style={styles.headerTheme}>{theme.title}</span>} />
+        <NavBar />
         <main style={styles.main}>
           <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back to themes</button>
           <div style={styles.card}>
@@ -366,7 +366,7 @@ export default function Quiz() {
     const resultByWordId = Object.fromEntries(results.map(r => [r.word.id, r.result]))
     return (
       <div style={styles.page}>
-        <NavBar rightContent={<span style={styles.headerTheme}>{theme.title}</span>} />
+        <NavBar />
         <main style={{ ...styles.main, maxWidth: '820px' }}>
           <div style={styles.summaryHeader}>
             <h2 style={styles.summaryTitle}>Session complete</h2>
@@ -441,14 +441,14 @@ export default function Quiz() {
 
   return (
     <div style={styles.page}>
-      <NavBar rightContent={<span style={styles.headerTheme}>{theme.title}</span>} />
+      <NavBar />
       <main style={styles.main}>
-        <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back to themes</button>
-
-        <div style={styles.progressBar}>
-          <div style={{ ...styles.progressFill, width: `${(currentIdx / session.length) * 100}%` }} />
+        <div style={styles.progressRow}>
+          <div style={styles.progressBar}>
+            <div style={{ ...styles.progressFill, width: `${(currentIdx / session.length) * 100}%` }} />
+          </div>
+          <span style={styles.progressLabel}>{currentIdx + 1} / {session.length}</span>
         </div>
-        <p style={styles.progressLabel}>{currentIdx + 1} / {session.length}</p>
 
         <div style={styles.card}>
           <p style={styles.stageLabel}>Stage {question.stage}</p>
@@ -538,7 +538,7 @@ const styles = {
     right: 0,
     bottom: 0,
     left: 0,
-    overflow: 'auto',
+    overflow: 'hidden',
     backgroundColor: '#f8f8f6',
     fontFamily: 'system-ui, sans-serif',
     display: 'flex',
@@ -551,11 +551,20 @@ const styles = {
   main: {
     maxWidth: '600px',
     margin: '0 auto',
-    padding: '2rem 1.5rem',
+    padding: '0.5rem 1.5rem 2rem',
     display: 'flex',
     flexDirection: 'column',
-    gap: '1rem',
+    gap: '0.5rem',
     width: '100%',
+    overflowY: 'auto',
+    flex: 1,
+    WebkitOverflowScrolling: 'touch',
+  },
+  progressRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+    padding: '0.25rem 0',
   },
   backLink: {
     padding: '0.35rem 0',
@@ -572,6 +581,7 @@ const styles = {
     color: '#888',
   },
   progressBar: {
+    flex: 1,
     height: '6px',
     backgroundColor: '#e5e5e5',
     borderRadius: '3px',
@@ -587,6 +597,8 @@ const styles = {
     margin: 0,
     fontSize: '0.8rem',
     color: '#888',
+    flexShrink: 0,
+    minWidth: '32px',
     textAlign: 'right',
   },
   card: {
