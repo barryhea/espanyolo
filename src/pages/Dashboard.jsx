@@ -167,46 +167,56 @@ export default function Dashboard() {
   }, [modalTheme, selectorOpen])
 
   async function loadProgress() {
-    const [{ data: allWords }, { data: done }] = await Promise.all([
+    const [{ data: allWords }, { data: progressRows }] = await Promise.all([
       supabase.from('words').select('id, theme'),
       supabase
         .from('user_word_progress')
-        .select('word_id, words(theme), mastered, hidden')
-        .eq('user_id', user.id)
-        .or('mastered.eq.true,hidden.eq.true'),
+        .select('word_id, stage, mastered, hidden')
+        .eq('user_id', user.id),
     ])
 
-    const totals = {}
+    // Build word→theme map and per-theme word lists
+    const wordThemeMap = {}
+    const wordsByTheme = {}
     for (const w of allWords ?? []) {
-      totals[w.theme] = (totals[w.theme] || 0) + 1
+      wordThemeMap[w.id] = w.theme
+      if (!wordsByTheme[w.theme]) wordsByTheme[w.theme] = []
+      wordsByTheme[w.theme].push(w.id)
     }
 
-    const hiddenByTheme = {}
-    const masteredByTheme = {}
-    for (const p of done ?? []) {
-      const t = p.words?.theme
-      if (!t) continue
-      if (p.hidden) {
-        if (!hiddenByTheme[t]) hiddenByTheme[t] = new Set()
-        hiddenByTheme[t].add(p.word_id)
-      }
-      if (p.mastered && !p.hidden) {
-        if (!masteredByTheme[t]) masteredByTheme[t] = new Set()
-        masteredByTheme[t].add(p.word_id)
+    // Best progress row per word
+    const progByWord = {}
+    for (const p of progressRows ?? []) {
+      const ex = progByWord[p.word_id]
+      if (!ex || (p.stage ?? 1) > (ex.stage ?? 1) ||
+          ((p.stage ?? 1) === (ex.stage ?? 1) && p.mastered && !ex.mastered)) {
+        progByWord[p.word_id] = {
+          stage: p.stage ?? 1,
+          mastered: p.mastered ?? false,
+          hidden: p.hidden ?? false,
+        }
       }
     }
 
+    // Stage-weighted percentage per theme (hidden words excluded)
+    // S1 (no progress): 0/3  S2 (completed S1): 1/3  S3 (completed S2): 2/3  mastered: 3/3
     const progress = {}
     for (const theme of VOCAB_THEMES) {
-      const total = totals[theme.title] || 0
-      const hiddenCount = hiddenByTheme[theme.title]?.size ?? 0
-      const effectiveTotal = Math.max(0, total - hiddenCount)
-      const masteredCount = masteredByTheme[theme.title]?.size ?? 0
-      progress[theme.title] = effectiveTotal > 0 ? Math.round((masteredCount / effectiveTotal) * 100) : 0
+      const wordIds = wordsByTheme[theme.title] ?? []
+      let pts = 0, maxPts = 0
+      for (const wordId of wordIds) {
+        const prog = progByWord[wordId]
+        if (prog?.hidden) continue
+        maxPts += 3
+        if (prog?.mastered) pts += 3
+        else if ((prog?.stage ?? 1) >= 3) pts += 2
+        else if ((prog?.stage ?? 1) >= 2) pts += 1
+      }
+      progress[theme.title] = maxPts > 0 ? Math.round((pts / maxPts) * 100) : 0
     }
 
     const polishEligible = new Set(
-      (done ?? []).filter(p => p.mastered && !p.hidden).map(p => p.word_id)
+      (progressRows ?? []).filter(p => p.mastered && !p.hidden).map(p => p.word_id)
     )
 
     setThemeProgress(progress)
