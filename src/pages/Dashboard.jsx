@@ -381,7 +381,8 @@ export default function Dashboard() {
                           const p = modalProgress[w.id]
                           const stage = p?.stage ?? 1
                           const consec = p?.consecutive_correct ?? 0
-                          if ((p?.mastered) || (stage === 3 && consec >= 5) || p?.hidden) return 0
+                          if (p?.hidden) return 4
+                          if ((p?.mastered) || (stage === 3 && consec >= 5)) return 0
                           if (stage >= 3) return 1
                           if (stage >= 2) return 2
                           return 3
