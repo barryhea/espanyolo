@@ -129,7 +129,7 @@ export default function Quiz() {
   }, [theme?.id, user?.id])
 
   useEffect(() => {
-    if (question?.type === 'typed') inputRef.current?.focus()
+    if (question?.type === 'typed') inputRef.current?.focus({ preventScroll: true })
   }, [question])
 
   async function ensureProfile() {
@@ -538,7 +538,12 @@ export default function Quiz() {
 
 const styles = {
   page: {
-    minHeight: '100vh',
+    position: 'fixed',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    overflow: 'auto',
     backgroundColor: '#f8f8f6',
     fontFamily: 'system-ui, sans-serif',
   },

@@ -75,7 +75,7 @@ export default function Polish() {
   }, [user?.id])
 
   useEffect(() => {
-    if (phase === 'question') inputRef.current?.focus()
+    if (phase === 'question') inputRef.current?.focus({ preventScroll: true })
   }, [currentIdx, phase])
 
   async function loadPolish() {
@@ -321,7 +321,12 @@ export default function Polish() {
 
 const styles = {
   page: {
-    minHeight: '100vh',
+    position: 'fixed',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    overflow: 'auto',
     backgroundColor: '#f8f8f6',
     fontFamily: 'system-ui, sans-serif',
   },
