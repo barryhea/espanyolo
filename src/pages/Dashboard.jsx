@@ -83,11 +83,11 @@ function WordTable({ words, progressMap, onToggleHidden }) {
       <table style={styles.table}>
         <thead>
           <tr>
-            <th style={styles.thLeft}>Word</th>
+            <th style={styles.thLeft}>English</th>
             <th style={styles.thLeft}>Spanish</th>
-            <th style={styles.thCenter}>S1</th>
-            <th style={styles.thCenter}>S2</th>
-            <th style={styles.thCenter}>S3</th>
+            <th style={styles.thCenter}>🥉</th>
+            <th style={styles.thCenter}>🥈</th>
+            <th style={styles.thCenter}>🥇</th>
             <th style={styles.thRight}></th>
           </tr>
         </thead>
