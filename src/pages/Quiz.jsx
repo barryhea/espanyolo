@@ -282,6 +282,13 @@ export default function Quiz() {
       if (prog.stage === 2 && newConsecIncorrect >= 2) {
         newProg = { ...prog, stage: 1, consecutive_correct: 0, consecutive_incorrect: 0 }
         console.log(`[handleAnswer] word ${wordId} REGRESSED S2 → S1 (2 consecutive incorrect)`)
+      } else if (prog.stage === 3 && newConsecIncorrect >= 2) {
+        newProg = { ...prog, consecutive_correct: 0, consecutive_incorrect: 0 }
+        console.log(`[handleAnswer] word ${wordId} S3 counter reset (2 consecutive incorrect)`)
+      } else if (prog.stage === 3) {
+        // Forgiveness buffer: one wrong in S3 preserves the consecutive_correct counter
+        newProg = { ...prog, consecutive_incorrect: newConsecIncorrect }
+        console.log(`[handleAnswer] word ${wordId} S3 forgiveness — cc preserved at ${prog.consecutive_correct}, ci: ${newConsecIncorrect}`)
       } else {
         newProg = { ...prog, consecutive_correct: 0, consecutive_incorrect: newConsecIncorrect }
         console.log(`[handleAnswer] word ${wordId} incorrect — S${prog.stage} consec_correct reset, consec_incorrect: ${newConsecIncorrect}`)
