@@ -276,6 +276,10 @@ export default function Polish() {
               disabled={phase === 'feedback'}
               autoFocus
               placeholder="Type the Spanish word…"
+              autoComplete="off"
+              autoCorrect="on"
+              spellCheck="true"
+              data-form-type="other"
             />
             {phase === 'question' && (
               <button
