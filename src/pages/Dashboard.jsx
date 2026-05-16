@@ -126,6 +126,7 @@ export default function Dashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [themeProgress, setThemeProgress] = useState({})
+  const [masteredCount, setMasteredCount] = useState(0)
 
   // Modal state
   const [modalTheme, setModalTheme] = useState(null)
@@ -170,7 +171,12 @@ export default function Dashboard() {
       progress[theme.title] = total > 0 ? Math.round((count / total) * 100) : 0
     }
 
+    const polishEligible = new Set(
+      (done ?? []).filter(p => p.mastered && !p.hidden).map(p => p.word_id)
+    )
+
     setThemeProgress(progress)
+    setMasteredCount(polishEligible.size)
   }
 
   async function openModal(theme) {
@@ -284,6 +290,22 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
+          <div style={styles.polishWrap}>
+            <h3 style={styles.polishTitle}>Polish</h3>
+            <p style={styles.polishSubtitle}>Practise your mastered words</p>
+            <button
+              style={masteredCount > 0 ? styles.polishCard : styles.polishCardDisabled}
+              onClick={() => masteredCount > 0 && navigate('/polish')}
+              disabled={masteredCount === 0}
+            >
+              <span style={masteredCount > 0 ? styles.polishCardText : styles.polishCardTextDisabled}>
+                {masteredCount === 0
+                  ? 'Master some words to unlock Polish mode'
+                  : `${masteredCount} mastered word${masteredCount !== 1 ? 's' : ''} ready to polish →`}
+              </span>
+            </button>
+          </div>
+
           <div style={styles.hiddenWordsBtnWrap}>
             <button style={styles.hiddenWordsBtn} onClick={() => navigate('/hidden')}>
               Hidden words
@@ -470,6 +492,51 @@ const styles = {
     fontWeight: 500,
     color: '#111',
     lineHeight: 1.3,
+  },
+  polishWrap: {
+    marginTop: '2rem',
+  },
+  polishTitle: {
+    margin: '0 0 0.2rem',
+    fontSize: '1rem',
+    fontWeight: 600,
+    color: '#111',
+  },
+  polishSubtitle: {
+    margin: '0 0 0.75rem',
+    fontSize: '0.85rem',
+    color: '#666',
+  },
+  polishCard: {
+    display: 'block',
+    width: '100%',
+    padding: '1.1rem 1.5rem',
+    background: '#fffbeb',
+    border: '1.5px solid #fbbf24',
+    borderRadius: '10px',
+    cursor: 'pointer',
+    textAlign: 'left',
+    transition: 'border-color 0.15s, box-shadow 0.15s',
+  },
+  polishCardDisabled: {
+    display: 'block',
+    width: '100%',
+    padding: '1.1rem 1.5rem',
+    background: '#f9f9f9',
+    border: '1.5px solid #e5e5e5',
+    borderRadius: '10px',
+    cursor: 'default',
+    textAlign: 'left',
+  },
+  polishCardText: {
+    fontSize: '0.9rem',
+    fontWeight: 600,
+    color: '#92400e',
+  },
+  polishCardTextDisabled: {
+    fontSize: '0.9rem',
+    fontWeight: 400,
+    color: '#aaa',
   },
   hiddenWordsBtnWrap: {
     marginTop: '1.5rem',
