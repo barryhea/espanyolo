@@ -149,35 +149,37 @@ export default function Quiz() {
     const wordIds = words.map(w => w.id)
     const { data: progress } = await supabase
       .from('user_word_progress')
-      .select('id, word_id, stage, consecutive_correct, hidden')
+      .select('id, word_id, stage, consecutive_correct, hidden, mastered')
       .eq('user_id', user.id)
       .in('word_id', wordIds)
 
     const progMap = {}
     const hiddenWordIds = new Set()
+    const masteredWordIds = new Set()
     for (const p of progress ?? []) {
       const existing = progMap[p.word_id]
-      // If duplicate rows exist (missing unique constraint), keep the most advanced
       if (!existing || p.stage > existing.stage ||
           (p.stage === existing.stage && p.consecutive_correct > existing.consecutive_correct)) {
         progMap[p.word_id] = {
           stage: p.stage ?? 1,
           consecutive_correct: p.consecutive_correct ?? 0,
           hidden: p.hidden ?? false,
+          mastered: p.mastered ?? false,
           db_id: p.id,
           consecutive_incorrect: 0,
         }
       }
       if (p.hidden) hiddenWordIds.add(p.word_id)
+      if (p.mastered) masteredWordIds.add(p.word_id)
     }
     console.log('[loadQuiz] progress loaded:', Object.fromEntries(
-      Object.entries(progMap).map(([id, p]) => [id, `S${p.stage} C${p.consecutive_correct}`])
+      Object.entries(progMap).map(([id, p]) => [id, `S${p.stage} C${p.consecutive_correct} M${p.mastered}`])
     ))
     progressRef.current = progMap
     setHiddenWords(hiddenWordIds)
 
-    // Hidden words are excluded from sessions but kept in allWords for distractor picking
-    const visibleWords = words.filter(w => !hiddenWordIds.has(w.id))
+    // Hidden and mastered words are excluded from sessions; kept in allWords for distractor picking
+    const visibleWords = words.filter(w => !hiddenWordIds.has(w.id) && !masteredWordIds.has(w.id))
     const sess = buildSession(visibleWords, progMap)
 
     setAllWords(words)
@@ -200,20 +202,20 @@ export default function Quiz() {
   async function saveProgress(wordId) {
     const prog = progressRef.current[wordId]
     if (!prog) return
-    const { stage, consecutive_correct, hidden, db_id } = prog
-    console.log('[saveProgress]', { wordId, stage, consecutive_correct, db_id: db_id ?? 'none' })
+    const { stage, consecutive_correct, hidden, mastered, db_id } = prog
+    console.log('[saveProgress]', { wordId, stage, consecutive_correct, mastered, db_id: db_id ?? 'none' })
 
     if (db_id) {
       const { error } = await supabase
         .from('user_word_progress')
-        .update({ stage, consecutive_correct, hidden: hidden ?? false })
+        .update({ stage, consecutive_correct, hidden: hidden ?? false, mastered: mastered ?? false })
         .eq('id', db_id)
       if (error) console.error('[saveProgress] UPDATE error', error)
-      else console.log('[saveProgress] UPDATE ok → stage', stage, 'consec', consecutive_correct)
+      else console.log('[saveProgress] UPDATE ok → stage', stage, 'consec', consecutive_correct, 'mastered', mastered)
     } else {
       const { data, error } = await supabase
         .from('user_word_progress')
-        .insert({ user_id: user.id, word_id: wordId, stage, consecutive_correct, hidden: hidden ?? false })
+        .insert({ user_id: user.id, word_id: wordId, stage, consecutive_correct, hidden: hidden ?? false, mastered: mastered ?? false })
         .select('id')
         .single()
       if (error) console.error('[saveProgress] INSERT error', error)
@@ -234,7 +236,7 @@ export default function Quiz() {
     })
 
     const prog = progressRef.current[wordId]
-    progressRef.current[wordId] = { ...(prog ?? { stage: 1, consecutive_correct: 0, db_id: null }), hidden: willBeHidden }
+    progressRef.current[wordId] = { ...(prog ?? { stage: 1, consecutive_correct: 0, mastered: false, db_id: null }), hidden: willBeHidden }
 
     const currentProg = progressRef.current[wordId]
     const { data } = await supabase
@@ -246,6 +248,7 @@ export default function Quiz() {
           stage: currentProg?.stage ?? 1,
           consecutive_correct: currentProg?.consecutive_correct ?? 0,
           hidden: willBeHidden,
+          mastered: currentProg?.mastered ?? false,
         },
         { onConflict: 'user_id,word_id' }
       )
@@ -267,9 +270,12 @@ export default function Quiz() {
       if (newConsec >= threshold && prog.stage < 3) {
         newProg = { ...prog, stage: prog.stage + 1, consecutive_correct: 0, consecutive_incorrect: 0 }
         console.log(`[handleAnswer] word ${wordId} GRADUATED S${prog.stage} → S${prog.stage + 1}`)
+      } else if (prog.stage === 3 && newConsec >= 5) {
+        newProg = { ...prog, consecutive_correct: newConsec, consecutive_incorrect: 0, mastered: true }
+        console.log(`[handleAnswer] word ${wordId} MASTERED at S3 (${newConsec} consecutive correct)`)
       } else {
         newProg = { ...prog, consecutive_correct: newConsec, consecutive_incorrect: 0 }
-        console.log(`[handleAnswer] word ${wordId} correct — S${prog.stage} consec ${prog.consecutive_correct} → ${newConsec} (need ${threshold})`)
+        console.log(`[handleAnswer] word ${wordId} correct — S${prog.stage} consec ${prog.consecutive_correct} → ${newConsec}`)
       }
     } else {
       const newConsecIncorrect = (prog.consecutive_incorrect ?? 0) + 1
@@ -335,7 +341,7 @@ export default function Quiz() {
         <main style={styles.main}>
           <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back to themes</button>
           <div style={styles.card}>
-            <p style={{ margin: 0, color: '#555' }}>All words in this theme are hidden. Unhide some words to start a session.</p>
+            <p style={{ margin: 0, color: '#555' }}>All words in this theme are hidden or mastered. Unhide some words to continue.</p>
           </div>
         </main>
       </div>
@@ -378,9 +384,10 @@ export default function Quiz() {
                   const prog = progressRef.current[word.id]
                   const stage = prog?.stage ?? 1
                   const consec = prog?.consecutive_correct ?? 0
-                  const s1done = stage >= 2
-                  const s2done = stage >= 3
-                  const s3done = stage === 3 && consec >= 5
+                  const isMastered = prog?.mastered ?? false
+                  const s1done = stage >= 2 || isMastered
+                  const s2done = stage >= 3 || isMastered
+                  const s3done = isMastered || (stage === 3 && consec >= 5)
                   const isHidden = hiddenWords.has(word.id)
                   const wordResult = resultByWordId[word.id]
                   const textColor = wordResult === 'exact' ? '#16a34a' : wordResult === 'close' ? '#d97706' : wordResult === 'wrong' ? '#dc2626' : '#333'

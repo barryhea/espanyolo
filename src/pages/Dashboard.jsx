@@ -101,9 +101,9 @@ function WordTable({ words, progressMap, onToggleHidden }) {
               <tr key={word.id} style={styles.tableRow}>
                 <td style={styles.tdEn}>{word.english}</td>
                 <td style={styles.tdEs}>{word.spanish}</td>
-                <StageCell done={stage >= 2} />
-                <StageCell done={stage >= 3} />
-                <StageCell done={stage === 3 && consec >= 5} />
+                <StageCell done={stage >= 2 || isHidden} />
+                <StageCell done={stage >= 3 || isHidden} />
+                <StageCell done={(stage === 3 && consec >= 5) || isHidden} />
                 <td style={styles.tdHide}>
                   <button
                     style={{ ...styles.hideBtn, color: isHidden ? '#3b82f6' : '#bbb' }}
@@ -139,13 +139,13 @@ export default function Dashboard() {
   }, [user?.id])
 
   async function loadProgress() {
-    const [{ data: allWords }, { data: mastered }] = await Promise.all([
-      supabase.from('words').select('theme'),
+    const [{ data: allWords }, { data: done }] = await Promise.all([
+      supabase.from('words').select('id, theme'),
       supabase
         .from('user_word_progress')
-        .select('words(theme)')
+        .select('word_id, words(theme), mastered, hidden')
         .eq('user_id', user.id)
-        .eq('stage', 3),
+        .or('mastered.eq.true,hidden.eq.true'),
     ])
 
     const totals = {}
@@ -153,17 +153,21 @@ export default function Dashboard() {
       totals[w.theme] = (totals[w.theme] || 0) + 1
     }
 
-    const masteredByTheme = {}
-    for (const p of mastered ?? []) {
+    // Count unique word_ids that are mastered or hidden per theme (avoid double-counting)
+    const doneByTheme = {}
+    for (const p of done ?? []) {
       const t = p.words?.theme
-      if (t) masteredByTheme[t] = (masteredByTheme[t] || 0) + 1
+      if (t) {
+        if (!doneByTheme[t]) doneByTheme[t] = new Set()
+        doneByTheme[t].add(p.word_id)
+      }
     }
 
     const progress = {}
     for (const theme of VOCAB_THEMES) {
       const total = totals[theme.title] || 0
-      const done = masteredByTheme[theme.title] || 0
-      progress[theme.title] = total > 0 ? Math.round((done / total) * 100) : 0
+      const count = doneByTheme[theme.title]?.size ?? 0
+      progress[theme.title] = total > 0 ? Math.round((count / total) * 100) : 0
     }
 
     setThemeProgress(progress)
@@ -187,7 +191,7 @@ export default function Dashboard() {
     if (wordIds.length) {
       const { data } = await supabase
         .from('user_word_progress')
-        .select('id, word_id, stage, consecutive_correct, hidden')
+        .select('id, word_id, stage, consecutive_correct, hidden, mastered')
         .eq('user_id', user.id)
         .in('word_id', wordIds)
       progress = data ?? []
@@ -202,6 +206,7 @@ export default function Dashboard() {
           stage: p.stage ?? 1,
           consecutive_correct: p.consecutive_correct ?? 0,
           hidden: p.hidden ?? false,
+          mastered: p.mastered ?? false,
           db_id: p.id,
         }
       }
