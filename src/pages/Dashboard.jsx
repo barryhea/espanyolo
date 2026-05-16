@@ -147,6 +147,11 @@ export default function Dashboard() {
     window.history.replaceState(null, '')
   }, [user?.id, location.state?.openThemeId, location.state?.openView])
 
+  useEffect(() => {
+    document.body.style.overflow = modalTheme ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [modalTheme])
+
   async function loadProgress() {
     const [{ data: allWords }, { data: done }] = await Promise.all([
       supabase.from('words').select('id, theme'),
