@@ -70,9 +70,9 @@ function buildQuestion(word, allWords, progressMap) {
     return { type: 'mc', word, options, prompt: word.english, promptLabel: 'What is the Spanish for:', correct: word.spanish, stage }
   }
   if (stage === 2) {
-    return { type: 'typed', word, prompt: word.spanish, promptLabel: 'What is the English for:', correct: word.english, stage }
+    return { type: 'typed', word, prompt: word.spanish, promptLabel: 'What is the English for:', correct: word.english, placeholder: 'Type the English word…', stage }
   }
-  return { type: 'typed', word, prompt: word.english, promptLabel: 'What is the Spanish for:', correct: word.spanish, stage }
+  return { type: 'typed', word, prompt: word.english, promptLabel: 'What is the Spanish for:', correct: word.spanish, placeholder: 'Type the Spanish word…', stage }
 }
 
 function EyeSlashIcon() {
@@ -491,7 +491,7 @@ export default function Quiz() {
                 }}
                 disabled={phase === 'feedback'}
                 autoFocus
-                placeholder="Type the Spanish word…"
+                placeholder={question.placeholder}
                 autoComplete="off"
                 autoCorrect="on"
                 spellCheck="true"
