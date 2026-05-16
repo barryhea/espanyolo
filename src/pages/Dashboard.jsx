@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { VOCAB_THEMES } from '../utils/courseData'
@@ -125,6 +125,7 @@ function WordTable({ words, progressMap, onToggleHidden }) {
 export default function Dashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [themeProgress, setThemeProgress] = useState({})
   const [masteredCount, setMasteredCount] = useState(0)
 
@@ -138,6 +139,13 @@ export default function Dashboard() {
   useEffect(() => {
     if (user) loadProgress()
   }, [user?.id])
+
+  useEffect(() => {
+    if (!user || !location.state?.openThemeId) return
+    const t = VOCAB_THEMES.find(t => t.id === location.state.openThemeId)
+    if (t) openModal(t, location.state.openView ?? 'menu')
+    window.history.replaceState(null, '')
+  }, [user?.id, location.state?.openThemeId, location.state?.openView])
 
   async function loadProgress() {
     const [{ data: allWords }, { data: done }] = await Promise.all([
@@ -179,9 +187,9 @@ export default function Dashboard() {
     setMasteredCount(polishEligible.size)
   }
 
-  async function openModal(theme) {
+  async function openModal(theme, initialView = 'menu') {
     setModalTheme(theme)
-    setModalView('menu')
+    setModalView(initialView)
     setModalWords([])
     setModalProgress({})
     setModalLoading(true)

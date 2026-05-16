@@ -365,13 +365,9 @@ export default function Quiz() {
           <span style={styles.headerTheme}>{theme.title}</span>
         </header>
         <main style={{ ...styles.main, maxWidth: '820px' }}>
-          <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back to themes</button>
           <div style={styles.summaryHeader}>
-            <div>
-              <h2 style={styles.summaryTitle}>Session complete</h2>
-              <p style={styles.summaryScore}>{correctCount} / {results.length} correct</p>
-            </div>
-            <button style={styles.primaryBtn} onClick={loadQuiz}>Play again</button>
+            <h2 style={styles.summaryTitle}>Session complete</h2>
+            <p style={styles.summaryScore}>{correctCount} / {results.length} correct</p>
           </div>
 
           <div style={styles.tableWrap}>
@@ -419,6 +415,21 @@ export default function Quiz() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          <div style={styles.summaryActions}>
+            <button style={{ ...styles.primaryBtn, width: '100%', alignSelf: 'auto', textAlign: 'center' }} onClick={loadQuiz}>
+              Play again
+            </button>
+            <button style={styles.secondaryBtn} onClick={() => navigate('/vocabulary', { state: { openThemeId: theme.id, openView: 'progress' } })}>
+              Progress
+            </button>
+            <button style={styles.secondaryBtn} onClick={() => navigate('/vocabulary', { state: { openThemeId: theme.id, openView: 'hidden' } })}>
+              Hidden Words
+            </button>
+            <button style={styles.summaryBackLink} onClick={() => navigate('/vocabulary')}>
+              ← Back to themes
+            </button>
           </div>
         </main>
       </div>
@@ -678,10 +689,7 @@ const styles = {
     cursor: 'pointer',
   },
   summaryHeader: {
-    display: 'flex',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: '1rem',
+    paddingBottom: '0.25rem',
   },
   summaryTitle: {
     margin: '0 0 0.25rem',
@@ -693,6 +701,33 @@ const styles = {
     fontSize: '2rem',
     fontWeight: 700,
     color: '#3b82f6',
+  },
+  summaryActions: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem',
+    paddingTop: '0.25rem',
+  },
+  secondaryBtn: {
+    padding: '0.75rem 1.25rem',
+    fontSize: '1rem',
+    fontWeight: 600,
+    backgroundColor: '#fff',
+    color: '#111',
+    border: '1px solid #e5e5e5',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    width: '100%',
+    textAlign: 'center',
+  },
+  summaryBackLink: {
+    padding: '0.5rem',
+    fontSize: '0.875rem',
+    color: '#888',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    textAlign: 'center',
   },
   tableWrap: {
     backgroundColor: '#fff',
