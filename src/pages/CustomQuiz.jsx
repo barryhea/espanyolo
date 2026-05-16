@@ -62,6 +62,37 @@ function buildQuestion(word, allWords, progressMap) {
   return { type: 'typed', word, prompt: word.english, promptLabel: 'What is the Spanish for:', correct: word.spanish, placeholder: 'Type the Spanish word…', stage }
 }
 
+function MasteryBar({ stage, consecutiveCorrect, mastered }) {
+  const s1Filled = mastered ? 3 : stage >= 2 ? 3 : Math.min(consecutiveCorrect, 3)
+  const s2Filled = mastered ? 5 : stage >= 3 ? 5 : stage === 2 ? Math.min(consecutiveCorrect, 5) : 0
+  const s3Filled = mastered ? 3 : stage === 3 ? Math.min(consecutiveCorrect, 3) : 0
+  const BRONZE = '#cd7f32', SILVER = '#a8a9ad', GOLD = '#f5c518'
+  const segs = [
+    ...Array(3).fill(null).map((_, i) => ({ filled: i < s1Filled, color: BRONZE })),
+    ...Array(5).fill(null).map((_, i) => ({ filled: i < s2Filled, color: SILVER })),
+    ...Array(3).fill(null).map((_, i) => ({ filled: i < s3Filled, color: GOLD })),
+  ]
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+      <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        Word Mastery
+      </span>
+      <div style={{ display: 'flex', gap: '3px' }}>
+        {segs.map((seg, i) => (
+          <div key={i} style={{
+            flex: 1,
+            height: '8px',
+            borderRadius: '3px',
+            backgroundColor: seg.filled ? seg.color : '#fff',
+            border: `1.5px solid ${seg.filled ? seg.color : '#d1d5db'}`,
+            boxSizing: 'border-box',
+          }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function buildCustomSession(words, progressMap) {
   const target = Math.min(20, Math.max(5, words.length))
   const byStage = { 1: [], 2: [], 3: [] }
@@ -305,6 +336,8 @@ export default function CustomQuiz() {
     )
   }
 
+  const currentProg = progressRef.current[question?.word?.id]
+
   return (
     <div style={styles.page}>
       <NavBar rightContent={<span style={styles.headerLabel}>Custom Quiz</span>} />
@@ -320,6 +353,11 @@ export default function CustomQuiz() {
           <p style={styles.stageLabel}>Stage {question.stage}</p>
           <p style={styles.prompt}>{question.promptLabel}</p>
           <p style={styles.word}>{question.prompt}</p>
+          <MasteryBar
+            stage={currentProg?.stage ?? 1}
+            consecutiveCorrect={currentProg?.consecutive_correct ?? 0}
+            mastered={currentProg?.mastered ?? false}
+          />
 
           {question.type === 'mc' && (
             <div style={styles.optionGrid}>
@@ -418,6 +456,7 @@ const styles = {
     flexDirection: 'column',
     gap: '0.5rem',
     width: '100%',
+    boxSizing: 'border-box',
     overflowY: 'auto',
     flex: 1,
     WebkitOverflowScrolling: 'touch',
