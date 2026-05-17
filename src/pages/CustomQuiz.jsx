@@ -95,21 +95,14 @@ function MasteryBar({ stage, consecutiveCorrect, mastered }) {
 
 function buildCustomSession(words, progressMap) {
   const target = Math.min(20, Math.max(5, words.length))
-  const byStage = { 1: [], 2: [], 3: [] }
-  for (const word of words) {
-    const stage = Math.max(1, Math.min(3, progressMap[word.id]?.stage ?? 1))
-    byStage[stage].push(word)
-  }
-  const ordered = [
-    ...shuffle(byStage[3]),
-    ...shuffle(byStage[2]),
-    ...shuffle(byStage[1]),
-  ]
-  if (!ordered.length) return []
+  const s1 = words.filter(w => (progressMap[w.id]?.stage ?? 1) === 1)
+  const pool = s1.length > 0 ? s1 : words
+  if (!pool.length) return []
   const session = []
   let i = 0
+  const shuffled = shuffle(pool)
   while (session.length < target) {
-    session.push(ordered[i % ordered.length])
+    session.push(shuffled[i % shuffled.length])
     i++
   }
   return session

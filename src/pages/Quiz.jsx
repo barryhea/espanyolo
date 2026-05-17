@@ -52,16 +52,13 @@ function pickDistractors(word, allWords, count = 3) {
 }
 
 function buildSession(words, progressMap) {
-  const byStage = { 1: [], 2: [], 3: [] }
-  for (const word of words) {
-    const stage = progressMap[word.id]?.stage ?? 1
-    byStage[stage].push(word)
+  const s1 = words.filter(w => (progressMap[w.id]?.stage ?? 1) === 1)
+  if (s1.length > 0) {
+    // S1 phase: keep drilling S1 words until every word has graduated
+    return shuffle(s1).slice(0, 5)
   }
-  return [
-    ...shuffle(byStage[3]),
-    ...shuffle(byStage[2]),
-    ...shuffle(byStage[1]),
-  ].slice(0, 5)
+  // S2+ phase: all remaining words mixed equally, no S3 priority
+  return shuffle(words).slice(0, 5)
 }
 
 function buildQuestion(word, allWords, progressMap) {
