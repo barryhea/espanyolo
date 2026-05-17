@@ -320,13 +320,19 @@ export default function Dashboard() {
       const wordIds = wordList.map(w => w.id)
       const { data: progress } = await supabase
         .from('user_word_progress')
-        .select('word_id, stage, consecutive_correct, mastered')
+        .select('id, word_id, stage, consecutive_correct, mastered, hidden')
         .eq('user_id', user.id)
         .in('word_id', wordIds)
       for (const p of progress ?? []) {
         const ex = progMap[p.word_id]
         if (!ex || p.stage > ex.stage || (p.stage === ex.stage && p.consecutive_correct > ex.consecutive_correct)) {
-          progMap[p.word_id] = { stage: p.stage ?? 1, consecutive_correct: p.consecutive_correct ?? 0, mastered: p.mastered ?? false }
+          progMap[p.word_id] = {
+            stage: p.stage ?? 1,
+            consecutive_correct: p.consecutive_correct ?? 0,
+            mastered: p.mastered ?? false,
+            hidden: p.hidden ?? false,
+            db_id: p.id,
+          }
         }
       }
     }
@@ -339,6 +345,24 @@ export default function Dashboard() {
       return next
     })
     setSelectorLoading(false)
+  }
+
+  async function toggleHiddenInSelector(wordId) {
+    const prog = selectorProgress[wordId] ?? { stage: 1, consecutive_correct: 0, hidden: false, mastered: false, db_id: null }
+    const willBeHidden = !prog.hidden
+    setSelectorProgress(prev => ({ ...prev, [wordId]: { ...prog, hidden: willBeHidden } }))
+    if (willBeHidden) {
+      setSelectedWordIds(prev => { const next = new Set(prev); next.delete(wordId); return next })
+    }
+    if (prog.db_id) {
+      await supabase.from('user_word_progress').update({ hidden: willBeHidden }).eq('id', prog.db_id)
+    } else {
+      const { data } = await supabase
+        .from('user_word_progress')
+        .insert({ user_id: user.id, word_id: wordId, stage: 1, consecutive_correct: 0, hidden: willBeHidden, mastered: false })
+        .select('id').single()
+      if (data) setSelectorProgress(prev => ({ ...prev, [wordId]: { ...prev[wordId], db_id: data.id } }))
+    }
   }
 
   function toggleWordSelection(wordId) {
@@ -529,15 +553,18 @@ export default function Dashboard() {
               ←
             </button>
             <div style={styles.selectorThemeWrap}>
-              <select
-                style={styles.selectorThemeSelect}
-                value={selectorThemeId ?? ''}
-                onChange={e => loadSelectorTheme(Number(e.target.value))}
-              >
-                {VOCAB_THEMES.map(t => (
-                  <option key={t.id} value={t.id}>{t.title}</option>
-                ))}
-              </select>
+              <div style={styles.selectorThemePill}>
+                <select
+                  style={styles.selectorThemeSelect}
+                  value={selectorThemeId ?? ''}
+                  onChange={e => loadSelectorTheme(Number(e.target.value))}
+                >
+                  {VOCAB_THEMES.map(t => (
+                    <option key={t.id} value={t.id}>{t.title}</option>
+                  ))}
+                </select>
+                <span style={styles.selectorThemeChevron}>▾</span>
+              </div>
             </div>
             <button
               style={selectedWordIds.size > 0 ? styles.startQuizBtn : styles.startQuizBtnDisabled}
@@ -562,6 +589,7 @@ export default function Dashboard() {
                     <th style={styles.selectorThCenter}>🥈</th>
                     <th style={styles.selectorThCenter}>🥇</th>
                     <th style={styles.selectorThCheck}></th>
+                    <th style={styles.selectorThHide}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -570,29 +598,50 @@ export default function Dashboard() {
                     const stage = prog?.stage ?? 1
                     const consec = prog?.consecutive_correct ?? 0
                     const mastered = prog?.mastered ?? false
+                    const isHidden = prog?.hidden ?? false
                     const s1done = stage >= 2 || mastered
                     const s2done = stage >= 3 || mastered
                     const s3done = mastered || (stage === 3 && consec >= 5)
                     const selected = selectedWordIds.has(word.id)
+                    const rowBg = isHidden ? '#f9f9f9' : selected ? '#dcfce7' : '#fff'
                     return (
                       <tr
                         key={word.id}
-                        style={{ ...styles.selectorTableRow, backgroundColor: selected ? '#dcfce7' : '#fff' }}
-                        onClick={() => toggleWordSelection(word.id)}
+                        style={{ ...styles.selectorTableRow, backgroundColor: rowBg }}
+                        onClick={() => !isHidden && toggleWordSelection(word.id)}
                       >
-                        <td style={styles.selectorTdEn}>{word.english}</td>
-                        <td style={styles.selectorTdEs}>{word.spanish}</td>
-                        <td style={styles.selectorStageCell}>
-                          <span style={{ color: s1done ? '#16a34a' : '#d1d5db', fontWeight: 700 }}>{s1done ? '✓' : '✗'}</span>
-                        </td>
-                        <td style={styles.selectorStageCell}>
-                          <span style={{ color: s2done ? '#16a34a' : '#d1d5db', fontWeight: 700 }}>{s2done ? '✓' : '✗'}</span>
-                        </td>
-                        <td style={styles.selectorStageCell}>
-                          <span style={{ color: s3done ? '#16a34a' : '#d1d5db', fontWeight: 700 }}>{s3done ? '✓' : '✗'}</span>
-                        </td>
+                        <td style={{ ...styles.selectorTdEn, color: isHidden ? '#bbb' : '#333' }}>{word.english}</td>
+                        <td style={{ ...styles.selectorTdEs, color: isHidden ? '#bbb' : '#111' }}>{word.spanish}</td>
+                        {isHidden ? (
+                          <>
+                            <td style={styles.selectorStageCell}><span style={{ color: '#d1d5db' }}>—</span></td>
+                            <td style={styles.selectorStageCell}><span style={{ color: '#d1d5db' }}>—</span></td>
+                            <td style={styles.selectorStageCell}><span style={{ color: '#d1d5db' }}>—</span></td>
+                          </>
+                        ) : (
+                          <>
+                            <td style={styles.selectorStageCell}>
+                              <span style={{ color: s1done ? '#16a34a' : '#d1d5db', fontWeight: 700 }}>{s1done ? '✓' : '✗'}</span>
+                            </td>
+                            <td style={styles.selectorStageCell}>
+                              <span style={{ color: s2done ? '#16a34a' : '#d1d5db', fontWeight: 700 }}>{s2done ? '✓' : '✗'}</span>
+                            </td>
+                            <td style={styles.selectorStageCell}>
+                              <span style={{ color: s3done ? '#16a34a' : '#d1d5db', fontWeight: 700 }}>{s3done ? '✓' : '✗'}</span>
+                            </td>
+                          </>
+                        )}
                         <td style={styles.selectorCheckCell}>
                           {selected && <span style={{ color: '#16a34a', fontWeight: 700 }}>✓</span>}
+                        </td>
+                        <td style={styles.selectorHideCell}>
+                          <button
+                            style={{ ...styles.selectorHideBtn, color: isHidden ? '#3b82f6' : '#bbb' }}
+                            onClick={e => { e.stopPropagation(); toggleHiddenInSelector(word.id) }}
+                            title={isHidden ? 'Unhide' : 'Hide'}
+                          >
+                            {isHidden ? <EyeIcon /> : <EyeSlashIcon />}
+                          </button>
                         </td>
                       </tr>
                     )
@@ -978,23 +1027,42 @@ const styles = {
     display: 'flex',
     justifyContent: 'center',
   },
+  selectorThemePill: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    border: '1.5px solid #d1d5db',
+    borderRadius: '20px',
+    padding: '0.3rem 0.75rem',
+    backgroundColor: '#fff',
+    cursor: 'pointer',
+  },
   selectorThemeSelect: {
     border: 'none',
     background: 'none',
-    fontSize: '0.95rem',
+    fontSize: '0.9rem',
     fontWeight: 600,
     color: '#111',
     cursor: 'pointer',
     outline: 'none',
-    maxWidth: '200px',
+    WebkitAppearance: 'none',
+    appearance: 'none',
     textAlign: 'center',
     fontFamily: 'system-ui, sans-serif',
+    maxWidth: '160px',
+  },
+  selectorThemeChevron: {
+    fontSize: '0.85rem',
+    color: '#666',
+    lineHeight: 1,
+    flexShrink: 0,
+    pointerEvents: 'none',
   },
   startQuizBtn: {
     padding: '0.4rem 0.875rem',
     fontSize: '0.875rem',
     fontWeight: 600,
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#16a34a',
     color: '#fff',
     border: 'none',
     borderRadius: '20px',
@@ -1084,7 +1152,15 @@ const styles = {
     padding: '0.6rem 0.5rem',
     borderBottom: '1px solid #f0f0f0',
     backgroundColor: '#fafafa',
-    width: '30px',
+    width: '28px',
+    position: 'sticky',
+    top: 0,
+  },
+  selectorThHide: {
+    padding: '0.6rem 0.5rem',
+    borderBottom: '1px solid #f0f0f0',
+    backgroundColor: '#fafafa',
+    width: '36px',
     position: 'sticky',
     top: 0,
   },
@@ -1112,7 +1188,19 @@ const styles = {
     textAlign: 'center',
   },
   selectorCheckCell: {
-    padding: '0.55rem 0.5rem',
+    padding: '0.55rem 0.25rem',
     textAlign: 'center',
+  },
+  selectorHideCell: {
+    padding: '0.55rem 0.5rem',
+    textAlign: 'right',
+  },
+  selectorHideBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '2px',
+    lineHeight: 0,
+    borderRadius: '4px',
   },
 }
