@@ -64,13 +64,13 @@ function buildQuestion(word, allWords, progressMap) {
 
 function MasteryBar({ stage, consecutiveCorrect, mastered }) {
   const s1Filled = mastered ? 3 : stage >= 2 ? 3 : Math.min(consecutiveCorrect, 3)
-  const s2Filled = mastered ? 5 : stage >= 3 ? 5 : stage === 2 ? Math.min(consecutiveCorrect, 5) : 0
-  const s3Filled = mastered ? 3 : stage === 3 ? Math.min(consecutiveCorrect, 3) : 0
+  const s2Filled = mastered ? 3 : stage >= 3 ? 3 : stage === 2 ? Math.min(consecutiveCorrect, 3) : 0
+  const s3Filled = mastered ? 5 : stage === 3 ? Math.min(consecutiveCorrect, 5) : 0
   const BRONZE = '#cd7f32', SILVER = '#a8a9ad', GOLD = '#f5c518'
   const segs = [
     ...Array(3).fill(null).map((_, i) => ({ filled: i < s1Filled, color: BRONZE })),
-    ...Array(5).fill(null).map((_, i) => ({ filled: i < s2Filled, color: SILVER })),
-    ...Array(3).fill(null).map((_, i) => ({ filled: i < s3Filled, color: GOLD })),
+    ...Array(3).fill(null).map((_, i) => ({ filled: i < s2Filled, color: SILVER })),
+    ...Array(5).fill(null).map((_, i) => ({ filled: i < s3Filled, color: GOLD })),
   ]
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
