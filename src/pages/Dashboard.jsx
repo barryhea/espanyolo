@@ -402,7 +402,7 @@ export default function Dashboard() {
                   <span style={styles.themeTitle}>{theme.title}</span>
                   {themeStats[theme.title] && (
                     <span style={styles.themeSubtitle}>
-                      {themeStats[theme.title].total} words · {themeStats[theme.title].mastered} mastered · {themeStats[theme.title].hidden} hidden
+                      {themeStats[theme.title].total} words · {themeStats[theme.title].mastered} mastered · {themeStats[theme.title].hidden} hidden · {themeStats[theme.title].total - themeStats[theme.title].mastered - themeStats[theme.title].hidden} remaining
                     </span>
                   )}
                 </div>

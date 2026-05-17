@@ -452,7 +452,7 @@ export default function Quiz() {
             <div style={styles.cardLeft}>
               <span style={styles.themeTitle}>{theme.title}</span>
               <span style={styles.themeSubtitle}>
-                {allWords.length} words · {masteredCount} mastered · {hiddenWords.size} hidden
+                {allWords.length} words · {masteredCount} mastered · {hiddenWords.size} hidden · {allWords.length - masteredCount - hiddenWords.size} remaining
               </span>
             </div>
             <div style={styles.cardDivider} />
