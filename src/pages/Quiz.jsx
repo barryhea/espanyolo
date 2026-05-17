@@ -136,6 +136,47 @@ function MasteryBar({ stage, consecutiveCorrect, mastered }) {
   )
 }
 
+function ringColor(pct) {
+  if (pct === 100) return '#22c55e'
+  if (pct >= 75) return '#eab308'
+  if (pct >= 50) return '#f97316'
+  return '#ef4444'
+}
+
+function ProgressRing({ pct }) {
+  const color = ringColor(pct)
+  const filled = Math.min(100, Math.max(0, pct))
+  const empty = 100 - filled
+  const r = 15.9155
+  return (
+    <svg viewBox="-2 -2 40 40" style={{ width: '100%', height: 'auto', display: 'block' }}>
+      <circle cx="18" cy="18" r={r} fill="none" stroke="#ececec" strokeWidth="3" />
+      {filled > 0 && (
+        <circle
+          cx="18" cy="18" r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth="3"
+          strokeDasharray={`${filled} ${empty}`}
+          strokeDashoffset="25"
+          strokeLinecap="butt"
+        />
+      )}
+      <text
+        x="18" y="18"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={pct === 100 ? 7 : 8.5}
+        fontWeight="700"
+        fill={color}
+        fontFamily="system-ui, sans-serif"
+      >
+        {pct}%
+      </text>
+    </svg>
+  )
+}
+
 export default function Quiz() {
   const { themeId } = useParams()
   const navigate = useNavigate()
@@ -395,29 +436,31 @@ export default function Quiz() {
   if (phase === 'summary') {
     const resultByWordId = Object.fromEntries(results.map(r => [r.word.id, r.result]))
     const masteredCount = allWords.filter(w => progressRef.current[w.id]?.mastered).length
+    let pts = 0, maxPts = 0
+    for (const w of allWords) {
+      const prog = progressRef.current[w.id]
+      if (prog?.hidden) continue
+      maxPts += 3
+      const isMastered = prog?.mastered || ((prog?.stage ?? 1) === 3 && (prog?.consecutive_correct ?? 0) >= 5)
+      if (isMastered) pts += 3
+      else if ((prog?.stage ?? 1) >= 3) pts += 2
+      else if ((prog?.stage ?? 1) >= 2) pts += 1
+    }
+    const progressPct = maxPts > 0 ? Math.round((pts / maxPts) * 100) : 0
     return (
       <div style={styles.page}>
         <NavBar />
         <main style={{ ...styles.main, maxWidth: '820px' }}>
-          <div style={styles.summaryHeader}>
-            <h2 style={styles.summaryTitle}>Session complete</h2>
-          </div>
-
-          <div style={styles.themeMetricsBlock}>
-            <span style={styles.themeMetricsName}>{theme.title}</span>
-            <div style={styles.themeMetricsRow}>
-              <div style={styles.metricItem}>
-                <span style={styles.metricValue}>{allWords.length}</span>
-                <span style={styles.metricLabel}>Total Words</span>
-              </div>
-              <div style={styles.metricItem}>
-                <span style={styles.metricValue}>{masteredCount}</span>
-                <span style={styles.metricLabel}>Mastered</span>
-              </div>
-              <div style={styles.metricItem}>
-                <span style={styles.metricValue}>{hiddenWords.size}</span>
-                <span style={styles.metricLabel}>Hidden</span>
-              </div>
+          <div style={styles.summaryThemeCard}>
+            <div style={styles.cardLeft}>
+              <span style={styles.themeTitle}>{theme.title}</span>
+              <span style={styles.themeSubtitle}>
+                {allWords.length} words · {masteredCount} mastered · {hiddenWords.size} hidden
+              </span>
+            </div>
+            <div style={styles.cardDivider} />
+            <div style={styles.cardRight}>
+              <ProgressRing pct={progressPct} />
             </div>
           </div>
 
@@ -750,47 +793,53 @@ const styles = {
     cursor: 'pointer',
     alignSelf: 'flex-start',
   },
-  summaryHeader: {
-    paddingBottom: '0.25rem',
-  },
-  summaryTitle: {
-    margin: 0,
-    fontSize: '1.3rem',
-    fontWeight: 700,
-  },
-  themeMetricsBlock: {
-    backgroundColor: '#fff',
+  summaryThemeCard: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    height: '72px',
+    background: '#fff',
     border: '1px solid #e5e5e5',
-    borderRadius: '12px',
-    padding: '1rem 1.25rem',
+    borderRadius: '10px',
+    overflow: 'hidden',
+  },
+  cardLeft: {
+    flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    gap: '0.5rem',
+    justifyContent: 'center',
+    gap: '2px',
+    padding: '0.35rem 0.875rem',
+    minWidth: 0,
   },
-  themeMetricsName: {
-    fontSize: '0.85rem',
-    fontWeight: 600,
-    color: '#555',
+  cardDivider: {
+    width: '1px',
+    flexShrink: 0,
+    backgroundColor: '#f0f0f0',
   },
-  themeMetricsRow: {
+  cardRight: {
+    width: '56px',
+    flexShrink: 0,
     display: 'flex',
-    gap: '1.5rem',
+    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
+    padding: '0 3px 3px 0',
   },
-  metricItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1px',
-  },
-  metricValue: {
-    fontSize: '1.25rem',
-    fontWeight: 700,
+  themeTitle: {
+    fontSize: '0.875rem',
+    fontWeight: 500,
     color: '#111',
+    lineHeight: 1.3,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
-  metricLabel: {
-    fontSize: '0.72rem',
-    color: '#888',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
+  themeSubtitle: {
+    fontSize: '0.68rem',
+    color: '#bbb',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   summaryActions: {
     display: 'flex',
