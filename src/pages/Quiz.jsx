@@ -393,15 +393,32 @@ export default function Quiz() {
   }
 
   if (phase === 'summary') {
-    const correctCount = results.filter(r => r.correct).length
     const resultByWordId = Object.fromEntries(results.map(r => [r.word.id, r.result]))
+    const masteredCount = allWords.filter(w => progressRef.current[w.id]?.mastered).length
     return (
       <div style={styles.page}>
         <NavBar />
         <main style={{ ...styles.main, maxWidth: '820px' }}>
           <div style={styles.summaryHeader}>
             <h2 style={styles.summaryTitle}>Session complete</h2>
-            <p style={styles.summaryScore}>{correctCount} / {results.length} correct</p>
+          </div>
+
+          <div style={styles.themeMetricsBlock}>
+            <span style={styles.themeMetricsName}>{theme.title}</span>
+            <div style={styles.themeMetricsRow}>
+              <div style={styles.metricItem}>
+                <span style={styles.metricValue}>{allWords.length}</span>
+                <span style={styles.metricLabel}>Total Words</span>
+              </div>
+              <div style={styles.metricItem}>
+                <span style={styles.metricValue}>{masteredCount}</span>
+                <span style={styles.metricLabel}>Mastered</span>
+              </div>
+              <div style={styles.metricItem}>
+                <span style={styles.metricValue}>{hiddenWords.size}</span>
+                <span style={styles.metricLabel}>Hidden</span>
+              </div>
+            </div>
           </div>
 
           <div style={styles.tableWrap}>
@@ -455,13 +472,15 @@ export default function Quiz() {
             <button style={{ ...styles.primaryBtn, width: '100%', alignSelf: 'auto', textAlign: 'center' }} onClick={loadQuiz}>
               Play again
             </button>
-            <button style={styles.secondaryBtn} onClick={() => navigate('/vocabulary', { state: { openThemeId: theme.id, openView: 'progress' } })}>
-              Progress
-            </button>
-            <button style={styles.secondaryBtn} onClick={() => navigate('/vocabulary', { state: { openThemeId: theme.id, openView: 'hidden' } })}>
-              Hidden Words
-            </button>
-            <button style={styles.summaryBackLink} onClick={() => navigate('/vocabulary')}>
+            <div style={styles.summaryBtnRow}>
+              <button style={{ ...styles.secondaryBtn, flex: 1 }} onClick={() => navigate('/vocabulary', { state: { openThemeId: theme.id, openView: 'progress' } })}>
+                Progress
+              </button>
+              <button style={{ ...styles.secondaryBtn, flex: 1 }} onClick={() => navigate('/vocabulary', { state: { openThemeId: theme.id, openView: 'hidden' } })}>
+                Hidden Words
+              </button>
+            </div>
+            <button style={styles.backToThemesBtn} onClick={() => navigate('/vocabulary')}>
               ← Back to themes
             </button>
           </div>
@@ -735,21 +754,53 @@ const styles = {
     paddingBottom: '0.25rem',
   },
   summaryTitle: {
-    margin: '0 0 0.25rem',
+    margin: 0,
     fontSize: '1.3rem',
     fontWeight: 700,
   },
-  summaryScore: {
-    margin: 0,
-    fontSize: '2rem',
+  themeMetricsBlock: {
+    backgroundColor: '#fff',
+    border: '1px solid #e5e5e5',
+    borderRadius: '12px',
+    padding: '1rem 1.25rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem',
+  },
+  themeMetricsName: {
+    fontSize: '0.85rem',
+    fontWeight: 600,
+    color: '#555',
+  },
+  themeMetricsRow: {
+    display: 'flex',
+    gap: '1.5rem',
+  },
+  metricItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
+  },
+  metricValue: {
+    fontSize: '1.25rem',
     fontWeight: 700,
-    color: '#3b82f6',
+    color: '#111',
+  },
+  metricLabel: {
+    fontSize: '0.72rem',
+    color: '#888',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
   },
   summaryActions: {
     display: 'flex',
     flexDirection: 'column',
     gap: '0.75rem',
     paddingTop: '0.25rem',
+  },
+  summaryBtnRow: {
+    display: 'flex',
+    gap: '0.75rem',
   },
   secondaryBtn: {
     padding: '0.75rem 1.25rem',
@@ -763,13 +814,16 @@ const styles = {
     width: '100%',
     textAlign: 'center',
   },
-  summaryBackLink: {
-    padding: '0.5rem',
-    fontSize: '0.875rem',
-    color: '#888',
-    background: 'none',
+  backToThemesBtn: {
+    padding: '0.75rem 1.25rem',
+    fontSize: '1rem',
+    fontWeight: 600,
+    backgroundColor: '#3b82f6',
+    color: '#fff',
     border: 'none',
+    borderRadius: '8px',
     cursor: 'pointer',
+    width: '100%',
     textAlign: 'center',
   },
   tableWrap: {
