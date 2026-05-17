@@ -18,7 +18,7 @@ function ProgressRing({ pct }) {
   const empty = 100 - filled
   const r = 15.9155
   return (
-    <svg viewBox="-2 -2 40 40" style={{ width: '100%', maxWidth: '44px', height: 'auto', display: 'block' }}>
+    <svg viewBox="-2 -2 40 40" style={{ width: '100%', height: 'auto', display: 'block' }}>
       <circle cx="18" cy="18" r={r} fill="none" stroke="#ececec" strokeWidth="3" />
       {filled > 0 && (
         <circle
@@ -131,6 +131,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const location = useLocation()
   const [themeProgress, setThemeProgress] = useState({})
+  const [themeStats, setThemeStats] = useState({})
   const [masteredCount, setMasteredCount] = useState(0)
 
   // Theme modal state
@@ -171,20 +172,16 @@ export default function Dashboard() {
       supabase.from('words').select('id, theme'),
       supabase
         .from('user_word_progress')
-        .select('word_id, stage, mastered, hidden')
+        .select('word_id, stage, consecutive_correct, mastered, hidden')
         .eq('user_id', user.id),
     ])
 
-    // Build word→theme map and per-theme word lists
-    const wordThemeMap = {}
     const wordsByTheme = {}
     for (const w of allWords ?? []) {
-      wordThemeMap[w.id] = w.theme
       if (!wordsByTheme[w.theme]) wordsByTheme[w.theme] = []
       wordsByTheme[w.theme].push(w.id)
     }
 
-    // Best progress row per word
     const progByWord = {}
     for (const p of progressRows ?? []) {
       const ex = progByWord[p.word_id]
@@ -192,27 +189,30 @@ export default function Dashboard() {
           ((p.stage ?? 1) === (ex.stage ?? 1) && p.mastered && !ex.mastered)) {
         progByWord[p.word_id] = {
           stage: p.stage ?? 1,
+          consecutive_correct: p.consecutive_correct ?? 0,
           mastered: p.mastered ?? false,
           hidden: p.hidden ?? false,
         }
       }
     }
 
-    // Stage-weighted percentage per theme (hidden words excluded)
-    // S1 (no progress): 0/3  S2 (completed S1): 1/3  S3 (completed S2): 2/3  mastered: 3/3
+    // Stage-weighted % (hidden excluded). S2=1/3, S3=2/3, mastered=3/3
     const progress = {}
+    const stats = {}
     for (const theme of VOCAB_THEMES) {
       const wordIds = wordsByTheme[theme.title] ?? []
-      let pts = 0, maxPts = 0
+      let pts = 0, maxPts = 0, masteredCt = 0, hiddenCt = 0
       for (const wordId of wordIds) {
         const prog = progByWord[wordId]
-        if (prog?.hidden) continue
+        if (prog?.hidden) { hiddenCt++; continue }
         maxPts += 3
-        if (prog?.mastered) pts += 3
+        const isMastered = prog?.mastered || ((prog?.stage ?? 1) === 3 && (prog?.consecutive_correct ?? 0) >= 5)
+        if (isMastered) { pts += 3; masteredCt++ }
         else if ((prog?.stage ?? 1) >= 3) pts += 2
         else if ((prog?.stage ?? 1) >= 2) pts += 1
       }
       progress[theme.title] = maxPts > 0 ? Math.round((pts / maxPts) * 100) : 0
+      stats[theme.title] = { total: wordIds.length, mastered: masteredCt, hidden: hiddenCt }
     }
 
     const polishEligible = new Set(
@@ -220,6 +220,7 @@ export default function Dashboard() {
     )
 
     setThemeProgress(progress)
+    setThemeStats(stats)
     setMasteredCount(polishEligible.size)
   }
 
@@ -375,6 +376,11 @@ export default function Dashboard() {
               >
                 <div style={styles.cardLeft}>
                   <span style={styles.themeTitle}>{theme.title}</span>
+                  {themeStats[theme.title] && (
+                    <span style={styles.themeSubtitle}>
+                      {themeStats[theme.title].total} words · {themeStats[theme.title].mastered} mastered · {themeStats[theme.title].hidden} hidden
+                    </span>
+                  )}
                 </div>
                 <div style={styles.cardDivider} />
                 <div style={styles.cardRight}>
@@ -658,10 +664,13 @@ const styles = {
     transition: 'border-color 0.15s, box-shadow 0.15s',
   },
   cardLeft: {
-    flex: '2',
+    flex: 1,
     display: 'flex',
-    alignItems: 'center',
-    padding: '0.5rem 0.875rem',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    gap: '2px',
+    padding: '0.35rem 0.875rem',
+    minWidth: 0,
   },
   cardDivider: {
     width: '1px',
@@ -669,17 +678,28 @@ const styles = {
     backgroundColor: '#f0f0f0',
   },
   cardRight: {
-    flex: '1',
+    width: '56px',
+    flexShrink: 0,
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '8px 10px',
+    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
+    padding: '0 3px 3px 0',
   },
   themeTitle: {
     fontSize: '0.875rem',
     fontWeight: 500,
     color: '#111',
     lineHeight: 1.3,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  themeSubtitle: {
+    fontSize: '0.68rem',
+    color: '#bbb',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   polishWrap: {
     marginTop: '2rem',
