@@ -586,7 +586,7 @@ const styles = {
     padding: '0.75rem 1.25rem',
     fontSize: '1rem',
     fontWeight: 600,
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#16a34a',
     color: '#fff',
     border: 'none',
     borderRadius: '8px',
