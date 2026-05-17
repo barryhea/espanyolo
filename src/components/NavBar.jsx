@@ -28,6 +28,7 @@ export default function NavBar({ rightContent }) {
     location.pathname.startsWith('/quiz/')
 
   const verbActive = location.pathname === '/verbs'
+  const dictActive = location.pathname === '/dictionary'
 
   return (
     <>
@@ -67,6 +68,12 @@ export default function NavBar({ rightContent }) {
             onClick={() => { setOpen(false); navigate('/verbs') }}
           >
             Verb Trainer
+          </button>
+          <button
+            style={{ ...styles.navItem, ...(dictActive ? styles.navItemActive : {}) }}
+            onClick={() => { setOpen(false); navigate('/dictionary') }}
+          >
+            Dictionary
           </button>
           <div style={styles.navDivider} />
           <button style={{ ...styles.navItem, color: '#666' }} onClick={handleSignOut}>
