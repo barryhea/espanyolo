@@ -484,8 +484,6 @@ export default function Quiz() {
         </div>
 
         <div style={styles.card}>
-          <p style={styles.stageLabel}>Stage {question.stage}</p>
-          <p style={styles.prompt}>{question.promptLabel}</p>
           <p style={styles.word}>{question.prompt}</p>
           <MasteryBar
             stage={currentProg?.stage ?? 1}
@@ -538,7 +536,7 @@ export default function Quiz() {
               />
               {phase === 'question' && (
                 <button
-                  style={{ ...styles.typedBtn, backgroundColor: typedAnswer.trim() ? '#3b82f6' : '#f3f4f6', color: typedAnswer.trim() ? '#fff' : '#6b7280' }}
+                  style={{ ...styles.typedBtn, backgroundColor: typedAnswer.trim() ? '#16a34a' : '#f59e0b', color: '#fff' }}
                   onClick={() => handleAnswer(typedAnswer)}
                 >
                   {typedAnswer.trim() ? 'Check' : 'Pass'}
