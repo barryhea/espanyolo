@@ -160,14 +160,12 @@ export default function Dictionary() {
           <p style={styles.muted}>Loading…</p>
         ) : (
           <>
-            <p style={styles.count}>{filtered.length} word{filtered.length !== 1 ? 's' : ''}</p>
             <div style={styles.tableWrap}>
               <table style={styles.table}>
                 <thead>
                   <tr>
                     <th style={styles.thLeft}>English</th>
                     <th style={styles.thLeft}>Spanish</th>
-                    <th style={styles.thTheme}>Theme</th>
                     <th style={styles.thCenter}>🥉</th>
                     <th style={styles.thCenter}>🥈</th>
                     <th style={styles.thCenter}>🥇</th>
@@ -185,7 +183,6 @@ export default function Dictionary() {
                       <tr key={word.id} style={styles.tableRow}>
                         <td style={styles.tdEn}>{word.english}</td>
                         <td style={styles.tdEs}>{word.spanish}</td>
-                        <td style={styles.tdTheme}>{word.theme}</td>
                         <StageCell done={stage >= 2 || isMastered} isHidden={isHidden} />
                         <StageCell done={stage >= 3 || isMastered} isHidden={isHidden} />
                         <StageCell done={isMastered} isHidden={isHidden} />
