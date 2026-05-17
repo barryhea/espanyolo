@@ -54,11 +54,9 @@ function pickDistractors(word, allWords, count = 3) {
 function buildSession(words, progressMap) {
   const s1 = words.filter(w => (progressMap[w.id]?.stage ?? 1) === 1)
   if (s1.length > 0) {
-    // S1 phase: keep drilling S1 words until every word has graduated
-    return shuffle(s1).slice(0, 5)
+    return shuffle(s1).slice(0, 25)
   }
-  // S2+ phase: all remaining words mixed equally, no S3 priority
-  return shuffle(words).slice(0, 5)
+  return shuffle(words).slice(0, 10)
 }
 
 function buildQuestion(word, allWords, progressMap) {
