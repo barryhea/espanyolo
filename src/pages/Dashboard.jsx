@@ -489,16 +489,16 @@ export default function Dashboard() {
               </div>
             )}
 
+            {modalView === 'progress' && !modalLoading && (
+              <p style={styles.progressSummary}>
+                {modalWords.length} words · {modalWords.filter(w => { const p = modalProgress[w.id]; return (p?.mastered) || (p?.stage === 3 && (p?.consecutive_correct ?? 0) >= 5) }).length} mastered · {modalWords.filter(w => modalProgress[w.id]?.hidden).length} hidden
+              </p>
+            )}
             {modalView === 'progress' && (
               <div style={styles.modalBody}>
                 {modalLoading
                   ? <p style={styles.emptyMsg}>Loading…</p>
                   : (() => {
-                      const masteredWords = modalWords.filter(w => {
-                        const p = modalProgress[w.id]
-                        return (p?.mastered) || (p?.stage === 3 && (p?.consecutive_correct ?? 0) >= 5)
-                      })
-                      const hiddenWordsList = modalWords.filter(w => modalProgress[w.id]?.hidden)
                       const sortedWords = [...modalWords].sort((a, b) => {
                         const rank = w => {
                           const p = modalProgress[w.id]
@@ -514,14 +514,7 @@ export default function Dashboard() {
                         if (diff !== 0) return diff
                         return a.english.localeCompare(b.english)
                       })
-                      return (
-                        <>
-                          <p style={styles.progressSummary}>
-                            {modalWords.length} words · {masteredWords.length} mastered · {hiddenWordsList.length} hidden
-                          </p>
-                          <WordTable words={sortedWords} progressMap={modalProgress} onToggleHidden={toggleHiddenInModal} />
-                        </>
-                      )
+                      return <WordTable words={sortedWords} progressMap={modalProgress} onToggleHidden={toggleHiddenInModal} />
                     })()
                 }
               </div>

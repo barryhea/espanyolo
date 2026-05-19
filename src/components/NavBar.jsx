@@ -93,7 +93,9 @@ const styles = {
     padding: '0 1rem',
     borderBottom: '1px solid #e5e5e5',
     backgroundColor: '#fff',
-    position: 'relative',
+    position: 'sticky',
+    top: 0,
+    zIndex: 200,
     flexShrink: 0,
   },
   hamburgerBtn: {

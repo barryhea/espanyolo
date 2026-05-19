@@ -223,7 +223,11 @@ const styles = {
     gap: '1rem',
   },
   searchWrap: {
-    position: 'relative',
+    position: 'sticky',
+    top: '56px',
+    zIndex: 100,
+    backgroundColor: '#f8f8f6',
+    paddingBottom: '0.5rem',
   },
   searchBox: {
     display: 'flex',
@@ -312,7 +316,7 @@ const styles = {
     backgroundColor: '#fff',
     border: '1px solid #e5e5e5',
     borderRadius: '12px',
-    overflow: 'hidden',
+    overflow: 'clip',
   },
   table: {
     width: '100%',
@@ -328,6 +332,9 @@ const styles = {
     color: '#888',
     borderBottom: '1px solid #f0f0f0',
     backgroundColor: '#fafafa',
+    position: 'sticky',
+    top: '114px',
+    zIndex: 10,
   },
   thTheme: {
     padding: '0.6rem 0.5rem',
@@ -348,12 +355,18 @@ const styles = {
     borderBottom: '1px solid #f0f0f0',
     backgroundColor: '#fafafa',
     width: '28px',
+    position: 'sticky',
+    top: '114px',
+    zIndex: 10,
   },
   thRight: {
     padding: '0.6rem 0.5rem',
     borderBottom: '1px solid #f0f0f0',
     backgroundColor: '#fafafa',
     width: '36px',
+    position: 'sticky',
+    top: '114px',
+    zIndex: 10,
   },
   tableRow: {
     borderBottom: '1px solid #f5f5f5',
