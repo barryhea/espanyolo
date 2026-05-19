@@ -164,8 +164,8 @@ export default function Dictionary() {
               <table style={styles.table}>
                 <thead>
                   <tr>
-                    <th style={styles.thLeft}>English</th>
-                    <th style={styles.thLeft}>Spanish</th>
+                    <th style={{ ...styles.thLeft, textAlign: 'center' }}>English</th>
+                    <th style={{ ...styles.thLeft, textAlign: 'center' }}>Spanish</th>
                     <th style={styles.thCenter}>🥉</th>
                     <th style={styles.thCenter}>🥈</th>
                     <th style={styles.thCenter}>🥇</th>

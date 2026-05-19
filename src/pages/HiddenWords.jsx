@@ -58,8 +58,8 @@ export default function HiddenWords() {
             <table style={styles.table}>
               <thead>
                 <tr>
-                  <th style={styles.thLeft}>Word</th>
-                  <th style={styles.thLeft}>Spanish</th>
+                  <th style={{ ...styles.thLeft, textAlign: 'center' }}>Word</th>
+                  <th style={{ ...styles.thLeft, textAlign: 'center' }}>Spanish</th>
                   <th style={styles.thLeft}>Theme</th>
                   <th style={styles.thRight}></th>
                 </tr>
