@@ -74,7 +74,15 @@ export default function Dictionary() {
       }
     }
 
-    setWords(wordData ?? [])
+    const seen = new Set()
+    const deduped = (wordData ?? []).filter(w => {
+      const key = `${w.english.toLowerCase()}|${w.spanish.toLowerCase()}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+    setWords(deduped)
     setProgress(progMap)
     setLoading(false)
   }
@@ -111,10 +119,23 @@ export default function Dictionary() {
         .slice(0, 8)
     : []
 
+  const totalWords = words.length
+  const masteredCount = words.filter(w => progress[w.id]?.mastered).length
+  const hiddenCount = words.filter(w => progress[w.id]?.hidden).length
+  const remainingCount = totalWords - masteredCount - hiddenCount
+
   return (
     <div style={styles.page}>
       <NavBar />
       <main style={styles.main}>
+        {!loading && (
+          <div style={styles.statsBar}>
+            <span style={styles.statsTitle}>All Themes</span>
+            <span style={styles.statsSubtitle}>
+              {totalWords} words · {masteredCount} mastered · {hiddenCount} hidden · {remainingCount} remaining
+            </span>
+          </div>
+        )}
         <div style={styles.searchWrap}>
           <div style={styles.searchBox}>
             <svg style={styles.searchIcon} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -221,6 +242,24 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '1rem',
+  },
+  statsBar: {
+    backgroundColor: '#fff',
+    border: '1px solid #e5e5e5',
+    borderRadius: '10px',
+    padding: '0.5rem 0.875rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  statsTitle: {
+    fontSize: '0.875rem',
+    fontWeight: 500,
+    color: '#111',
+  },
+  statsSubtitle: {
+    fontSize: '0.68rem',
+    color: '#bbb',
   },
   searchWrap: {
     position: 'sticky',
