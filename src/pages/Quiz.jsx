@@ -459,16 +459,16 @@ export default function Quiz() {
             </div>
           </div>
 
-          <div style={{ ...styles.tableWrap, maxHeight: '260px', overflowY: 'scroll' }}>
+          <div className="results-table-wrap" style={{ ...styles.tableWrap, maxHeight: '260px', overflowY: 'scroll' }}>
             <table style={styles.table}>
               <thead>
                 <tr>
-                  <th style={{ ...styles.thLeft, textAlign: 'center' }}>English</th>
-                  <th style={{ ...styles.thLeft, textAlign: 'center' }}>Spanish</th>
-                  <th style={styles.thCenter}>🥉</th>
-                  <th style={styles.thCenter}>🥈</th>
-                  <th style={styles.thCenter}>🥇</th>
-                  <th style={styles.thRight}></th>
+                  <th style={{ ...styles.thLeft, textAlign: 'center', position: 'sticky', top: 0 }}>English</th>
+                  <th style={{ ...styles.thLeft, textAlign: 'center', position: 'sticky', top: 0 }}>Spanish</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>🥉</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>🥈</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>🥇</th>
+                  <th style={{ ...styles.thRight, position: 'sticky', top: 0 }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -931,7 +931,7 @@ const styles = {
   },
   tdHide: {
     padding: '0.6rem 0.5rem',
-    textAlign: 'right',
+    textAlign: 'center',
   },
   hideBtn: {
     background: 'none',
