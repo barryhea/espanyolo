@@ -5,7 +5,16 @@ import { useAuth } from '../hooks/useAuth'
 import { VERB_CATEGORIES } from '../utils/courseData'
 import NavBar from '../components/NavBar'
 
-// ── Fuzzy matching (copied verbatim from Quiz.jsx) ─────────────────────────────
+function shuffle(arr) {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+// ── Fuzzy matching (S3 typed answers) ─────────────────────────────────────────
 function levenshtein(a, b) {
   const m = a.length, n = b.length
   const dp = Array.from({ length: m + 1 }, (_, i) => Array(n + 1).fill(0).map((_, j) => j === 0 ? i : 0))
@@ -38,92 +47,13 @@ function fuzzyMatch(typed, correct) {
   return (1 - levenshtein(a, b) / maxLen) >= 0.8 ? 'close' : 'wrong'
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-function shuffle(arr) {
-  const a = [...arr]
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function pickEnglishDistractors(verb, allVerbs) {
+  return shuffle(allVerbs.filter(v => v.id !== verb.id))
+    .slice(0, 3)
+    .map(v => v.english)
 }
 
-const PRONOUNS = ['yo', 'tu', 'el', 'nosotros', 'ellos']
-const PRONOUN_DISPLAY = { yo: 'I', tu: 'You', el: 'He/She', nosotros: 'We', ellos: 'They' }
-
-function pickPronoun() {
-  return PRONOUNS[Math.floor(Math.random() * PRONOUNS.length)]
-}
-
-function buildSession(verbs, progressMap) {
-  const s1 = verbs.filter(v => (progressMap[v.id]?.stage ?? 1) === 1)
-  if (s1.length > 0) {
-    return shuffle(s1).slice(0, 25)
-  }
-  return shuffle(verbs).slice(0, 10)
-}
-
-function buildQuestion(verb, progressMap) {
-  const stage = progressMap[verb.id]?.stage ?? 1
-
-  if (stage === 1) {
-    // Show Spanish infinitive → type English meaning
-    return {
-      type: 'typed',
-      verb,
-      stage,
-      prompt: verb.spanish_infinitive,
-      promptLabel: 'What does this verb mean? (no "to")',
-      correct: verb.english,
-      placeholder: 'Type the English meaning…',
-      pronoun: null,
-    }
-  }
-
-  const pronoun = pickPronoun()
-  const displayPronoun = PRONOUN_DISPLAY[pronoun]
-  const promptText = `${displayPronoun} / ${verb.english}`
-
-  if (stage === 2) {
-    return {
-      type: 'typed',
-      verb,
-      stage,
-      prompt: promptText,
-      promptLabel: 'Type the present tense conjugation:',
-      correct: verb.present_conjugations[pronoun],
-      placeholder: 'Type the Spanish conjugation…',
-      pronoun,
-    }
-  }
-
-  if (stage === 3) {
-    return {
-      type: 'typed',
-      verb,
-      stage,
-      prompt: promptText,
-      promptLabel: 'Type the future tense conjugation:',
-      correct: verb.future_conjugations[pronoun],
-      placeholder: 'Type the Spanish conjugation…',
-      pronoun,
-    }
-  }
-
-  // stage === 4
-  return {
-    type: 'typed',
-    verb,
-    stage,
-    prompt: promptText,
-    promptLabel: 'Type the past tense conjugation:',
-    correct: verb.past_conjugations[pronoun],
-    placeholder: 'Type the Spanish conjugation…',
-    pronoun,
-  }
-}
-
-// ── Progress ring (identical to Dashboard) ─────────────────────────────────────
 function ringColor(pct) {
   if (pct === 100) return '#22c55e'
   if (pct >= 75) return '#eab308'
@@ -165,22 +95,18 @@ function ProgressRing({ pct }) {
   )
 }
 
-// ── Mastery bar — 4 stages: S1(bronze×3) S2(silver×3) S3(gold×3) S4(platinum×5)
 function MasteryBar({ stage, consecutiveCorrect, mastered }) {
   const BRONZE = '#cd7f32', SILVER = '#a8a9ad', GOLD = '#f5c518', PLATINUM = '#60a5fa'
-
   const s1Filled = mastered ? 3 : stage >= 2 ? 3 : Math.min(consecutiveCorrect, 3)
   const s2Filled = mastered ? 3 : stage >= 3 ? 3 : stage === 2 ? Math.min(consecutiveCorrect, 3) : 0
   const s3Filled = mastered ? 3 : stage >= 4 ? 3 : stage === 3 ? Math.min(consecutiveCorrect, 3) : 0
   const s4Filled = mastered ? 5 : stage === 4 ? Math.min(consecutiveCorrect, 5) : 0
-
   const segs = [
     ...Array(3).fill(null).map((_, i) => ({ filled: i < s1Filled, color: BRONZE })),
     ...Array(3).fill(null).map((_, i) => ({ filled: i < s2Filled, color: SILVER })),
     ...Array(3).fill(null).map((_, i) => ({ filled: i < s3Filled, color: GOLD })),
     ...Array(5).fill(null).map((_, i) => ({ filled: i < s4Filled, color: PLATINUM })),
   ]
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
       <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -212,7 +138,29 @@ function StageCell({ done }) {
   )
 }
 
-// ── Main component ─────────────────────────────────────────────────────────────
+// ── Question builder ──────────────────────────────────────────────────────────
+function makeQuestion(verb, allVerbs, progMap) {
+  const stage = progMap[verb.id]?.stage ?? 1
+  if (stage <= 2) {
+    // S2: MC — Spanish infinitive shown, pick English
+    const distractors = pickEnglishDistractors(verb, allVerbs)
+    return {
+      type: 'mc',
+      verb,
+      options: shuffle([verb.english, ...distractors]),
+      correct: verb.english,
+    }
+  }
+  // S3: typed ES→EN — Spanish infinitive shown, type English
+  return {
+    type: 'typed',
+    verb,
+    correct: verb.english,
+    placeholder: 'Type the English meaning…',
+  }
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export default function VerbQuiz() {
   const { categoryId } = useParams()
   const navigate = useNavigate()
@@ -227,31 +175,33 @@ export default function VerbQuiz() {
   const [session, setSession] = useState([])
   const [currentIdx, setCurrentIdx] = useState(0)
   const [question, setQuestion] = useState(null)
-  const [typedAnswer, setTypedAnswer] = useState('')
-  const [matchResult, setMatchResult] = useState(null)
+  const [selectedOption, setSelectedOption] = useState(null)   // S2 MC
+  const [isCorrect, setIsCorrect] = useState(null)             // S2 MC feedback
+  const [typedAnswer, setTypedAnswer] = useState('')           // S3 typed
+  const [matchResult, setMatchResult] = useState(null)         // S3 fuzzy result
   const [results, setResults] = useState([])
 
   useEffect(() => {
     if (category && user) loadQuiz()
   }, [category?.id, user?.id])
 
+  // Auto-focus typed input when a typed question loads
   useEffect(() => {
-    if (phase === 'question') inputRef.current?.focus({ preventScroll: true })
+    if (question?.type === 'typed' && phase === 'question') {
+      inputRef.current?.focus({ preventScroll: true })
+    }
   }, [question, phase])
-
-  async function ensureProfile() {
-    await supabase
-      .from('profiles')
-      .upsert({ id: user.id, email: user.email }, { onConflict: 'id' })
-  }
 
   async function loadQuiz() {
     setPhase('loading')
-    await ensureProfile()
+
+    await supabase
+      .from('profiles')
+      .upsert({ id: user.id, email: user.email }, { onConflict: 'id' })
 
     const { data: verbs, error } = await supabase
       .from('verbs')
-      .select('*')
+      .select('id, english, spanish_infinitive')
       .eq('category', category.title)
 
     if (error || !verbs?.length) {
@@ -267,31 +217,36 @@ export default function VerbQuiz() {
       .in('verb_id', verbIds)
 
     const progMap = {}
-    const masteredVerbIds = new Set()
     for (const p of progress ?? []) {
-      const existing = progMap[p.verb_id]
-      if (!existing || p.stage > existing.stage ||
-          (p.stage === existing.stage && p.consecutive_correct > existing.consecutive_correct)) {
-        progMap[p.verb_id] = {
-          stage: p.stage ?? 1,
-          consecutive_correct: p.consecutive_correct ?? 0,
-          mastered: p.mastered ?? false,
-          db_id: p.id,
-          consecutive_incorrect: 0,
-        }
+      progMap[p.verb_id] = {
+        stage: p.stage ?? 1,
+        consecutive_correct: p.consecutive_correct ?? 0,
+        mastered: p.mastered ?? false,
+        db_id: p.id,
+        consecutive_incorrect: 0,
       }
-      if (p.mastered) masteredVerbIds.add(p.verb_id)
     }
-
     progressRef.current = progMap
 
-    const activeVerbs = verbs.filter(v => !masteredVerbIds.has(v.id))
-    const sess = buildSession(activeVerbs, progMap)
+    // S2 first; fall back to S3 only when no S2 verbs remain
+    const s2 = verbs.filter(v => {
+      const stage = progMap[v.id]?.stage ?? 1
+      return stage <= 2 && !progMap[v.id]?.mastered
+    })
+    let sess
+    if (s2.length > 0) {
+      sess = shuffle(s2).slice(0, 25)
+    } else {
+      const s3 = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 3 && !progMap[v.id]?.mastered)
+      sess = shuffle(s3).slice(0, 10)
+    }
 
     setAllVerbs(verbs)
     setSession(sess)
     setCurrentIdx(0)
     setResults([])
+    setSelectedOption(null)
+    setIsCorrect(null)
     setTypedAnswer('')
     setMatchResult(null)
 
@@ -300,7 +255,7 @@ export default function VerbQuiz() {
       return
     }
 
-    setQuestion(buildQuestion(sess[0], progMap))
+    setQuestion(makeQuestion(sess[0], verbs, progMap))
     setPhase('question')
   }
 
@@ -308,65 +263,86 @@ export default function VerbQuiz() {
     const prog = progressRef.current[verbId]
     if (!prog) return
     const { stage, consecutive_correct, mastered, db_id } = prog
-
     if (db_id) {
-      await supabase
-        .from('user_verb_progress')
-        .update({ stage, consecutive_correct, mastered: mastered ?? false })
+      await supabase.from('user_verb_progress')
+        .update({ stage, consecutive_correct, mastered })
         .eq('id', db_id)
     } else {
-      const { data } = await supabase
-        .from('user_verb_progress')
+      const { data } = await supabase.from('user_verb_progress')
         .upsert(
-          { user_id: user.id, verb_id: verbId, stage, consecutive_correct, mastered: mastered ?? false },
+          { user_id: user.id, verb_id: verbId, stage, consecutive_correct, mastered },
           { onConflict: 'user_id,verb_id' }
         )
-        .select('id')
-        .single()
-      if (data) {
-        progressRef.current[verbId] = { ...prog, db_id: data.id }
-      }
+        .select('id').single()
+      if (data) progressRef.current[verbId] = { ...prog, db_id: data.id }
     }
   }
 
-  function handleAnswer(answer) {
-    const result = fuzzyMatch(answer, question.correct)
-    const isCorrect = result !== 'wrong'
+  // ── S2: multiple choice answer (unchanged logic) ──────────────────────────
+  function handleAnswer(option) {
+    const correct = option === question.correct
     const verbId = question.verb.id
-    const prog = progressRef.current[verbId] ?? { stage: 1, consecutive_correct: 0, mastered: false, db_id: null, consecutive_incorrect: 0 }
+    const prog = progressRef.current[verbId] ?? {
+      stage: 1, consecutive_correct: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
+    }
+
+    const effectiveStage = Math.max(prog.stage, 2)
+    let newProg
+
+    if (correct) {
+      const newConsec = prog.consecutive_correct + 1
+      if (newConsec >= 3 && effectiveStage === 2) {
+        newProg = { ...prog, stage: 3, consecutive_correct: 0, consecutive_incorrect: 0 }
+      } else {
+        newProg = { ...prog, stage: effectiveStage, consecutive_correct: newConsec, consecutive_incorrect: 0 }
+      }
+    } else {
+      const newConsecIncorrect = (prog.consecutive_incorrect ?? 0) + 1
+      if (newConsecIncorrect >= 2) {
+        newProg = { ...prog, stage: 1, consecutive_correct: 0, consecutive_incorrect: 0 }
+      } else {
+        newProg = { ...prog, stage: effectiveStage, consecutive_correct: 0, consecutive_incorrect: newConsecIncorrect }
+      }
+    }
+
+    progressRef.current[verbId] = newProg
+    saveProgress(verbId)
+    setSelectedOption(option)
+    setIsCorrect(correct)
+    setResults(r => [...r, { verb: question.verb, correct, matchResult: correct ? 'exact' : 'wrong' }])
+    setPhase('feedback')
+  }
+
+  // ── S3: typed ES→EN answer ────────────────────────────────────────────────
+  function handleTyped() {
+    const result = fuzzyMatch(typedAnswer, question.correct)
+    const correct = result !== 'wrong'
+    const verbId = question.verb.id
+    const prog = progressRef.current[verbId] ?? {
+      stage: 3, consecutive_correct: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
+    }
 
     let newProg
-    if (isCorrect) {
+    if (correct) {
       const newConsec = prog.consecutive_correct + 1
-      if (newConsec >= 3 && prog.stage < 4) {
-        // Graduation S1→S2, S2→S3, S3→S4
-        newProg = { ...prog, stage: prog.stage + 1, consecutive_correct: 0, consecutive_incorrect: 0 }
-      } else if (prog.stage === 4 && newConsec >= 5) {
-        // Mastered
-        newProg = { ...prog, consecutive_correct: newConsec, consecutive_incorrect: 0, mastered: true }
+      if (newConsec >= 3) {
+        newProg = { ...prog, stage: 4, consecutive_correct: 0, consecutive_incorrect: 0 }
       } else {
         newProg = { ...prog, consecutive_correct: newConsec, consecutive_incorrect: 0 }
       }
     } else {
       const newConsecIncorrect = (prog.consecutive_incorrect ?? 0) + 1
-      if (prog.stage === 2 && newConsecIncorrect >= 2) {
-        // Regress S2 → S1
-        newProg = { ...prog, stage: 1, consecutive_correct: 0, consecutive_incorrect: 0 }
-      } else if ((prog.stage === 3 || prog.stage === 4) && newConsecIncorrect >= 2) {
-        // Reset counter, stay at stage
+      if (newConsecIncorrect >= 2) {
         newProg = { ...prog, consecutive_correct: 0, consecutive_incorrect: 0 }
-      } else if (prog.stage === 3 || prog.stage === 4) {
-        // First wrong — forgiveness, preserve cc
-        newProg = { ...prog, consecutive_incorrect: newConsecIncorrect }
       } else {
-        newProg = { ...prog, consecutive_correct: 0, consecutive_incorrect: newConsecIncorrect }
+        newProg = { ...prog, consecutive_incorrect: newConsecIncorrect }
       }
     }
 
     progressRef.current[verbId] = newProg
     saveProgress(verbId)
     setMatchResult(result)
-    setResults(r => [...r, { verb: question.verb, correct: isCorrect, result, stage: question.stage }])
+    setResults(r => [...r, { verb: question.verb, correct, matchResult: result }])
     setPhase('feedback')
   }
 
@@ -377,18 +353,20 @@ export default function VerbQuiz() {
       return
     }
     setCurrentIdx(nextIdx)
-    setQuestion(buildQuestion(session[nextIdx], progressRef.current))
+    setQuestion(makeQuestion(session[nextIdx], allVerbs, progressRef.current))
+    setSelectedOption(null)
+    setIsCorrect(null)
     setTypedAnswer('')
     setMatchResult(null)
     setPhase('question')
   }
 
+  // ── Guard renders ─────────────────────────────────────────────────────────
   if (!category) {
     return (
       <div style={styles.page}>
         <NavBar />
         <p style={{ padding: '2rem' }}>Category not found.</p>
-        <button style={styles.backLink} onClick={() => navigate('/verbs')}>← Back</button>
       </div>
     )
   }
@@ -402,7 +380,7 @@ export default function VerbQuiz() {
       <div style={styles.page}>
         <NavBar />
         <main style={styles.main}>
-          <p style={{ padding: '2rem', color: '#c00' }}>
+          <p style={{ color: '#c00' }}>
             Could not load verbs. Make sure the verb migration has been run in Supabase.
           </p>
           <button style={styles.backLink} onClick={() => navigate('/verbs')}>← Back</button>
@@ -418,16 +396,18 @@ export default function VerbQuiz() {
         <main style={styles.main}>
           <button style={styles.backLink} onClick={() => navigate('/verbs')}>← Back to Verb Trainer</button>
           <div style={styles.card}>
-            <p style={{ margin: 0, color: '#555' }}>All verbs in this category are mastered. Great work!</p>
+            <p style={{ margin: 0, color: '#555' }}>
+              All verbs in this category have passed the available stages. Check back once more stages are unlocked!
+            </p>
           </div>
         </main>
       </div>
     )
   }
 
-  // ── Summary screen ──────────────────────────────────────────────────────────
+  // ── Summary ───────────────────────────────────────────────────────────────
   if (phase === 'summary') {
-    const resultByVerbId = Object.fromEntries(results.map(r => [r.verb.id, r.result]))
+    const resultByVerbId = Object.fromEntries(results.map(r => [r.verb.id, r.matchResult]))
     const masteredCount = allVerbs.filter(v => progressRef.current[v.id]?.mastered).length
 
     let pts = 0, maxPts = 0
@@ -459,11 +439,11 @@ export default function VerbQuiz() {
             </div>
           </div>
 
-          <div style={{ ...styles.tableWrap, maxHeight: '260px', overflowY: 'scroll' }}>
+          <div className="results-table-wrap" style={{ ...styles.tableWrap, maxHeight: '260px', overflowY: 'scroll' }}>
             <table style={styles.table}>
               <thead>
                 <tr>
-                  <th style={{ ...styles.thLeft, textAlign: 'center', position: 'sticky', top: 0 }}>Infinitive</th>
+                  <th style={{ ...styles.thLeft, textAlign: 'center', position: 'sticky', top: 0 }}>Spanish</th>
                   <th style={{ ...styles.thLeft, textAlign: 'center', position: 'sticky', top: 0 }}>English</th>
                   <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>S1</th>
                   <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>S2</th>
@@ -481,8 +461,8 @@ export default function VerbQuiz() {
                   const s2done = stage >= 3 || isMastered
                   const s3done = stage >= 4 || isMastered
                   const s4done = isMastered || (stage === 4 && consec >= 5)
-                  const wordResult = resultByVerbId[verb.id]
-                  const textColor = wordResult === 'exact' ? '#16a34a' : wordResult === 'close' ? '#d97706' : wordResult === 'wrong' ? '#dc2626' : '#333'
+                  const verbResult = resultByVerbId[verb.id]
+                  const textColor = verbResult === 'exact' ? '#16a34a' : verbResult === 'close' ? '#d97706' : verbResult === 'wrong' ? '#dc2626' : '#333'
                   return (
                     <tr key={verb.id} style={styles.tableRow}>
                       <td style={{ ...styles.tdEn, color: textColor }}>{verb.spanish_infinitive}</td>
@@ -511,7 +491,7 @@ export default function VerbQuiz() {
     )
   }
 
-  // ── Question screen ─────────────────────────────────────────────────────────
+  // ── Question ──────────────────────────────────────────────────────────────
   const currentProg = progressRef.current[question?.verb?.id]
 
   return (
@@ -526,54 +506,80 @@ export default function VerbQuiz() {
         </div>
 
         <div style={styles.card}>
-          <p style={styles.promptLabel}>{question.promptLabel}</p>
-          <p style={styles.word}>{question.prompt}</p>
+          <p style={styles.word}>{question.verb.spanish_infinitive}</p>
+
           <MasteryBar
             stage={currentProg?.stage ?? 1}
             consecutiveCorrect={currentProg?.consecutive_correct ?? 0}
             mastered={currentProg?.mastered ?? false}
           />
 
-          <div style={styles.typedArea}>
-            <input
-              ref={inputRef}
-              style={styles.typedInput}
-              type="text"
-              value={typedAnswer}
-              onChange={e => setTypedAnswer(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && phase === 'question') {
-                  handleAnswer(typedAnswer)
+          {question.type === 'mc' && (
+            <div style={styles.optionGrid}>
+              {question.options.map(opt => {
+                let bg = '#fff'
+                if (phase === 'feedback') {
+                  if (opt === question.correct) bg = '#dcfce7'
+                  else if (opt === selectedOption) bg = '#fee2e2'
                 }
-              }}
-              disabled={phase === 'feedback'}
-              placeholder={question.placeholder}
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck="false"
-              data-form-type="other"
-            />
-            {phase === 'question' && (
-              <button
-                style={{ ...styles.typedBtn, backgroundColor: typedAnswer.trim() ? '#16a34a' : '#f59e0b', color: '#fff' }}
-                onClick={() => handleAnswer(typedAnswer)}
-              >
-                {typedAnswer.trim() ? 'Check' : 'Pass'}
-              </button>
-            )}
-          </div>
+                return (
+                  <button
+                    key={opt}
+                    style={{ ...styles.optionBtn, backgroundColor: bg }}
+                    onClick={() => phase === 'question' && handleAnswer(opt)}
+                    disabled={phase === 'feedback'}
+                  >
+                    {opt}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {question.type === 'typed' && (
+            <div style={styles.typedArea}>
+              <input
+                ref={inputRef}
+                style={styles.typedInput}
+                type="text"
+                value={typedAnswer}
+                onChange={e => setTypedAnswer(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && phase === 'question') handleTyped() }}
+                disabled={phase === 'feedback'}
+                placeholder={question.placeholder}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+                data-form-type="other"
+              />
+              {phase === 'question' && (
+                <button
+                  style={{ ...styles.typedBtn, backgroundColor: typedAnswer.trim() ? '#16a34a' : '#f59e0b', color: '#fff' }}
+                  onClick={handleTyped}
+                >
+                  {typedAnswer.trim() ? 'Check' : 'Pass'}
+                </button>
+              )}
+            </div>
+          )}
 
           {phase === 'feedback' && (
             <div style={{
               ...styles.feedbackBanner,
-              backgroundColor: matchResult === 'exact' ? '#dcfce7' : matchResult === 'close' ? '#fef3c7' : '#fee2e2',
+              backgroundColor: question.type === 'typed'
+                ? (matchResult === 'exact' ? '#dcfce7' : matchResult === 'close' ? '#fef3c7' : '#fee2e2')
+                : (isCorrect ? '#dcfce7' : '#fee2e2'),
             }}>
               <span style={{
-                color: matchResult === 'exact' ? '#16a34a' : matchResult === 'close' ? '#d97706' : '#dc2626',
                 fontWeight: 600,
+                color: question.type === 'typed'
+                  ? (matchResult === 'exact' ? '#16a34a' : matchResult === 'close' ? '#d97706' : '#dc2626')
+                  : (isCorrect ? '#16a34a' : '#dc2626'),
               }}>
-                {matchResult === 'exact' ? 'Correct!' : matchResult === 'close' ? `Close — ${question.correct}` : `Incorrect — ${question.correct}`}
+                {question.type === 'typed'
+                  ? (matchResult === 'exact' ? 'Correct!' : matchResult === 'close' ? `Close — ${question.correct}` : `Incorrect — ${question.correct}`)
+                  : (isCorrect ? 'Correct!' : `Incorrect — ${question.correct}`)}
               </span>
               <button style={styles.nextBtn} onClick={handleNext}>
                 {currentIdx + 1 >= session.length ? 'Finish' : 'Next →'}
@@ -589,10 +595,7 @@ export default function VerbQuiz() {
 const styles = {
   page: {
     position: 'fixed',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
+    top: 0, right: 0, bottom: 0, left: 0,
     overflow: 'hidden',
     backgroundColor: '#f8f8f6',
     fontFamily: 'system-ui, sans-serif',
@@ -662,19 +665,26 @@ const styles = {
     flexDirection: 'column',
     gap: '1.25rem',
   },
-  promptLabel: {
-    margin: 0,
-    fontSize: '0.8rem',
-    fontWeight: 600,
-    color: '#aaa',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
   word: {
     margin: 0,
     fontSize: '1.8rem',
     fontWeight: 700,
     color: '#111',
+  },
+  optionGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '0.75rem',
+  },
+  optionBtn: {
+    padding: '0.85rem 1rem',
+    fontSize: '1rem',
+    color: '#111',
+    border: '1px solid #e5e5e5',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    textAlign: 'left',
+    transition: 'background-color 0.15s',
   },
   typedArea: {
     display: 'flex',
@@ -724,7 +734,6 @@ const styles = {
     border: 'none',
     borderRadius: '8px',
     cursor: 'pointer',
-    alignSelf: 'flex-start',
   },
   summaryThemeCard: {
     display: 'flex',
