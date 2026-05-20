@@ -152,13 +152,16 @@ function DragMatchRound({ roundVerbs, onComplete }) {
   const autoAdvanceRef = useRef(null)
   useEffect(() => { slotsStateRef.current = slots }, [slots])
 
-  // Auto-advance 3 s after a fully-correct round
+  // Auto-advance 3 s after any Check result
   useEffect(() => {
-    if (checkResult && checkResult.every(Boolean)) {
-      const tid = setTimeout(() => onComplete(roundVerbs.map(v => v.id), []), 3000)
-      autoAdvanceRef.current = tid
-      return () => clearTimeout(tid)
-    }
+    if (!checkResult) return
+    const allOk = checkResult.every(Boolean)
+    const wrongIds = slotsStateRef.current
+      .map((slot, i) => checkResult[i] ? null : slot.verbId)
+      .filter(Boolean)
+    const tid = setTimeout(() => onComplete(allOk ? roundVerbs.map(v => v.id) : [], wrongIds), 3000)
+    autoAdvanceRef.current = tid
+    return () => clearTimeout(tid)
   }, [checkResult])
 
   // Attach global pointer listeners once on mount
@@ -299,23 +302,18 @@ function DragMatchRound({ roundVerbs, onComplete }) {
       {allFilled && !checkResult && (
         <button style={styles.dmCheckBtn} onClick={handleCheck}>Check ✓</button>
       )}
-      {checkResult && allCorrect && (
+      {checkResult && (
         <>
           <style>{`@keyframes dmFill{from{transform:scaleX(0)}to{transform:scaleX(1)}}`}</style>
           <div
             role="button"
             style={styles.dmProgressBtnWrap}
-            onClick={() => { clearTimeout(autoAdvanceRef.current); onComplete(roundVerbs.map(v => v.id), []) }}
+            onClick={() => { clearTimeout(autoAdvanceRef.current); onComplete(allCorrect ? roundVerbs.map(v => v.id) : [], wrongVerbIds) }}
           >
             <div style={styles.dmProgressFill} />
             <span style={styles.dmProgressLabel}>Next round →</span>
           </div>
         </>
-      )}
-      {checkResult && !allCorrect && (
-        <button style={styles.dmNextBtn} onClick={() => onComplete([], wrongVerbIds)}>
-          Next round →
-        </button>
       )}
 
       {/* Ghost chip — positioned via DOM ref, no re-render on move */}
