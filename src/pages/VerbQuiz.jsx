@@ -661,17 +661,6 @@ export default function VerbQuiz() {
       <div style={styles.s1Page}>
         <NavBar />
         <main style={styles.s1Main}>
-          <div style={styles.progressRow}>
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: '2px' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#888' }}>
-                Stage 1 — Drag & Match
-              </span>
-              <span style={{ fontSize: '0.7rem', color: '#bbb' }}>
-                Match each verb 5 times to unlock Stage 2
-              </span>
-            </div>
-            <button style={styles.backLink} onClick={() => navigate('/verbs')}>Exit</button>
-          </div>
           <DragMatchRound
             key={roundVerbs.map(v => v.id).join('-')}
             roundVerbs={roundVerbs}
