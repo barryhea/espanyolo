@@ -95,34 +95,28 @@ function ProgressRing({ pct }) {
   )
 }
 
-function MasteryBar({ stage, consecutiveCorrect, mastered }) {
-  const BRONZE = '#cd7f32', SILVER = '#a8a9ad', GOLD = '#f5c518', PLATINUM = '#60a5fa'
-  const s1Filled = mastered ? 3 : stage >= 2 ? 3 : Math.min(consecutiveCorrect, 3)
-  const s2Filled = mastered ? 3 : stage >= 3 ? 3 : stage === 2 ? Math.min(consecutiveCorrect, 3) : 0
-  const s3Filled = mastered ? 3 : stage >= 4 ? 3 : stage === 3 ? Math.min(consecutiveCorrect, 3) : 0
-  const s4Filled = mastered ? 5 : stage === 4 ? Math.min(consecutiveCorrect, 5) : 0
-  const segs = [
-    ...Array(3).fill(null).map((_, i) => ({ filled: i < s1Filled, color: BRONZE })),
-    ...Array(3).fill(null).map((_, i) => ({ filled: i < s2Filled, color: SILVER })),
-    ...Array(3).fill(null).map((_, i) => ({ filled: i < s3Filled, color: GOLD })),
-    ...Array(5).fill(null).map((_, i) => ({ filled: i < s4Filled, color: PLATINUM })),
-  ]
+function MasteryBar({ stage, mastered }) {
+  const s1done = stage >= 2 || mastered
+  const s2done = stage >= 3 || mastered
+  const s3done = stage >= 4 || mastered
+  const s4done = mastered
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-      <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        Verb Mastery
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
+        Mastery
       </span>
-      <div style={{ display: 'flex', gap: '3px' }}>
-        {segs.map((seg, i) => (
-          <div key={i} style={{
-            flex: 1,
-            height: '8px',
-            borderRadius: '3px',
-            backgroundColor: seg.filled ? seg.color : '#fff',
-            border: `1.5px solid ${seg.filled ? seg.color : '#d1d5db'}`,
-            boxSizing: 'border-box',
-          }} />
-        ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: '26px', height: '18px', borderRadius: '5px',
+          backgroundColor: s1done ? '#16a34a' : '#e5e7eb',
+          transition: 'background-color 0.2s',
+        }}>
+          <span style={{ fontSize: '0.7rem', color: s1done ? '#fff' : '#9ca3af', fontWeight: 700, lineHeight: 1 }}>✓</span>
+        </div>
+        <span style={{ fontSize: '1.15rem', opacity: s2done ? 1 : 0.2, transition: 'opacity 0.2s', lineHeight: 1 }}>🥉</span>
+        <span style={{ fontSize: '1.15rem', opacity: s3done ? 1 : 0.2, transition: 'opacity 0.2s', lineHeight: 1 }}>🥈</span>
+        <span style={{ fontSize: '1.15rem', opacity: s4done ? 1 : 0.2, transition: 'opacity 0.2s', lineHeight: 1 }}>🥇</span>
       </div>
     </div>
   )
@@ -783,7 +777,6 @@ export default function VerbQuiz() {
 
           <MasteryBar
             stage={currentProg?.stage ?? 1}
-            consecutiveCorrect={(currentProg?.stage ?? 1) === 4 ? (currentProg?.s4_score ?? 0) : (currentProg?.consecutive_correct ?? 0)}
             mastered={currentProg?.mastered ?? false}
           />
 
