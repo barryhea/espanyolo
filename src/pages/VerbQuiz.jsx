@@ -138,7 +138,182 @@ function StageCell({ done }) {
   )
 }
 
-// ── Question builder ──────────────────────────────────────────────────────────
+// ── S1: Drag & Match ──────────────────────────────────────────────────────────
+// Props: roundVerbs [{id, english, spanish_infinitive}], onComplete(verbIds[])
+function DragMatchRound({ roundVerbs, onComplete }) {
+  const [bank, setBank] = useState(() =>
+    shuffle(roundVerbs.map(v => ({ id: v.id, label: v.spanish_infinitive })))
+  )
+  const [slots, setSlots] = useState(() =>
+    roundVerbs.map(v => ({ verbId: v.id, english: v.english, chip: null }))
+  )
+  const [checkResult, setCheckResult] = useState(null) // null | boolean[]
+
+  // Drag state stored in refs so window handlers never go stale
+  const dragChipRef = useRef(null)
+  const ghostElRef = useRef(null)
+  const ghostOffsetRef = useRef({ x: 0, y: 0 })
+  const slotRefs = useRef([])
+  const slotsStateRef = useRef(slots)
+  useEffect(() => { slotsStateRef.current = slots }, [slots])
+
+  // Attach global pointer listeners once on mount
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!dragChipRef.current || !ghostElRef.current) return
+      ghostElRef.current.style.left = (e.clientX - ghostOffsetRef.current.x) + 'px'
+      ghostElRef.current.style.top = (e.clientY - ghostOffsetRef.current.y) + 'px'
+    }
+
+    const onUp = (e) => {
+      const chip = dragChipRef.current
+      if (!chip) return
+      dragChipRef.current = null
+      if (ghostElRef.current) ghostElRef.current.style.display = 'none'
+
+      // Hit-test against slot bounding rects
+      let targetIdx = -1
+      for (let i = 0; i < slotRefs.current.length; i++) {
+        const el = slotRefs.current[i]
+        if (!el) continue
+        const r = el.getBoundingClientRect()
+        if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+          targetIdx = i
+          break
+        }
+      }
+
+      if (targetIdx >= 0) {
+        const existing = slotsStateRef.current[targetIdx]?.chip ?? null
+        setSlots(prev => {
+          const next = [...prev]
+          next[targetIdx] = { ...next[targetIdx], chip }
+          return next
+        })
+        if (existing) setBank(prev => [...prev, existing])
+      } else {
+        // Dropped outside any slot — return to bank
+        setBank(prev => [...prev, chip])
+      }
+    }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, []) // attach once
+
+  function startDrag(chip, source, e) {
+    e.preventDefault()
+    if (dragChipRef.current) return // already dragging
+
+    // Measure grab offset so ghost doesn't jump
+    const rect = e.currentTarget.getBoundingClientRect()
+    ghostOffsetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+
+    // Remove from source immediately
+    if (source === 'bank') {
+      setBank(prev => prev.filter(c => c.id !== chip.id))
+    } else {
+      // source is a slot index
+      setSlots(prev => prev.map((s, i) => i === source ? { ...s, chip: null } : s))
+    }
+
+    dragChipRef.current = chip
+    setCheckResult(null)
+
+    if (ghostElRef.current) {
+      ghostElRef.current.textContent = chip.label
+      ghostElRef.current.style.left = (e.clientX - ghostOffsetRef.current.x) + 'px'
+      ghostElRef.current.style.top = (e.clientY - ghostOffsetRef.current.y) + 'px'
+      ghostElRef.current.style.display = 'block'
+    }
+  }
+
+  function handleCheck() {
+    const results = slots.map(slot => slot.chip?.id === slot.verbId)
+    setCheckResult(results)
+
+    if (results.every(Boolean)) {
+      // All correct — complete after brief green flash
+      setTimeout(() => onComplete(roundVerbs.map(v => v.id)), 1000)
+    } else {
+      // Return wrong chips to bank after red flash
+      const wrongChips = slots
+        .map((slot, i) => (!results[i] && slot.chip) ? slot.chip : null)
+        .filter(Boolean)
+      setTimeout(() => {
+        setSlots(prev => prev.map((slot, i) => results[i] ? slot : { ...slot, chip: null }))
+        setBank(prev => [...prev, ...wrongChips])
+        setCheckResult(null)
+      }, 1200)
+    }
+  }
+
+  const allFilled = slots.every(s => s.chip !== null)
+
+  return (
+    <div style={styles.dmCard}>
+      {/* Chip bank */}
+      <div>
+        <span style={styles.dmBankLabel}>Drag to match</span>
+        <div style={styles.dmBank}>
+          {bank.map(chip => (
+            <div
+              key={chip.id}
+              style={styles.dmChip}
+              onPointerDown={e => startDrag(chip, 'bank', e)}
+            >
+              {chip.label}
+            </div>
+          ))}
+          {bank.length === 0 && (
+            <span style={{ color: '#aaa', fontSize: '0.85rem' }}>All placed ✓</span>
+          )}
+        </div>
+      </div>
+
+      {/* Pair rows */}
+      <div style={styles.dmPairs}>
+        {slots.map((slot, i) => (
+          <div key={slot.verbId} style={styles.dmPairRow}>
+            <div style={styles.dmEnglish}>{slot.english}</div>
+            <div
+              ref={el => slotRefs.current[i] = el}
+              style={{
+                ...styles.dmSlot,
+                ...(checkResult ? (checkResult[i] ? styles.dmSlotCorrect : styles.dmSlotWrong) : {}),
+              }}
+            >
+              {slot.chip && (
+                <div
+                  style={{
+                    ...styles.dmChipInSlot,
+                    ...(checkResult ? (checkResult[i] ? styles.dmChipCorrect : styles.dmChipWrong) : {}),
+                  }}
+                  onPointerDown={!checkResult ? e => startDrag(slot.chip, i, e) : undefined}
+                >
+                  {slot.chip.label}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {allFilled && !checkResult && (
+        <button style={styles.dmCheckBtn} onClick={handleCheck}>Check ✓</button>
+      )}
+
+      {/* Ghost chip — positioned via DOM ref, no re-render on move */}
+      <div ref={ghostElRef} style={{ ...styles.dmChipGhost, display: 'none' }} />
+    </div>
+  )
+}
+
+// ── Question builder (S2/S3/S4 — unchanged) ───────────────────────────────────
 function makeQuestion(verb, allVerbs, progMap) {
   const stage = progMap[verb.id]?.stage ?? 1
   if (stage <= 2) {
@@ -182,13 +357,14 @@ export default function VerbQuiz() {
 
   const [phase, setPhase] = useState('loading')
   const [allVerbs, setAllVerbs] = useState([])
+  const [roundVerbs, setRoundVerbs] = useState([])             // S1 current round
   const [session, setSession] = useState([])
   const [currentIdx, setCurrentIdx] = useState(0)
   const [question, setQuestion] = useState(null)
   const [selectedOption, setSelectedOption] = useState(null)   // S2 MC
   const [isCorrect, setIsCorrect] = useState(null)             // S2 MC feedback
-  const [typedAnswer, setTypedAnswer] = useState('')           // S3 typed
-  const [matchResult, setMatchResult] = useState(null)         // S3 fuzzy result
+  const [typedAnswer, setTypedAnswer] = useState('')           // S3/S4 typed
+  const [matchResult, setMatchResult] = useState(null)         // S3/S4 fuzzy result
   const [results, setResults] = useState([])
 
   useEffect(() => {
@@ -239,7 +415,17 @@ export default function VerbQuiz() {
     }
     progressRef.current = progMap
 
-    // S2 first; fall back to S3 only when no S2 verbs remain
+    // ── S1: if any verbs still at stage 1, run a drag-match round ────────────
+    const s1 = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 1)
+    if (s1.length > 0) {
+      const round = shuffle(s1).slice(0, 5)
+      setAllVerbs(verbs)
+      setRoundVerbs(round)
+      setPhase('s1')
+      return
+    }
+
+    // ── S2 first; fall back to S3 only when no S2 verbs remain ───────────────
     const s2 = verbs.filter(v => {
       const stage = progMap[v.id]?.stage ?? 1
       return stage <= 2 && !progMap[v.id]?.mastered
@@ -295,7 +481,25 @@ export default function VerbQuiz() {
     }
   }
 
-  // ── S2: multiple choice answer (unchanged logic) ──────────────────────────
+  // ── S1: round complete — advance consecutive_correct, graduate at 3 ────────
+  async function handleS1RoundComplete(verbIds) {
+    for (const verbId of verbIds) {
+      const prog = progressRef.current[verbId] ?? {
+        stage: 1, consecutive_correct: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
+      }
+      const newConsec = (prog.consecutive_correct ?? 0) + 1
+      const graduated = newConsec >= 3
+      progressRef.current[verbId] = {
+        ...prog,
+        stage: graduated ? 2 : 1,
+        consecutive_correct: graduated ? 0 : newConsec,
+      }
+    }
+    await Promise.all(verbIds.map(saveProgress))
+    loadQuiz()
+  }
+
+  // ── S2: multiple choice answer (unchanged) ────────────────────────────────
   function handleAnswer(option) {
     const correct = option === question.correct
     const verbId = question.verb.id
@@ -330,7 +534,7 @@ export default function VerbQuiz() {
     setPhase('feedback')
   }
 
-  // ── S3: typed ES→EN answer (unchanged) ───────────────────────────────────
+  // ── S3 & S4: typed answer (unchanged) ─────────────────────────────────────
   function handleTyped() {
     const result = fuzzyMatch(typedAnswer, question.correct)
     const correct = result !== 'wrong'
@@ -437,9 +641,38 @@ export default function VerbQuiz() {
           <button style={styles.backLink} onClick={() => navigate('/verbs')}>← Back to Verb Trainer</button>
           <div style={styles.card}>
             <p style={{ margin: 0, color: '#555' }}>
-              All verbs in this category have passed the available stages. Check back once more stages are unlocked!
+              All verbs in this category have passed the available stages. Great work!
             </p>
           </div>
+        </main>
+      </div>
+    )
+  }
+
+  // ── S1: drag & match round ────────────────────────────────────────────────
+  if (phase === 's1') {
+    // Show how many rounds the first verb in the round has completed
+    const roundsDone = progressRef.current[roundVerbs[0]?.id]?.consecutive_correct ?? 0
+    return (
+      <div style={styles.s1Page}>
+        <NavBar />
+        <main style={styles.s1Main}>
+          <div style={styles.progressRow}>
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: '2px' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#888' }}>
+                Stage 1 — Drag & Match
+              </span>
+              <span style={{ fontSize: '0.7rem', color: '#bbb' }}>
+                Round {roundsDone + 1} of 3 — complete all 3 rounds to advance
+              </span>
+            </div>
+            <button style={styles.backLink} onClick={() => navigate('/verbs')}>Exit</button>
+          </div>
+          <DragMatchRound
+            key={roundVerbs.map(v => v.id).join('-')}
+            roundVerbs={roundVerbs}
+            onComplete={handleS1RoundComplete}
+          />
         </main>
       </div>
     )
@@ -495,7 +728,6 @@ export default function VerbQuiz() {
                 {session.map(verb => {
                   const prog = progressRef.current[verb.id]
                   const stage = prog?.stage ?? 1
-                  const consec = prog?.consecutive_correct ?? 0
                   const isMastered = prog?.mastered ?? false
                   const s4Score = prog?.s4_score ?? 0
                   const s1done = stage >= 2 || isMastered
@@ -532,7 +764,7 @@ export default function VerbQuiz() {
     )
   }
 
-  // ── Question ──────────────────────────────────────────────────────────────
+  // ── Question (S2/S3/S4) ───────────────────────────────────────────────────
   const currentProg = progressRef.current[question?.verb?.id]
 
   return (
@@ -634,6 +866,7 @@ export default function VerbQuiz() {
 }
 
 const styles = {
+  // ── S2/S3/S4 quiz layout (fixed, no scroll — keyboard-safe) ──────────────
   page: {
     position: 'fixed',
     top: 0, right: 0, bottom: 0, left: 0,
@@ -642,6 +875,22 @@ const styles = {
     fontFamily: 'system-ui, sans-serif',
     display: 'flex',
     flexDirection: 'column',
+  },
+  // ── S1 layout (scrollable — no keyboard, more vertical space needed) ──────
+  s1Page: {
+    minHeight: '100vh',
+    backgroundColor: '#f8f8f6',
+    fontFamily: 'system-ui, sans-serif',
+  },
+  s1Main: {
+    maxWidth: '600px',
+    margin: '0 auto',
+    padding: '0.5rem 1.5rem 3rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem',
+    width: '100%',
+    boxSizing: 'border-box',
   },
   main: {
     maxWidth: '600px',
@@ -670,6 +919,7 @@ const styles = {
     border: 'none',
     cursor: 'pointer',
     alignSelf: 'flex-start',
+    flexShrink: 0,
   },
   loadingMsg: {
     padding: '3rem 2rem',
@@ -894,5 +1144,137 @@ const styles = {
   stageCell: {
     padding: '0.6rem 0.25rem',
     textAlign: 'center',
+  },
+
+  // ── S1 Drag & Match styles ─────────────────────────────────────────────────
+  dmCard: {
+    backgroundColor: '#fff',
+    border: '1px solid #e5e5e5',
+    borderRadius: '12px',
+    padding: '1.5rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1.25rem',
+  },
+  dmBankLabel: {
+    display: 'block',
+    fontSize: '0.7rem',
+    fontWeight: 600,
+    color: '#aaa',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    marginBottom: '0.5rem',
+  },
+  dmBank: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '0.5rem',
+    minHeight: '48px',
+    backgroundColor: '#f8f8f6',
+    borderRadius: '8px',
+    padding: '0.5rem',
+    border: '1.5px dashed #e0e0e0',
+    alignItems: 'center',
+  },
+  dmChip: {
+    padding: '0.4rem 0.875rem',
+    backgroundColor: '#3b82f6',
+    color: '#fff',
+    borderRadius: '6px',
+    fontSize: '0.9rem',
+    fontWeight: 500,
+    cursor: 'grab',
+    userSelect: 'none',
+    touchAction: 'none',
+    whiteSpace: 'nowrap',
+    boxShadow: '0 1px 3px rgba(59,130,246,0.3)',
+  },
+  dmPairs: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.625rem',
+  },
+  dmPairRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+  },
+  dmEnglish: {
+    flex: 1,
+    fontSize: '0.95rem',
+    color: '#333',
+    fontWeight: 500,
+    minWidth: 0,
+  },
+  dmSlot: {
+    width: '130px',
+    minHeight: '40px',
+    borderRadius: '6px',
+    border: '2px dashed #d1d5db',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f9fafb',
+    flexShrink: 0,
+    transition: 'border-color 0.15s, background-color 0.15s',
+  },
+  dmSlotCorrect: {
+    borderColor: '#16a34a',
+    borderStyle: 'solid',
+    backgroundColor: '#dcfce7',
+  },
+  dmSlotWrong: {
+    borderColor: '#dc2626',
+    borderStyle: 'solid',
+    backgroundColor: '#fee2e2',
+  },
+  dmChipInSlot: {
+    padding: '0.35rem 0.625rem',
+    backgroundColor: '#3b82f6',
+    color: '#fff',
+    borderRadius: '5px',
+    fontSize: '0.85rem',
+    fontWeight: 500,
+    cursor: 'grab',
+    userSelect: 'none',
+    touchAction: 'none',
+    whiteSpace: 'nowrap',
+    maxWidth: '118px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  dmChipCorrect: {
+    backgroundColor: '#16a34a',
+    cursor: 'default',
+  },
+  dmChipWrong: {
+    backgroundColor: '#dc2626',
+    cursor: 'default',
+  },
+  dmCheckBtn: {
+    padding: '0.75rem',
+    backgroundColor: '#16a34a',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '1rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    width: '100%',
+  },
+  dmChipGhost: {
+    position: 'fixed',
+    padding: '0.4rem 0.875rem',
+    backgroundColor: '#3b82f6',
+    color: '#fff',
+    borderRadius: '6px',
+    fontSize: '0.9rem',
+    fontWeight: 500,
+    pointerEvents: 'none',
+    zIndex: 9999,
+    userSelect: 'none',
+    whiteSpace: 'nowrap',
+    boxShadow: '0 4px 16px rgba(59,130,246,0.4)',
+    transform: 'scale(1.08)',
   },
 }
