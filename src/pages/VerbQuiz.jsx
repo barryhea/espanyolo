@@ -149,7 +149,17 @@ function DragMatchRound({ roundVerbs, onComplete }) {
   const ghostOffsetRef = useRef({ x: 0, y: 0 })
   const slotRefs = useRef([])
   const slotsStateRef = useRef(slots)
+  const autoAdvanceRef = useRef(null)
   useEffect(() => { slotsStateRef.current = slots }, [slots])
+
+  // Auto-advance 3 s after a fully-correct round
+  useEffect(() => {
+    if (checkResult && checkResult.every(Boolean)) {
+      const tid = setTimeout(() => onComplete(roundVerbs.map(v => v.id), []), 3000)
+      autoAdvanceRef.current = tid
+      return () => clearTimeout(tid)
+    }
+  }, [checkResult])
 
   // Attach global pointer listeners once on mount
   useEffect(() => {
@@ -289,12 +299,22 @@ function DragMatchRound({ roundVerbs, onComplete }) {
       {allFilled && !checkResult && (
         <button style={styles.dmCheckBtn} onClick={handleCheck}>Check ✓</button>
       )}
-      {checkResult && (
-        <button
-          style={allCorrect ? styles.dmCheckBtn : styles.dmNextBtn}
-          onClick={() => onComplete(allCorrect ? roundVerbs.map(v => v.id) : [], wrongVerbIds)}
-        >
-          {allCorrect ? '✓ Next round →' : 'Next round →'}
+      {checkResult && allCorrect && (
+        <>
+          <style>{`@keyframes dmFill{from{transform:scaleX(0)}to{transform:scaleX(1)}}`}</style>
+          <div
+            role="button"
+            style={styles.dmProgressBtnWrap}
+            onClick={() => { clearTimeout(autoAdvanceRef.current); onComplete(roundVerbs.map(v => v.id), []) }}
+          >
+            <div style={styles.dmProgressFill} />
+            <span style={styles.dmProgressLabel}>Next round →</span>
+          </div>
+        </>
+      )}
+      {checkResult && !allCorrect && (
+        <button style={styles.dmNextBtn} onClick={() => onComplete([], wrongVerbIds)}>
+          Next round →
         </button>
       )}
 
@@ -1264,6 +1284,36 @@ const styles = {
     fontWeight: 600,
     cursor: 'pointer',
     width: '100%',
+  },
+  dmProgressBtnWrap: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: '8px',
+    backgroundColor: '#dcfce7',
+    cursor: 'pointer',
+    padding: '0.75rem',
+    textAlign: 'center',
+    userSelect: 'none',
+    boxSizing: 'border-box',
+  },
+  dmProgressFill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#16a34a',
+    transformOrigin: 'left center',
+    transform: 'scaleX(0)',
+    animation: 'dmFill 3s linear forwards',
+  },
+  dmProgressLabel: {
+    position: 'relative',
+    zIndex: 1,
+    color: '#fff',
+    fontWeight: 600,
+    fontSize: '1rem',
+    textShadow: '0 1px 3px rgba(0,0,0,0.35)',
   },
   dmChipGhost: {
     position: 'fixed',
