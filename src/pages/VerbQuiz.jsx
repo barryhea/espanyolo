@@ -14,7 +14,7 @@ function shuffle(arr) {
   return a
 }
 
-// ── Fuzzy matching (S3 typed answers) ─────────────────────────────────────────
+// ── Fuzzy matching (S3 & S4 typed answers) ────────────────────────────────────
 function levenshtein(a, b) {
   const m = a.length, n = b.length
   const dp = Array.from({ length: m + 1 }, (_, i) => Array(n + 1).fill(0).map((_, j) => j === 0 ? i : 0))
@@ -151,12 +151,22 @@ function makeQuestion(verb, allVerbs, progMap) {
       correct: verb.english,
     }
   }
-  // S3: typed ES→EN — Spanish infinitive shown, type English
+  if (stage === 3) {
+    // S3: typed ES→EN — Spanish infinitive shown, type English
+    return {
+      type: 'typed',
+      verb,
+      correct: verb.english,
+      placeholder: 'Type the English meaning…',
+    }
+  }
+  // S4: typed EN→ES — English shown, type Spanish infinitive
   return {
     type: 'typed',
     verb,
-    correct: verb.english,
-    placeholder: 'Type the English meaning…',
+    prompt: verb.english,
+    correct: verb.spanish_infinitive,
+    placeholder: 'Type the Spanish infinitive…',
   }
 }
 
@@ -212,7 +222,7 @@ export default function VerbQuiz() {
     const verbIds = verbs.map(v => v.id)
     const { data: progress } = await supabase
       .from('user_verb_progress')
-      .select('id, verb_id, stage, consecutive_correct, mastered')
+      .select('id, verb_id, stage, consecutive_correct, mastered, s4_score')
       .eq('user_id', user.id)
       .in('verb_id', verbIds)
 
@@ -222,6 +232,7 @@ export default function VerbQuiz() {
         stage: p.stage ?? 1,
         consecutive_correct: p.consecutive_correct ?? 0,
         mastered: p.mastered ?? false,
+        s4_score: p.s4_score ?? 0,
         db_id: p.id,
         consecutive_incorrect: 0,
       }
@@ -238,7 +249,12 @@ export default function VerbQuiz() {
       sess = shuffle(s2).slice(0, 25)
     } else {
       const s3 = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 3 && !progMap[v.id]?.mastered)
-      sess = shuffle(s3).slice(0, 10)
+      if (s3.length > 0) {
+        sess = shuffle(s3).slice(0, 10)
+      } else {
+        const s4 = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 4 && !progMap[v.id]?.mastered)
+        sess = shuffle(s4).slice(0, 10)
+      }
     }
 
     setAllVerbs(verbs)
@@ -262,15 +278,16 @@ export default function VerbQuiz() {
   async function saveProgress(verbId) {
     const prog = progressRef.current[verbId]
     if (!prog) return
-    const { stage, consecutive_correct, mastered, db_id } = prog
+    const { stage, consecutive_correct, mastered, s4_score, db_id } = prog
+    const payload = { stage, consecutive_correct, mastered, s4_score: s4_score ?? 0 }
     if (db_id) {
       await supabase.from('user_verb_progress')
-        .update({ stage, consecutive_correct, mastered })
+        .update(payload)
         .eq('id', db_id)
     } else {
       const { data } = await supabase.from('user_verb_progress')
         .upsert(
-          { user_id: user.id, verb_id: verbId, stage, consecutive_correct, mastered },
+          { user_id: user.id, verb_id: verbId, ...payload },
           { onConflict: 'user_id,verb_id' }
         )
         .select('id').single()
@@ -313,15 +330,39 @@ export default function VerbQuiz() {
     setPhase('feedback')
   }
 
-  // ── S3: typed ES→EN answer ────────────────────────────────────────────────
+  // ── S3: typed ES→EN answer (unchanged) ───────────────────────────────────
   function handleTyped() {
     const result = fuzzyMatch(typedAnswer, question.correct)
     const correct = result !== 'wrong'
     const verbId = question.verb.id
+    const stage = progressRef.current[verbId]?.stage ?? 3
+
+    if (stage === 4) {
+      // S4: EN→ES — mastery via s4_score (5 consecutive correct)
+      const prog = progressRef.current[verbId] ?? {
+        stage: 4, consecutive_correct: 0, s4_score: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
+      }
+      let newProg
+      if (correct) {
+        const newS4 = (prog.s4_score ?? 0) + 1
+        newProg = newS4 >= 5
+          ? { ...prog, s4_score: newS4, mastered: true, consecutive_incorrect: 0 }
+          : { ...prog, s4_score: newS4, consecutive_incorrect: 0 }
+      } else {
+        newProg = { ...prog, s4_score: 0 }
+      }
+      progressRef.current[verbId] = newProg
+      saveProgress(verbId)
+      setMatchResult(result)
+      setResults(r => [...r, { verb: question.verb, correct, matchResult: result }])
+      setPhase('feedback')
+      return
+    }
+
+    // S3: ES→EN — graduate to stage 4 on 3 consecutive correct
     const prog = progressRef.current[verbId] ?? {
       stage: 3, consecutive_correct: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
     }
-
     let newProg
     if (correct) {
       const newConsec = prog.consecutive_correct + 1
@@ -338,7 +379,6 @@ export default function VerbQuiz() {
         newProg = { ...prog, consecutive_incorrect: newConsecIncorrect }
       }
     }
-
     progressRef.current[verbId] = newProg
     saveProgress(verbId)
     setMatchResult(result)
@@ -414,7 +454,7 @@ export default function VerbQuiz() {
     for (const v of allVerbs) {
       const prog = progressRef.current[v.id]
       maxPts += 4
-      const isMastered = prog?.mastered || ((prog?.stage ?? 1) === 4 && (prog?.consecutive_correct ?? 0) >= 5)
+      const isMastered = prog?.mastered || ((prog?.stage ?? 1) === 4 && (prog?.s4_score ?? 0) >= 5)
       if (isMastered) pts += 4
       else if ((prog?.stage ?? 1) >= 4) pts += 3
       else if ((prog?.stage ?? 1) >= 3) pts += 2
@@ -457,10 +497,11 @@ export default function VerbQuiz() {
                   const stage = prog?.stage ?? 1
                   const consec = prog?.consecutive_correct ?? 0
                   const isMastered = prog?.mastered ?? false
+                  const s4Score = prog?.s4_score ?? 0
                   const s1done = stage >= 2 || isMastered
                   const s2done = stage >= 3 || isMastered
                   const s3done = stage >= 4 || isMastered
-                  const s4done = isMastered || (stage === 4 && consec >= 5)
+                  const s4done = isMastered || (stage === 4 && s4Score >= 5)
                   const verbResult = resultByVerbId[verb.id]
                   const textColor = verbResult === 'exact' ? '#16a34a' : verbResult === 'close' ? '#d97706' : verbResult === 'wrong' ? '#dc2626' : '#333'
                   return (
@@ -506,11 +547,11 @@ export default function VerbQuiz() {
         </div>
 
         <div style={styles.card}>
-          <p style={styles.word}>{question.verb.spanish_infinitive}</p>
+          <p style={styles.word}>{question.prompt ?? question.verb.spanish_infinitive}</p>
 
           <MasteryBar
             stage={currentProg?.stage ?? 1}
-            consecutiveCorrect={currentProg?.consecutive_correct ?? 0}
+            consecutiveCorrect={(currentProg?.stage ?? 1) === 4 ? (currentProg?.s4_score ?? 0) : (currentProg?.consecutive_correct ?? 0)}
             mastered={currentProg?.mastered ?? false}
           />
 
