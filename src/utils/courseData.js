@@ -18,15 +18,9 @@ export const VOCAB_THEMES = [
   { id: 17, title: 'Feelings & Emotions' },
 ]
 
-export const VERB_TIERS = [
-  {
-    id: 'tier1',
-    title: 'Tier 1',
-    description: 'The 30 most essential Spanish verbs',
-  },
-  {
-    id: 'tier2',
-    title: 'Tier 2',
-    description: 'The next 70 high-frequency verbs',
-  },
+export const VERB_CATEGORIES = [
+  { id: 1, title: 'Core Verbs', description: '10 essential verbs', count: 10 },
+  { id: 2, title: 'Everyday Verbs', description: '20 high-frequency verbs', count: 20 },
+  { id: 3, title: 'Vivid & Interactive Verbs', description: '20 action verbs', count: 20 },
+  { id: 4, title: 'Expressive & Emotional Verbs', description: '20 expressive verbs', count: 20 },
 ]
