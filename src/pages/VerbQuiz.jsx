@@ -229,24 +229,13 @@ function DragMatchRound({ roundVerbs, onComplete }) {
   function handleCheck() {
     const results = slots.map(slot => slot.chip?.id === slot.verbId)
     setCheckResult(results)
-
-    if (results.every(Boolean)) {
-      // All correct — complete after brief green flash
-      setTimeout(() => onComplete(roundVerbs.map(v => v.id)), 1000)
-    } else {
-      // Return wrong chips to bank after red flash
-      const wrongChips = slots
-        .map((slot, i) => (!results[i] && slot.chip) ? slot.chip : null)
-        .filter(Boolean)
-      setTimeout(() => {
-        setSlots(prev => prev.map((slot, i) => results[i] ? slot : { ...slot, chip: null }))
-        setBank(prev => [...prev, ...wrongChips])
-        setCheckResult(null)
-      }, 1200)
-    }
   }
 
   const allFilled = slots.every(s => s.chip !== null)
+  const allCorrect = checkResult !== null && checkResult.every(Boolean)
+  const wrongVerbIds = checkResult
+    ? slots.map((slot, i) => checkResult[i] ? null : slot.verbId).filter(Boolean)
+    : []
 
   return (
     <div style={styles.dmCard}>
@@ -300,6 +289,14 @@ function DragMatchRound({ roundVerbs, onComplete }) {
       {allFilled && !checkResult && (
         <button style={styles.dmCheckBtn} onClick={handleCheck}>Check ✓</button>
       )}
+      {checkResult && (
+        <button
+          style={allCorrect ? styles.dmCheckBtn : styles.dmNextBtn}
+          onClick={() => onComplete(allCorrect ? roundVerbs.map(v => v.id) : [], wrongVerbIds)}
+        >
+          {allCorrect ? '✓ Next round →' : 'Next round →'}
+        </button>
+      )}
 
       {/* Ghost chip — positioned via DOM ref, no re-render on move */}
       <div ref={ghostElRef} style={{ ...styles.dmChipGhost, display: 'none' }} />
@@ -348,6 +345,7 @@ export default function VerbQuiz() {
   const category = VERB_CATEGORIES.find(c => c.id === Number(categoryId))
   const progressRef = useRef({})
   const inputRef = useRef(null)
+  const recentlyUsedRef = useRef([])
 
   const [phase, setPhase] = useState('loading')
   const [allVerbs, setAllVerbs] = useState([])
@@ -412,9 +410,15 @@ export default function VerbQuiz() {
     // ── S1: if any verbs still at stage 1, run a drag-match round ────────────
     const s1All = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 1)
     if (s1All.length > 0) {
+      // Exclude recently wrong verbs if enough others are available
+      const exclude = recentlyUsedRef.current
+      recentlyUsedRef.current = []
+      const s1Pool = s1All.filter(v => !exclude.includes(v.id)).length >= 5
+        ? s1All.filter(v => !exclude.includes(v.id))
+        : s1All
       // Split into in-progress (1–4 matches) and fresh (0 matches)
-      const inProgress = shuffle(s1All.filter(v => (progMap[v.id]?.consecutive_correct ?? 0) > 0))
-      const fresh = shuffle(s1All.filter(v => (progMap[v.id]?.consecutive_correct ?? 0) === 0))
+      const inProgress = shuffle(s1Pool.filter(v => (progMap[v.id]?.consecutive_correct ?? 0) > 0))
+      const fresh = shuffle(s1Pool.filter(v => (progMap[v.id]?.consecutive_correct ?? 0) === 0))
       // Up to 2 in-progress + fill to 5 with fresh, then top up with more in-progress
       const ipSlice = inProgress.slice(0, 2)
       const frSlice = fresh.slice(0, 5 - ipSlice.length)
@@ -482,9 +486,10 @@ export default function VerbQuiz() {
     }
   }
 
-  // ── S1: round complete — accumulate match count, graduate at 5 total ────────
-  async function handleS1RoundComplete(verbIds) {
-    for (const verbId of verbIds) {
+  // ── S1: round complete — only credit fully-correct rounds, track wrong verbs ─
+  async function handleS1RoundComplete(creditedIds, wrongIds) {
+    recentlyUsedRef.current = wrongIds ?? []
+    for (const verbId of creditedIds) {
       const prog = progressRef.current[verbId] ?? {
         stage: 1, consecutive_correct: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
       }
@@ -496,7 +501,7 @@ export default function VerbQuiz() {
         consecutive_correct: graduated ? 0 : newCount,
       }
     }
-    await Promise.all(verbIds.map(saveProgress))
+    await Promise.all(creditedIds.map(saveProgress))
     loadQuiz()
   }
 
@@ -1252,6 +1257,17 @@ const styles = {
   dmCheckBtn: {
     padding: '0.75rem',
     backgroundColor: '#16a34a',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '1rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    width: '100%',
+  },
+  dmNextBtn: {
+    padding: '0.75rem',
+    backgroundColor: '#3b82f6',
     color: '#fff',
     border: 'none',
     borderRadius: '8px',
