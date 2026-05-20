@@ -410,9 +410,16 @@ export default function VerbQuiz() {
     progressRef.current = progMap
 
     // ── S1: if any verbs still at stage 1, run a drag-match round ────────────
-    const s1 = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 1)
-    if (s1.length > 0) {
-      const round = shuffle(s1).slice(0, 5)
+    const s1All = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 1)
+    if (s1All.length > 0) {
+      // Split into in-progress (1–4 matches) and fresh (0 matches)
+      const inProgress = shuffle(s1All.filter(v => (progMap[v.id]?.consecutive_correct ?? 0) > 0))
+      const fresh = shuffle(s1All.filter(v => (progMap[v.id]?.consecutive_correct ?? 0) === 0))
+      // Up to 2 in-progress + fill to 5 with fresh, then top up with more in-progress
+      const ipSlice = inProgress.slice(0, 2)
+      const frSlice = fresh.slice(0, 5 - ipSlice.length)
+      const extra = inProgress.slice(2, 2 + Math.max(0, 5 - ipSlice.length - frSlice.length))
+      const round = shuffle([...ipSlice, ...frSlice, ...extra])
       setAllVerbs(verbs)
       setRoundVerbs(round)
       setPhase('s1')
@@ -475,18 +482,18 @@ export default function VerbQuiz() {
     }
   }
 
-  // ── S1: round complete — advance consecutive_correct, graduate at 3 ────────
+  // ── S1: round complete — accumulate match count, graduate at 5 total ────────
   async function handleS1RoundComplete(verbIds) {
     for (const verbId of verbIds) {
       const prog = progressRef.current[verbId] ?? {
         stage: 1, consecutive_correct: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
       }
-      const newConsec = (prog.consecutive_correct ?? 0) + 1
-      const graduated = newConsec >= 3
+      const newCount = (prog.consecutive_correct ?? 0) + 1
+      const graduated = newCount >= 5
       progressRef.current[verbId] = {
         ...prog,
         stage: graduated ? 2 : 1,
-        consecutive_correct: graduated ? 0 : newConsec,
+        consecutive_correct: graduated ? 0 : newCount,
       }
     }
     await Promise.all(verbIds.map(saveProgress))
@@ -645,8 +652,6 @@ export default function VerbQuiz() {
 
   // ── S1: drag & match round ────────────────────────────────────────────────
   if (phase === 's1') {
-    // Show how many rounds the first verb in the round has completed
-    const roundsDone = progressRef.current[roundVerbs[0]?.id]?.consecutive_correct ?? 0
     return (
       <div style={styles.s1Page}>
         <NavBar />
@@ -657,7 +662,7 @@ export default function VerbQuiz() {
                 Stage 1 — Drag & Match
               </span>
               <span style={{ fontSize: '0.7rem', color: '#bbb' }}>
-                Round {roundsDone + 1} of 3 — complete all 3 rounds to advance
+                Match each verb 5 times to unlock Stage 2
               </span>
             </div>
             <button style={styles.backLink} onClick={() => navigate('/verbs')}>Exit</button>
