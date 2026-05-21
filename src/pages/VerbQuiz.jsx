@@ -155,11 +155,13 @@ function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
   // Auto-advance 3 s after any Check result
   useEffect(() => {
     if (!checkResult) return
-    const allOk = checkResult.every(Boolean)
+    const correctIds = slotsStateRef.current
+      .map((slot, i) => checkResult[i] ? slot.verbId : null)
+      .filter(Boolean)
     const wrongIds = slotsStateRef.current
       .map((slot, i) => checkResult[i] ? null : slot.verbId)
       .filter(Boolean)
-    const tid = setTimeout(() => onComplete(allOk ? roundVerbs.map(v => v.id) : [], wrongIds), 3000)
+    const tid = setTimeout(() => onComplete(correctIds, wrongIds), 3000)
     autoAdvanceRef.current = tid
     return () => clearTimeout(tid)
   }, [checkResult])
@@ -246,6 +248,9 @@ function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
 
   const allFilled = slots.every(s => s.chip !== null)
   const allCorrect = checkResult !== null && checkResult.every(Boolean)
+  const correctVerbIds = checkResult
+    ? slots.map((slot, i) => checkResult[i] ? slot.verbId : null).filter(Boolean)
+    : []
   const wrongVerbIds = checkResult
     ? slots.map((slot, i) => checkResult[i] ? null : slot.verbId).filter(Boolean)
     : []
@@ -320,7 +325,7 @@ function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
           <div
             role="button"
             style={styles.dmProgressBtnWrap}
-            onClick={() => { clearTimeout(autoAdvanceRef.current); onComplete(allCorrect ? roundVerbs.map(v => v.id) : [], wrongVerbIds) }}
+            onClick={() => { clearTimeout(autoAdvanceRef.current); onComplete(correctVerbIds, wrongVerbIds) }}
           >
             <div style={styles.dmProgressFill} />
             <span style={styles.dmProgressLabel}>Next round →</span>
