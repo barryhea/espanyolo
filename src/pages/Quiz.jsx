@@ -48,7 +48,7 @@ function shuffle(arr) {
 
 function pickDistractors(word, allWords, count = 3) {
   const pool = shuffle(allWords.filter(w => w.id !== word.id))
-  return pool.slice(0, count).map(w => w.spanish)
+  return pool.slice(0, count).map(w => w.english)
 }
 
 function buildSession(words, progressMap) {
@@ -62,8 +62,8 @@ function buildSession(words, progressMap) {
 function buildQuestion(word, allWords, progressMap) {
   const stage = progressMap[word.id]?.stage ?? 1
   if (stage === 1 && allWords.length >= 4) {
-    const options = shuffle([word.spanish, ...pickDistractors(word, allWords)])
-    return { type: 'mc', word, options, prompt: word.english, promptLabel: 'What is the Spanish for:', correct: word.spanish, stage }
+    const options = shuffle([word.english, ...pickDistractors(word, allWords)])
+    return { type: 'mc', word, options, prompt: word.spanish, promptLabel: 'What is the English for:', correct: word.english, stage }
   }
   if (stage === 2) {
     return { type: 'typed', word, prompt: word.spanish, promptLabel: 'What is the English for:', correct: word.english, placeholder: 'Type the English word…', stage }
