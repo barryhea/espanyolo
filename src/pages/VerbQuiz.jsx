@@ -14,7 +14,7 @@ function shuffle(arr) {
   return a
 }
 
-// ── Fuzzy matching (S3 & S4 typed answers) ────────────────────────────────────
+// ── Fuzzy matching (L3 & L4 typed answers) ────────────────────────────────────
 function levenshtein(a, b) {
   const m = a.length, n = b.length
   const dp = Array.from({ length: m + 1 }, (_, i) => Array(n + 1).fill(0).map((_, j) => j === 0 ? i : 0))
@@ -96,10 +96,10 @@ function ProgressRing({ pct }) {
 }
 
 function MasteryBar({ stage, mastered }) {
-  const s1done = stage >= 2 || mastered
-  const s2done = stage >= 3 || mastered
-  const s3done = stage >= 4 || mastered
-  const s4done = mastered
+  const l1done = stage >= 2 || mastered
+  const l2done = stage >= 3 || mastered
+  const l3done = stage >= 4 || mastered
+  const l4done = mastered
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
       <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
@@ -109,14 +109,14 @@ function MasteryBar({ stage, mastered }) {
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           width: '26px', height: '18px', borderRadius: '5px',
-          backgroundColor: s1done ? '#16a34a' : '#e5e7eb',
+          backgroundColor: l1done ? '#16a34a' : '#e5e7eb',
           transition: 'background-color 0.2s',
         }}>
-          <span style={{ fontSize: '0.7rem', color: s1done ? '#fff' : '#9ca3af', fontWeight: 700, lineHeight: 1 }}>✓</span>
+          <span style={{ fontSize: '0.7rem', color: l1done ? '#fff' : '#9ca3af', fontWeight: 700, lineHeight: 1 }}>✓</span>
         </div>
-        <span style={{ fontSize: '1.15rem', opacity: s2done ? 1 : 0.2, transition: 'opacity 0.2s', lineHeight: 1 }}>🥉</span>
-        <span style={{ fontSize: '1.15rem', opacity: s3done ? 1 : 0.2, transition: 'opacity 0.2s', lineHeight: 1 }}>🥈</span>
-        <span style={{ fontSize: '1.15rem', opacity: s4done ? 1 : 0.2, transition: 'opacity 0.2s', lineHeight: 1 }}>🥇</span>
+        <span style={{ fontSize: '1.15rem', opacity: l2done ? 1 : 0.2, transition: 'opacity 0.2s', lineHeight: 1 }}>🥉</span>
+        <span style={{ fontSize: '1.15rem', opacity: l3done ? 1 : 0.2, transition: 'opacity 0.2s', lineHeight: 1 }}>🥈</span>
+        <span style={{ fontSize: '1.15rem', opacity: l4done ? 1 : 0.2, transition: 'opacity 0.2s', lineHeight: 1 }}>🥇</span>
       </div>
     </div>
   )
@@ -132,7 +132,7 @@ function StageCell({ done }) {
   )
 }
 
-// ── S1: Drag & Match ──────────────────────────────────────────────────────────
+// ── L1: Drag & Match ──────────────────────────────────────────────────────────
 // Props: roundVerbs [{id, english, spanish_infinitive}], onComplete(verbIds[])
 function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
   const [bank, setBank] = useState(() =>
@@ -339,11 +339,11 @@ function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
   )
 }
 
-// ── Question builder (S2/S3/S4 — unchanged) ───────────────────────────────────
+// ── Question builder (L2/L3/L4 — unchanged) ───────────────────────────────────
 function makeQuestion(verb, allVerbs, progMap) {
   const stage = progMap[verb.id]?.stage ?? 1
   if (stage <= 2) {
-    // S2: MC — Spanish infinitive shown, pick English
+    // L2: MC — Spanish infinitive shown, pick English
     const distractors = pickEnglishDistractors(verb, allVerbs)
     return {
       type: 'mc',
@@ -353,7 +353,7 @@ function makeQuestion(verb, allVerbs, progMap) {
     }
   }
   if (stage === 3) {
-    // S3: typed ES→EN — Spanish infinitive shown, type English
+    // L3: typed ES→EN — Spanish infinitive shown, type English
     return {
       type: 'typed',
       verb,
@@ -361,7 +361,7 @@ function makeQuestion(verb, allVerbs, progMap) {
       placeholder: 'Type the English meaning…',
     }
   }
-  // S4: typed EN→ES — English shown, type Spanish infinitive
+  // L4: typed EN→ES — English shown, type Spanish infinitive
   return {
     type: 'typed',
     verb,
@@ -381,18 +381,18 @@ export default function VerbQuiz() {
   const progressRef = useRef({})
   const inputRef = useRef(null)
   const recentlyUsedRef = useRef([])
-  const s1RoundCountRef = useRef(0)
+  const l1RoundCountRef = useRef(0)
 
   const [phase, setPhase] = useState('loading')
   const [allVerbs, setAllVerbs] = useState([])
-  const [roundVerbs, setRoundVerbs] = useState([])             // S1 current round
+  const [roundVerbs, setRoundVerbs] = useState([])             // L1 current round
   const [session, setSession] = useState([])
   const [currentIdx, setCurrentIdx] = useState(0)
   const [question, setQuestion] = useState(null)
-  const [selectedOption, setSelectedOption] = useState(null)   // S2 MC
-  const [isCorrect, setIsCorrect] = useState(null)             // S2 MC feedback
-  const [typedAnswer, setTypedAnswer] = useState('')           // S3/S4 typed
-  const [matchResult, setMatchResult] = useState(null)         // S3/S4 fuzzy result
+  const [selectedOption, setSelectedOption] = useState(null)   // L2 MC
+  const [isCorrect, setIsCorrect] = useState(null)             // L2 MC feedback
+  const [typedAnswer, setTypedAnswer] = useState('')           // L3/L4 typed
+  const [matchResult, setMatchResult] = useState(null)         // L3/L4 fuzzy result
   const [results, setResults] = useState([])
 
   useEffect(() => {
@@ -426,7 +426,7 @@ export default function VerbQuiz() {
     const verbIds = verbs.map(v => v.id)
     const { data: progress } = await supabase
       .from('user_verb_progress')
-      .select('id, verb_id, stage, consecutive_correct, mastered, s4_score, drag_match_score')
+      .select('id, verb_id, stage, consecutive_correct, mastered, l4_score, drag_match_score')
       .eq('user_id', user.id)
       .in('verb_id', verbIds)
 
@@ -436,7 +436,7 @@ export default function VerbQuiz() {
         stage: p.stage ?? 1,
         consecutive_correct: p.consecutive_correct ?? 0,
         mastered: p.mastered ?? false,
-        s4_score: p.s4_score ?? 0,
+        l4_score: p.l4_score ?? 0,
         drag_match_score: p.drag_match_score ?? 0,
         db_id: p.id,
         consecutive_incorrect: 0,
@@ -444,18 +444,18 @@ export default function VerbQuiz() {
     }
     progressRef.current = progMap
 
-    // ── S1: if any verbs still at stage 1, run a drag-match round ────────────
-    const s1All = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 1)
-    if (s1All.length > 0) {
+    // ── L1: if any verbs still at stage 1, run a drag-match round ────────────
+    const l1All = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 1)
+    if (l1All.length > 0) {
       // Exclude recently wrong verbs if enough others are available
       const exclude = recentlyUsedRef.current
       recentlyUsedRef.current = []
-      const s1Pool = s1All.filter(v => !exclude.includes(v.id)).length >= 5
-        ? s1All.filter(v => !exclude.includes(v.id))
-        : s1All
+      const l1Pool = l1All.filter(v => !exclude.includes(v.id)).length >= 5
+        ? l1All.filter(v => !exclude.includes(v.id))
+        : l1All
       // Split into in-progress (1–4 matches) and fresh (0 matches)
-      const inProgress = shuffle(s1Pool.filter(v => (progMap[v.id]?.drag_match_score ?? 0) > 0))
-      const fresh = shuffle(s1Pool.filter(v => (progMap[v.id]?.drag_match_score ?? 0) === 0))
+      const inProgress = shuffle(l1Pool.filter(v => (progMap[v.id]?.drag_match_score ?? 0) > 0))
+      const fresh = shuffle(l1Pool.filter(v => (progMap[v.id]?.drag_match_score ?? 0) === 0))
       // Up to 2 in-progress + fill to 5 with fresh, then top up with more in-progress
       const ipSlice = inProgress.slice(0, 2)
       const frSlice = fresh.slice(0, 5 - ipSlice.length)
@@ -463,25 +463,25 @@ export default function VerbQuiz() {
       const round = shuffle([...ipSlice, ...frSlice, ...extra])
       setAllVerbs(verbs)
       setRoundVerbs(round)
-      setPhase('s1')
+      setPhase('l1')
       return
     }
 
-    // ── S2 first; fall back to S3 only when no S2 verbs remain ───────────────
-    const s2 = verbs.filter(v => {
+    // ── L2 first; fall back to L3 only when no L2 verbs remain ───────────────
+    const l2 = verbs.filter(v => {
       const stage = progMap[v.id]?.stage ?? 1
       return stage <= 2 && !progMap[v.id]?.mastered
     })
     let sess
-    if (s2.length > 0) {
-      sess = shuffle(s2).slice(0, 25)
+    if (l2.length > 0) {
+      sess = shuffle(l2).slice(0, 25)
     } else {
-      const s3 = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 3 && !progMap[v.id]?.mastered)
-      if (s3.length > 0) {
-        sess = shuffle(s3).slice(0, 10)
+      const l3 = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 3 && !progMap[v.id]?.mastered)
+      if (l3.length > 0) {
+        sess = shuffle(l3).slice(0, 10)
       } else {
-        const s4 = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 4 && !progMap[v.id]?.mastered)
-        sess = shuffle(s4).slice(0, 10)
+        const l4 = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 4 && !progMap[v.id]?.mastered)
+        sess = shuffle(l4).slice(0, 10)
       }
     }
 
@@ -506,8 +506,8 @@ export default function VerbQuiz() {
   async function saveProgress(verbId) {
     const prog = progressRef.current[verbId]
     if (!prog) return
-    const { stage, consecutive_correct, mastered, s4_score, drag_match_score, db_id } = prog
-    const payload = { stage, consecutive_correct, mastered, s4_score: s4_score ?? 0, drag_match_score: drag_match_score ?? 0 }
+    const { stage, consecutive_correct, mastered, l4_score, drag_match_score, db_id } = prog
+    const payload = { stage, consecutive_correct, mastered, l4_score: l4_score ?? 0, drag_match_score: drag_match_score ?? 0 }
     if (db_id) {
       await supabase.from('user_verb_progress')
         .update(payload)
@@ -523,8 +523,8 @@ export default function VerbQuiz() {
     }
   }
 
-  // ── S1: round complete — increment drag_match_score per credited verb ────────
-  async function handleS1RoundComplete(creditedIds, wrongIds) {
+  // ── L1: round complete — increment drag_match_score per credited verb ────────
+  async function handleL1RoundComplete(creditedIds, wrongIds) {
     recentlyUsedRef.current = wrongIds ?? []
     for (const verbId of creditedIds) {
       const prog = progressRef.current[verbId] ?? {
@@ -540,15 +540,15 @@ export default function VerbQuiz() {
       }
     }
     await Promise.all(creditedIds.map(saveProgress))
-    s1RoundCountRef.current += 1
-    if (s1RoundCountRef.current % 5 === 0) {
-      setPhase('s1summary')
+    l1RoundCountRef.current += 1
+    if (l1RoundCountRef.current % 5 === 0) {
+      setPhase('l1summary')
     } else {
       loadQuiz()
     }
   }
 
-  // ── S2: multiple choice answer (unchanged) ────────────────────────────────
+  // ── L2: multiple choice answer (unchanged) ────────────────────────────────
   function handleAnswer(option) {
     const correct = option === question.correct
     const verbId = question.verb.id
@@ -583,7 +583,7 @@ export default function VerbQuiz() {
     setPhase('feedback')
   }
 
-  // ── S3 & S4: typed answer (unchanged) ─────────────────────────────────────
+  // ── L3 & L4: typed answer (unchanged) ─────────────────────────────────────
   function handleTyped() {
     const result = fuzzyMatch(typedAnswer, question.correct)
     const correct = result !== 'wrong'
@@ -591,18 +591,18 @@ export default function VerbQuiz() {
     const stage = progressRef.current[verbId]?.stage ?? 3
 
     if (stage === 4) {
-      // S4: EN→ES — mastery via s4_score (5 consecutive correct)
+      // L4: EN→ES — mastery via l4_score (5 consecutive correct)
       const prog = progressRef.current[verbId] ?? {
-        stage: 4, consecutive_correct: 0, s4_score: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
+        stage: 4, consecutive_correct: 0, l4_score: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
       }
       let newProg
       if (correct) {
-        const newS4 = (prog.s4_score ?? 0) + 1
-        newProg = newS4 >= 5
-          ? { ...prog, s4_score: newS4, mastered: true, consecutive_incorrect: 0 }
-          : { ...prog, s4_score: newS4, consecutive_incorrect: 0 }
+        const newL4 = (prog.l4_score ?? 0) + 1
+        newProg = newL4 >= 5
+          ? { ...prog, l4_score: newL4, mastered: true, consecutive_incorrect: 0 }
+          : { ...prog, l4_score: newL4, consecutive_incorrect: 0 }
       } else {
-        newProg = { ...prog, s4_score: 0 }
+        newProg = { ...prog, l4_score: 0 }
       }
       progressRef.current[verbId] = newProg
       saveProgress(verbId)
@@ -612,7 +612,7 @@ export default function VerbQuiz() {
       return
     }
 
-    // S3: ES→EN — graduate to stage 4 on 3 consecutive correct
+    // L3: ES→EN — graduate to stage 4 on 3 consecutive correct
     const prog = progressRef.current[verbId] ?? {
       stage: 3, consecutive_correct: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
     }
@@ -698,49 +698,49 @@ export default function VerbQuiz() {
     )
   }
 
-  // ── S1: drag & match round ────────────────────────────────────────────────
-  if (phase === 's1') {
+  // ── L1: drag & match round ────────────────────────────────────────────────
+  if (phase === 'l1') {
     return (
-      <div style={styles.s1Page}>
+      <div style={styles.l1Page}>
         <NavBar />
-        <main style={styles.s1Main}>
+        <main style={styles.l1Main}>
           <DragMatchRound
             key={roundVerbs.map(v => v.id).join('-')}
             roundVerbs={roundVerbs}
-            onComplete={handleS1RoundComplete}
-            roundsInBlock={s1RoundCountRef.current % 5}
+            onComplete={handleL1RoundComplete}
+            roundsInBlock={l1RoundCountRef.current % 5}
           />
         </main>
       </div>
     )
   }
 
-  // ── S1 mid-session summary (every 10 rounds) ─────────────────────────────
-  if (phase === 's1summary') {
+  // ── L1 mid-session summary (every 10 rounds) ─────────────────────────────
+  if (phase === 'l1summary') {
     const sorted = [...allVerbs].sort((a, b) => {
       const cntA = (progressRef.current[a.id]?.stage ?? 1) >= 2 ? 5 : (progressRef.current[a.id]?.drag_match_score ?? 0)
       const cntB = (progressRef.current[b.id]?.stage ?? 1) >= 2 ? 5 : (progressRef.current[b.id]?.drag_match_score ?? 0)
       return cntB - cntA
     })
     return (
-      <div style={styles.s1Page}>
+      <div style={styles.l1Page}>
         <NavBar />
-        <main style={styles.s1Main}>
-          <div style={styles.s1SummaryCard}>
-            <div style={styles.s1SummaryHeader}>
-              <span style={styles.s1SummaryTitle}>Stage 1 Progress</span>
-              <span style={styles.s1SummarySubtitle}>{category.title}</span>
+        <main style={styles.l1Main}>
+          <div style={styles.l1SummaryCard}>
+            <div style={styles.l1SummaryHeader}>
+              <span style={styles.l1SummaryTitle}>Level 1 Progress</span>
+              <span style={styles.l1SummarySubtitle}>{category.title}</span>
             </div>
             {sorted.map(verb => {
               const prog = progressRef.current[verb.id]
               const matchCount = (prog?.stage ?? 1) >= 2 ? 5 : Math.min(prog?.drag_match_score ?? 0, 5)
               return (
-                <div key={verb.id} style={styles.s1SummaryRow}>
+                <div key={verb.id} style={styles.l1SummaryRow}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={styles.s1SummarySpanish}>{verb.spanish_infinitive}</div>
-                    <div style={styles.s1SummaryEnglish}>{verb.english}</div>
+                    <div style={styles.l1SummarySpanish}>{verb.spanish_infinitive}</div>
+                    <div style={styles.l1SummaryEnglish}>{verb.english}</div>
                   </div>
-                  <div style={styles.s1MatchDots}>
+                  <div style={styles.l1MatchDots}>
                     {Array.from({ length: 5 }).map((_, i) => (
                       <div key={i} style={{
                         width: '11px',
@@ -779,7 +779,7 @@ export default function VerbQuiz() {
     for (const v of allVerbs) {
       const prog = progressRef.current[v.id]
       maxPts += 4
-      const isMastered = prog?.mastered || ((prog?.stage ?? 1) === 4 && (prog?.s4_score ?? 0) >= 5)
+      const isMastered = prog?.mastered || ((prog?.stage ?? 1) === 4 && (prog?.l4_score ?? 0) >= 5)
       if (isMastered) pts += 4
       else if ((prog?.stage ?? 1) >= 4) pts += 3
       else if ((prog?.stage ?? 1) >= 3) pts += 2
@@ -810,10 +810,10 @@ export default function VerbQuiz() {
                 <tr>
                   <th style={{ ...styles.thLeft, textAlign: 'center', position: 'sticky', top: 0 }}>Spanish</th>
                   <th style={{ ...styles.thLeft, textAlign: 'center', position: 'sticky', top: 0 }}>English</th>
-                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>S1</th>
-                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>S2</th>
-                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>S3</th>
-                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>S4</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>L1</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>L2</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>L3</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>L4</th>
                 </tr>
               </thead>
               <tbody>
@@ -821,21 +821,21 @@ export default function VerbQuiz() {
                   const prog = progressRef.current[verb.id]
                   const stage = prog?.stage ?? 1
                   const isMastered = prog?.mastered ?? false
-                  const s4Score = prog?.s4_score ?? 0
-                  const s1done = stage >= 2 || isMastered
-                  const s2done = stage >= 3 || isMastered
-                  const s3done = stage >= 4 || isMastered
-                  const s4done = isMastered || (stage === 4 && s4Score >= 5)
+                  const l4Score = prog?.l4_score ?? 0
+                  const l1done = stage >= 2 || isMastered
+                  const l2done = stage >= 3 || isMastered
+                  const l3done = stage >= 4 || isMastered
+                  const l4done = isMastered || (stage === 4 && l4Score >= 5)
                   const verbResult = resultByVerbId[verb.id]
                   const textColor = verbResult === 'exact' ? '#16a34a' : verbResult === 'close' ? '#d97706' : verbResult === 'wrong' ? '#dc2626' : '#333'
                   return (
                     <tr key={verb.id} style={styles.tableRow}>
                       <td style={{ ...styles.tdEn, color: textColor }}>{verb.spanish_infinitive}</td>
                       <td style={{ ...styles.tdEs, color: textColor }}>{verb.english}</td>
-                      <StageCell done={s1done} />
-                      <StageCell done={s2done} />
-                      <StageCell done={s3done} />
-                      <StageCell done={s4done} />
+                      <StageCell done={l1done} />
+                      <StageCell done={l2done} />
+                      <StageCell done={l3done} />
+                      <StageCell done={l4done} />
                     </tr>
                   )
                 })}
@@ -856,7 +856,7 @@ export default function VerbQuiz() {
     )
   }
 
-  // ── Question (S2/S3/S4) ───────────────────────────────────────────────────
+  // ── Question (L2/L3/L4) ───────────────────────────────────────────────────
   const currentProg = progressRef.current[question?.verb?.id]
 
   return (
@@ -957,7 +957,7 @@ export default function VerbQuiz() {
 }
 
 const styles = {
-  // ── S2/S3/S4 quiz layout (fixed, no scroll — keyboard-safe) ──────────────
+  // ── L2/L3/L4 quiz layout (fixed, no scroll — keyboard-safe) ──────────────
   page: {
     position: 'fixed',
     top: 0, right: 0, bottom: 0, left: 0,
@@ -967,13 +967,13 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
   },
-  // ── S1 layout (scrollable — no keyboard, more vertical space needed) ──────
-  s1Page: {
+  // ── L1 layout (scrollable — no keyboard, more vertical space needed) ──────
+  l1Page: {
     minHeight: '100vh',
     backgroundColor: '#f8f8f6',
     fontFamily: 'system-ui, sans-serif',
   },
-  s1Main: {
+  l1Main: {
     maxWidth: '600px',
     margin: '0 auto',
     padding: '0.5rem 1.5rem 3rem',
@@ -1237,7 +1237,7 @@ const styles = {
     textAlign: 'center',
   },
 
-  // ── S1 Drag & Match styles ─────────────────────────────────────────────────
+  // ── L1 Drag & Match styles ─────────────────────────────────────────────────
   dmCard: {
     backgroundColor: '#fff',
     border: '1px solid #e5e5e5',
@@ -1394,37 +1394,37 @@ const styles = {
     fontSize: '1rem',
     textShadow: '0 1px 3px rgba(0,0,0,0.35)',
   },
-  // ── S1 mid-session summary styles ─────────────────────────────────────────
-  s1SummaryCard: {
+  // ── L1 mid-session summary styles ─────────────────────────────────────────
+  l1SummaryCard: {
     backgroundColor: '#fff',
     border: '1px solid #e5e5e5',
     borderRadius: '12px',
     overflow: 'hidden',
   },
-  s1SummaryHeader: {
+  l1SummaryHeader: {
     padding: '1rem 1.25rem 0.75rem',
     borderBottom: '1px solid #f0f0f0',
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
   },
-  s1SummaryTitle: {
+  l1SummaryTitle: {
     fontSize: '0.9rem',
     fontWeight: 700,
     color: '#111',
   },
-  s1SummarySubtitle: {
+  l1SummarySubtitle: {
     fontSize: '0.75rem',
     color: '#888',
   },
-  s1SummaryRow: {
+  l1SummaryRow: {
     display: 'flex',
     alignItems: 'center',
     gap: '0.75rem',
     padding: '0.6rem 1.25rem',
     borderBottom: '1px solid #f5f5f5',
   },
-  s1SummarySpanish: {
+  l1SummarySpanish: {
     fontSize: '0.9rem',
     fontWeight: 600,
     color: '#111',
@@ -1432,14 +1432,14 @@ const styles = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
   },
-  s1SummaryEnglish: {
+  l1SummaryEnglish: {
     fontSize: '0.78rem',
     color: '#666',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
   },
-  s1MatchDots: {
+  l1MatchDots: {
     display: 'flex',
     gap: '4px',
     alignItems: 'center',
