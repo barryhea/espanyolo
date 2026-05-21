@@ -426,7 +426,7 @@ export default function VerbQuiz() {
     const verbIds = verbs.map(v => v.id)
     const { data: progress } = await supabase
       .from('user_verb_progress')
-      .select('id, verb_id, stage, consecutive_correct, mastered, s4_score')
+      .select('id, verb_id, stage, consecutive_correct, mastered, s4_score, drag_match_score')
       .eq('user_id', user.id)
       .in('verb_id', verbIds)
 
@@ -437,6 +437,7 @@ export default function VerbQuiz() {
         consecutive_correct: p.consecutive_correct ?? 0,
         mastered: p.mastered ?? false,
         s4_score: p.s4_score ?? 0,
+        drag_match_score: p.drag_match_score ?? 0,
         db_id: p.id,
         consecutive_incorrect: 0,
       }
@@ -453,8 +454,8 @@ export default function VerbQuiz() {
         ? s1All.filter(v => !exclude.includes(v.id))
         : s1All
       // Split into in-progress (1–4 matches) and fresh (0 matches)
-      const inProgress = shuffle(s1Pool.filter(v => (progMap[v.id]?.consecutive_correct ?? 0) > 0))
-      const fresh = shuffle(s1Pool.filter(v => (progMap[v.id]?.consecutive_correct ?? 0) === 0))
+      const inProgress = shuffle(s1Pool.filter(v => (progMap[v.id]?.drag_match_score ?? 0) > 0))
+      const fresh = shuffle(s1Pool.filter(v => (progMap[v.id]?.drag_match_score ?? 0) === 0))
       // Up to 2 in-progress + fill to 5 with fresh, then top up with more in-progress
       const ipSlice = inProgress.slice(0, 2)
       const frSlice = fresh.slice(0, 5 - ipSlice.length)
@@ -505,8 +506,8 @@ export default function VerbQuiz() {
   async function saveProgress(verbId) {
     const prog = progressRef.current[verbId]
     if (!prog) return
-    const { stage, consecutive_correct, mastered, s4_score, db_id } = prog
-    const payload = { stage, consecutive_correct, mastered, s4_score: s4_score ?? 0 }
+    const { stage, consecutive_correct, mastered, s4_score, drag_match_score, db_id } = prog
+    const payload = { stage, consecutive_correct, mastered, s4_score: s4_score ?? 0, drag_match_score: drag_match_score ?? 0 }
     if (db_id) {
       await supabase.from('user_verb_progress')
         .update(payload)
@@ -522,19 +523,20 @@ export default function VerbQuiz() {
     }
   }
 
-  // ── S1: round complete — only credit fully-correct rounds, track wrong verbs ─
+  // ── S1: round complete — increment drag_match_score per credited verb ────────
   async function handleS1RoundComplete(creditedIds, wrongIds) {
     recentlyUsedRef.current = wrongIds ?? []
     for (const verbId of creditedIds) {
       const prog = progressRef.current[verbId] ?? {
-        stage: 1, consecutive_correct: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
+        stage: 1, consecutive_correct: 0, drag_match_score: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
       }
-      const newCount = (prog.consecutive_correct ?? 0) + 1
-      const graduated = newCount >= 5
+      const newScore = (prog.drag_match_score ?? 0) + 1
+      const graduated = newScore >= 5
       progressRef.current[verbId] = {
         ...prog,
+        drag_match_score: newScore,
         stage: graduated ? 2 : 1,
-        consecutive_correct: graduated ? 0 : newCount,
+        consecutive_correct: graduated ? 0 : prog.consecutive_correct,
       }
     }
     await Promise.all(creditedIds.map(saveProgress))
@@ -716,8 +718,8 @@ export default function VerbQuiz() {
   // ── S1 mid-session summary (every 10 rounds) ─────────────────────────────
   if (phase === 's1summary') {
     const sorted = [...allVerbs].sort((a, b) => {
-      const cntA = (progressRef.current[a.id]?.stage ?? 1) >= 2 ? 5 : (progressRef.current[a.id]?.consecutive_correct ?? 0)
-      const cntB = (progressRef.current[b.id]?.stage ?? 1) >= 2 ? 5 : (progressRef.current[b.id]?.consecutive_correct ?? 0)
+      const cntA = (progressRef.current[a.id]?.stage ?? 1) >= 2 ? 5 : (progressRef.current[a.id]?.drag_match_score ?? 0)
+      const cntB = (progressRef.current[b.id]?.stage ?? 1) >= 2 ? 5 : (progressRef.current[b.id]?.drag_match_score ?? 0)
       return cntB - cntA
     })
     return (
@@ -731,7 +733,7 @@ export default function VerbQuiz() {
             </div>
             {sorted.map(verb => {
               const prog = progressRef.current[verb.id]
-              const matchCount = (prog?.stage ?? 1) >= 2 ? 5 : (prog?.consecutive_correct ?? 0)
+              const matchCount = (prog?.stage ?? 1) >= 2 ? 5 : Math.min(prog?.drag_match_score ?? 0, 5)
               return (
                 <div key={verb.id} style={styles.s1SummaryRow}>
                   <div style={{ flex: 1, minWidth: 0 }}>
