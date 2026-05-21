@@ -465,9 +465,9 @@ export default function Quiz() {
                 <tr>
                   <th style={{ ...styles.thLeft, textAlign: 'center', position: 'sticky', top: 0 }}>English</th>
                   <th style={{ ...styles.thLeft, textAlign: 'center', position: 'sticky', top: 0 }}>Spanish</th>
-                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>🥉</th>
-                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>🥈</th>
-                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>🥇</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>S1</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>S2</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>S3</th>
                   <th style={{ ...styles.thRight, position: 'sticky', top: 0 }}></th>
                 </tr>
               </thead>
