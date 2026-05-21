@@ -406,6 +406,14 @@ export default function VerbQuiz() {
     }
   }, [question, phase])
 
+  // Enter to advance when feedback banner is showing
+  useEffect(() => {
+    if (phase !== 'feedback') return
+    const onKey = (e) => { if (e.key === 'Enter') handleNext() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [phase, currentIdx])
+
   async function loadQuiz() {
     setPhase('loading')
 
