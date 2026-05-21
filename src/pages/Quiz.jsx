@@ -54,9 +54,9 @@ function pickDistractors(word, allWords, count = 3) {
 function buildSession(words, progressMap) {
   const s1 = words.filter(w => (progressMap[w.id]?.stage ?? 1) === 1)
   if (s1.length > 0) {
-    return shuffle(s1).slice(0, 25)
+    return shuffle(s1).slice(0, 5) // TESTING STATE
   }
-  return shuffle(words).slice(0, 10)
+  return shuffle(words).slice(0, 5) // TESTING STATE
 }
 
 function buildQuestion(word, allWords, progressMap) {

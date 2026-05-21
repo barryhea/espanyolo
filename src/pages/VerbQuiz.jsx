@@ -476,14 +476,14 @@ export default function VerbQuiz() {
     })
     let sess
     if (l2.length > 0) {
-      sess = shuffle(l2).slice(0, 25)
+      sess = shuffle(l2).slice(0, 5) // TESTING STATE
     } else {
       const l3 = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 3 && !progMap[v.id]?.mastered)
       if (l3.length > 0) {
-        sess = shuffle(l3).slice(0, 10)
+        sess = shuffle(l3).slice(0, 5) // TESTING STATE
       } else {
         const l4 = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 4 && !progMap[v.id]?.mastered)
-        sess = shuffle(l4).slice(0, 10)
+        sess = shuffle(l4).slice(0, 5) // TESTING STATE
       }
     }
 
