@@ -137,6 +137,13 @@ export default function VerbTrainer() {
               </button>
             ))}
           </div>
+
+          <button style={styles.dictBtn} onClick={() => navigate('/verb-dictionary')}>
+            <span style={styles.dictBtnIcon}>📖</span>
+            <span style={styles.dictBtnLabel}>Verb Dictionary</span>
+            <span style={styles.dictBtnSub}>All 70 verbs with conjugations</span>
+            <span style={styles.dictBtnChevron}>›</span>
+          </button>
         </section>
       </main>
     </div>
@@ -217,5 +224,38 @@ const styles = {
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
+  },
+  dictBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+    width: '100%',
+    padding: '0.875rem 1rem',
+    background: '#fff',
+    border: '1px solid #e5e5e5',
+    borderRadius: '10px',
+    cursor: 'pointer',
+    textAlign: 'left',
+    marginTop: '0.25rem',
+  },
+  dictBtnIcon: {
+    fontSize: '1.25rem',
+    flexShrink: 0,
+  },
+  dictBtnLabel: {
+    fontSize: '0.9rem',
+    fontWeight: 600,
+    color: '#111',
+    flexShrink: 0,
+  },
+  dictBtnSub: {
+    fontSize: '0.75rem',
+    color: '#aaa',
+    flex: 1,
+  },
+  dictBtnChevron: {
+    fontSize: '1.1rem',
+    color: '#ccc',
+    flexShrink: 0,
   },
 }

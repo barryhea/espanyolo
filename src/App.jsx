@@ -4,6 +4,8 @@ import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
 import VerbTrainer from './pages/VerbTrainer'
 import VerbQuiz from './pages/VerbQuiz'
+import VerbDictionary from './pages/VerbDictionary'
+import VerbDetail from './pages/VerbDetail'
 import Quiz from './pages/Quiz'
 import HiddenWords from './pages/HiddenWords'
 import Polish from './pages/Polish'
@@ -26,6 +28,8 @@ export default function App() {
         <Route path="/vocabulary" element={<Protected><Dashboard /></Protected>} />
         <Route path="/verbs" element={<Protected><VerbTrainer /></Protected>} />
         <Route path="/verb-quiz/:categoryId" element={<Protected><VerbQuiz /></Protected>} />
+        <Route path="/verb-dictionary" element={<Protected><VerbDictionary /></Protected>} />
+        <Route path="/verb-dictionary/:verbId" element={<Protected><VerbDetail /></Protected>} />
         <Route path="/quiz/:themeId" element={<Protected><Quiz /></Protected>} />
         <Route path="/hidden" element={<Protected><HiddenWords /></Protected>} />
         <Route path="/polish" element={<Protected><Polish /></Protected>} />
