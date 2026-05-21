@@ -134,7 +134,7 @@ function StageCell({ done }) {
 
 // ── S1: Drag & Match ──────────────────────────────────────────────────────────
 // Props: roundVerbs [{id, english, spanish_infinitive}], onComplete(verbIds[])
-function DragMatchRound({ roundVerbs, onComplete }) {
+function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
   const [bank, setBank] = useState(() =>
     shuffle(roundVerbs.map(v => ({ id: v.id, label: v.spanish_infinitive })))
   )
@@ -252,9 +252,21 @@ function DragMatchRound({ roundVerbs, onComplete }) {
 
   return (
     <div style={styles.dmCard}>
+      {/* Round counter */}
+      <div style={{ display: 'flex', gap: '3px' }}>
+        {Array.from({ length: 10 }).map((_, i) => (
+          <div key={i} style={{
+            flex: 1,
+            height: '5px',
+            borderRadius: '3px',
+            backgroundColor: i < roundsInBlock ? '#3b82f6' : '#e5e7eb',
+            transition: 'background-color 0.2s',
+          }} />
+        ))}
+      </div>
+
       {/* Chip bank */}
       <div>
-        <span style={styles.dmBankLabel}>Drag to match</span>
         <div style={styles.dmBank}>
           {bank.map(chip => (
             <div
@@ -689,6 +701,7 @@ export default function VerbQuiz() {
             key={roundVerbs.map(v => v.id).join('-')}
             roundVerbs={roundVerbs}
             onComplete={handleS1RoundComplete}
+            roundsInBlock={s1RoundCountRef.current % 10}
           />
         </main>
       </div>
