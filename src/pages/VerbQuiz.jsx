@@ -415,7 +415,7 @@ export default function VerbQuiz() {
 
     const { data: verbs, error } = await supabase
       .from('verbs')
-      .select('id, english, spanish_infinitive')
+      .select('id, english, spanish_infinitive, english_alt1, english_alt2')
       .eq('category', category.title)
 
     if (error || !verbs?.length) {
