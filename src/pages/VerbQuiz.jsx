@@ -259,7 +259,7 @@ function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
     <div style={styles.dmCard}>
       {/* Round counter */}
       <div style={{ display: 'flex', gap: '3px' }}>
-        {Array.from({ length: 10 }).map((_, i) => (
+        {Array.from({ length: 5 }).map((_, i) => (
           <div key={i} style={{
             flex: 1,
             height: '5px',
@@ -539,7 +539,7 @@ export default function VerbQuiz() {
     }
     await Promise.all(creditedIds.map(saveProgress))
     s1RoundCountRef.current += 1
-    if (s1RoundCountRef.current % 10 === 0) {
+    if (s1RoundCountRef.current % 5 === 0) {
       setPhase('s1summary')
     } else {
       loadQuiz()
@@ -706,7 +706,7 @@ export default function VerbQuiz() {
             key={roundVerbs.map(v => v.id).join('-')}
             roundVerbs={roundVerbs}
             onComplete={handleS1RoundComplete}
-            roundsInBlock={s1RoundCountRef.current % 10}
+            roundsInBlock={s1RoundCountRef.current % 5}
           />
         </main>
       </div>
