@@ -643,11 +643,17 @@ export default function VerbQuiz() {
 
     // L3 multi-input — iterate over correctAll so missing inputs are always 'wrong'
     if (question.multiInput) {
-      // Order-independent best-fit: each input matched to its closest unused expected answer
+      // Order-independent best-fit with duplicate input guard.
+      // A typed input that is near-identical to an earlier input (same 80% threshold)
+      // is rejected before matching — prevents "say / say" claiming two different answers.
       const usedExpected = new Set()
       const perResult = question.correctAll.map((_, i) => {
         const typed = (typedAnswers[i] ?? '').trim()
         if (!typed) return 'wrong'
+        for (let j = 0; j < i; j++) {
+          const earlier = (typedAnswers[j] ?? '').trim()
+          if (earlier && fuzzyMatch(typed, earlier) !== 'wrong') return 'wrong'
+        }
         let best = 'wrong', bestIdx = -1
         question.correctAll.forEach((expected, j) => {
           if (usedExpected.has(j)) return
