@@ -51,21 +51,6 @@ function getAnswerCandidates(englishStr) {
   return englishStr.split(' / ').map(s => s.replace(/\s*\(.*?\)/g, '').trim()).filter(Boolean)
 }
 
-function matchMultiAnswers(typedArr, requiredArr) {
-  const usedRequired = new Set()
-  return typedArr.map(t => {
-    let best = 'wrong'
-    let bestIdx = -1
-    requiredArr.forEach((r, i) => {
-      if (usedRequired.has(i)) return
-      const res = fuzzyMatch(t, r)
-      if (res === 'exact' && best !== 'exact') { best = 'exact'; bestIdx = i }
-      else if (res === 'close' && best === 'wrong') { best = 'close'; bestIdx = i }
-    })
-    if (bestIdx >= 0) usedRequired.add(bestIdx)
-    return best
-  })
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function pickEnglishDistractors(verb, allVerbs) {
@@ -653,9 +638,13 @@ export default function VerbQuiz() {
     const verbId = question.verb.id
     const stage = progressRef.current[verbId]?.stage ?? 3
 
-    // L3 multi-input
+    // L3 multi-input — iterate over correctAll so missing inputs are always 'wrong'
     if (question.multiInput) {
-      const perResult = matchMultiAnswers(typedAnswers.map(t => t ?? ''), question.correctAll)
+      const perResult = question.correctAll.map((required, i) => {
+        const typed = (typedAnswers[i] ?? '').trim()
+        if (!typed) return 'wrong'
+        return fuzzyMatch(typed, required)
+      })
       const correct = perResult.every(r => r !== 'wrong')
       const overallResult = perResult.every(r => r === 'exact') ? 'exact' : correct ? 'close' : 'wrong'
       updateL3Progress(verbId, correct)
