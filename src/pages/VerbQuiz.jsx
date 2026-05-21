@@ -643,10 +643,20 @@ export default function VerbQuiz() {
 
     // L3 multi-input — iterate over correctAll so missing inputs are always 'wrong'
     if (question.multiInput) {
-      const perResult = question.correctAll.map((required, i) => {
+      // Order-independent best-fit: each input matched to its closest unused expected answer
+      const usedExpected = new Set()
+      const perResult = question.correctAll.map((_, i) => {
         const typed = (typedAnswers[i] ?? '').trim()
         if (!typed) return 'wrong'
-        return fuzzyMatch(typed, required)
+        let best = 'wrong', bestIdx = -1
+        question.correctAll.forEach((expected, j) => {
+          if (usedExpected.has(j)) return
+          const res = fuzzyMatch(typed, expected)
+          if (res === 'exact' && best !== 'exact') { best = 'exact'; bestIdx = j }
+          else if (res === 'close' && best === 'wrong') { best = 'close'; bestIdx = j }
+        })
+        if (bestIdx >= 0) usedExpected.add(bestIdx)
+        return best
       })
       const correct = perResult.every(r => r !== 'wrong')
       const overallResult = perResult.every(r => r === 'exact') ? 'exact' : correct ? 'close' : 'wrong'
