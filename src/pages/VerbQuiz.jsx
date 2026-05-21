@@ -47,6 +47,26 @@ function fuzzyMatch(typed, correct) {
   return (1 - levenshtein(a, b) / maxLen) >= 0.8 ? 'close' : 'wrong'
 }
 
+function getAnswerCandidates(englishStr) {
+  return englishStr.split(' / ').map(s => s.replace(/\s*\(.*?\)/g, '').trim()).filter(Boolean)
+}
+
+function matchMultiAnswers(typedArr, requiredArr) {
+  const usedRequired = new Set()
+  return typedArr.map(t => {
+    let best = 'wrong'
+    let bestIdx = -1
+    requiredArr.forEach((r, i) => {
+      if (usedRequired.has(i)) return
+      const res = fuzzyMatch(t, r)
+      if (res === 'exact' && best !== 'exact') { best = 'exact'; bestIdx = i }
+      else if (res === 'close' && best === 'wrong') { best = 'close'; bestIdx = i }
+    })
+    if (bestIdx >= 0) usedRequired.add(bestIdx)
+    return best
+  })
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function pickEnglishDistractors(verb, allVerbs) {
   return shuffle(allVerbs.filter(v => v.id !== verb.id))
@@ -354,12 +374,11 @@ function makeQuestion(verb, allVerbs, progMap) {
   }
   if (stage === 3) {
     // L3: typed ES→EN — Spanish infinitive shown, type English
-    return {
-      type: 'typed',
-      verb,
-      correct: verb.english,
-      placeholder: 'Type the English meaning…',
+    const candidates = getAnswerCandidates(verb.english)
+    if (verb.requires_all_answers && candidates.length > 1) {
+      return { type: 'typed', verb, correctAll: candidates, multiInput: true, placeholder: 'Type the English meaning…' }
     }
+    return { type: 'typed', verb, correct: candidates[0], correctCandidates: candidates, placeholder: 'Type the English meaning…' }
   }
   // L4: typed EN→ES — English shown, type Spanish infinitive
   return {
@@ -380,6 +399,7 @@ export default function VerbQuiz() {
   const category = VERB_CATEGORIES.find(c => c.id === Number(categoryId))
   const progressRef = useRef({})
   const inputRef = useRef(null)
+  const inputRefsArr = useRef([])
   const recentlyUsedRef = useRef([])
   const l1RoundCountRef = useRef(0)
 
@@ -391,8 +411,10 @@ export default function VerbQuiz() {
   const [question, setQuestion] = useState(null)
   const [selectedOption, setSelectedOption] = useState(null)   // L2 MC
   const [isCorrect, setIsCorrect] = useState(null)             // L2 MC feedback
-  const [typedAnswer, setTypedAnswer] = useState('')           // L3/L4 typed
-  const [matchResult, setMatchResult] = useState(null)         // L3/L4 fuzzy result
+  const [typedAnswer, setTypedAnswer] = useState('')           // L3 single / L4
+  const [matchResult, setMatchResult] = useState(null)         // L3/L4 overall fuzzy result
+  const [typedAnswers, setTypedAnswers] = useState([])         // L3 multi
+  const [matchResults, setMatchResults] = useState([])         // L3 multi per-answer
   const [results, setResults] = useState([])
 
   useEffect(() => {
@@ -402,7 +424,11 @@ export default function VerbQuiz() {
   // Auto-focus typed input when a typed question loads
   useEffect(() => {
     if (question?.type === 'typed' && phase === 'question') {
-      inputRef.current?.focus({ preventScroll: true })
+      if (question.multiInput) {
+        inputRefsArr.current[0]?.focus({ preventScroll: true })
+      } else {
+        inputRef.current?.focus({ preventScroll: true })
+      }
     }
   }, [question, phase])
 
@@ -423,7 +449,7 @@ export default function VerbQuiz() {
 
     const { data: verbs, error } = await supabase
       .from('verbs')
-      .select('id, english, spanish_infinitive, english_alt1, english_alt2')
+      .select('id, english, spanish_infinitive, english_alt1, english_alt2, requires_all_answers')
       .eq('category', category.title)
 
     if (error || !verbs?.length) {
@@ -602,15 +628,48 @@ export default function VerbQuiz() {
     setPhase('feedback')
   }
 
-  // ── L3 & L4: typed answer (unchanged) ─────────────────────────────────────
+  // ── L3 & L4: typed answer ──────────────────────────────────────────────────
+  function updateL3Progress(verbId, correct) {
+    const prog = progressRef.current[verbId] ?? {
+      stage: 3, stage2_mastery: 0, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
+    }
+    let newProg
+    if (correct) {
+      const newMastery = (prog.stage3_mastery ?? 0) + 1
+      newProg = newMastery >= 3
+        ? { ...prog, stage: 4, stage3_mastery: 0, consecutive_incorrect: 0 }
+        : { ...prog, stage3_mastery: newMastery, consecutive_incorrect: 0 }
+    } else {
+      const newConsecIncorrect = (prog.consecutive_incorrect ?? 0) + 1
+      newProg = newConsecIncorrect >= 2
+        ? { ...prog, stage3_mastery: 0, consecutive_incorrect: 0 }
+        : { ...prog, consecutive_incorrect: newConsecIncorrect }
+    }
+    progressRef.current[verbId] = newProg
+    saveProgress(verbId)
+  }
+
   function handleTyped() {
-    const result = fuzzyMatch(typedAnswer, question.correct.replace(/\s*\(.*?\)/g, '').trim())
-    const correct = result !== 'wrong'
     const verbId = question.verb.id
     const stage = progressRef.current[verbId]?.stage ?? 3
 
+    // L3 multi-input
+    if (question.multiInput) {
+      const perResult = matchMultiAnswers(typedAnswers.map(t => t ?? ''), question.correctAll)
+      const correct = perResult.every(r => r !== 'wrong')
+      const overallResult = perResult.every(r => r === 'exact') ? 'exact' : correct ? 'close' : 'wrong'
+      updateL3Progress(verbId, correct)
+      setMatchResults(perResult)
+      setMatchResult(overallResult)
+      setResults(r => [...r, { verb: question.verb, correct, matchResult: overallResult }])
+      setPhase('feedback')
+      return
+    }
+
+    // L4: EN→ES — mastery via l4_score (5 consecutive correct)
     if (stage === 4) {
-      // L4: EN→ES — mastery via l4_score (5 consecutive correct)
+      const result = fuzzyMatch(typedAnswer, question.correct.replace(/\s*\(.*?\)/g, '').trim())
+      const correct = result !== 'wrong'
       const prog = progressRef.current[verbId] ?? {
         stage: 4, stage2_mastery: 0, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
       }
@@ -631,28 +690,11 @@ export default function VerbQuiz() {
       return
     }
 
-    // L3: ES→EN — graduate to stage 4 on 3 consecutive correct
-    const prog = progressRef.current[verbId] ?? {
-      stage: 3, stage2_mastery: 0, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
-    }
-    let newProg
-    if (correct) {
-      const newMastery = (prog.stage3_mastery ?? 0) + 1
-      if (newMastery >= 3) {
-        newProg = { ...prog, stage: 4, stage3_mastery: 0, consecutive_incorrect: 0 }
-      } else {
-        newProg = { ...prog, stage3_mastery: newMastery, consecutive_incorrect: 0 }
-      }
-    } else {
-      const newConsecIncorrect = (prog.consecutive_incorrect ?? 0) + 1
-      if (newConsecIncorrect >= 2) {
-        newProg = { ...prog, stage3_mastery: 0, consecutive_incorrect: 0 }
-      } else {
-        newProg = { ...prog, consecutive_incorrect: newConsecIncorrect }
-      }
-    }
-    progressRef.current[verbId] = newProg
-    saveProgress(verbId)
+    // L3 single-input — match against all slash-separated candidates
+    const candidateResults = question.correctCandidates.map(c => fuzzyMatch(typedAnswer, c))
+    const result = candidateResults.includes('exact') ? 'exact' : candidateResults.includes('close') ? 'close' : 'wrong'
+    const correct = result !== 'wrong'
+    updateL3Progress(verbId, correct)
     setMatchResult(result)
     setResults(r => [...r, { verb: question.verb, correct, matchResult: result }])
     setPhase('feedback')
@@ -669,7 +711,9 @@ export default function VerbQuiz() {
     setSelectedOption(null)
     setIsCorrect(null)
     setTypedAnswer('')
+    setTypedAnswers([])
     setMatchResult(null)
+    setMatchResults([])
     setPhase('question')
   }
 
@@ -919,7 +963,7 @@ export default function VerbQuiz() {
             </div>
           )}
 
-          {question.type === 'typed' && (
+          {question.type === 'typed' && !question.multiInput && (
             <div style={styles.typedArea}>
               <input
                 ref={inputRef}
@@ -947,6 +991,54 @@ export default function VerbQuiz() {
             </div>
           )}
 
+          {question.type === 'typed' && question.multiInput && (
+            <div style={styles.typedArea}>
+              {question.correctAll.map((_, i) => (
+                <input
+                  key={i}
+                  ref={el => { inputRefsArr.current[i] = el }}
+                  style={{
+                    ...styles.typedInput,
+                    ...(phase === 'feedback' && matchResults[i] ? {
+                      borderColor: matchResults[i] === 'wrong' ? '#dc2626' : matchResults[i] === 'close' ? '#d97706' : '#16a34a',
+                      borderWidth: 2,
+                    } : {}),
+                  }}
+                  type="text"
+                  value={typedAnswers[i] ?? ''}
+                  onChange={e => {
+                    const v = e.target.value
+                    setTypedAnswers(prev => { const a = [...prev]; a[i] = v; return a })
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && phase === 'question') {
+                      if (i < question.correctAll.length - 1) {
+                        inputRefsArr.current[i + 1]?.focus()
+                      } else {
+                        handleTyped()
+                      }
+                    }
+                  }}
+                  disabled={phase === 'feedback'}
+                  placeholder={`Meaning ${i + 1}…`}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck="false"
+                  data-form-type="other"
+                />
+              ))}
+              {phase === 'question' && (
+                <button
+                  style={{ ...styles.typedBtn, backgroundColor: typedAnswers.some(t => t?.trim()) ? '#16a34a' : '#f59e0b', color: '#fff' }}
+                  onClick={handleTyped}
+                >
+                  {typedAnswers.some(t => t?.trim()) ? 'Check' : 'Pass'}
+                </button>
+              )}
+            </div>
+          )}
+
           {phase === 'feedback' && (
             <div style={{
               ...styles.feedbackBanner,
@@ -962,16 +1054,19 @@ export default function VerbQuiz() {
                     : (isCorrect ? '#16a34a' : '#dc2626'),
                 }}>
                   {(() => {
-                    const displayAnswer = question.correct.replace(/\s*\(.*?\)\s*/g, '').trim()
                     if (question.type === 'typed') {
+                      const displayAnswer = question.multiInput
+                        ? question.correctAll.join(' / ')
+                        : question.correct.replace(/\s*\(.*?\)\s*/g, '').trim()
                       if (matchResult === 'exact') return 'Correct!'
                       if (matchResult === 'close') return `Close — ${displayAnswer}`
                       return `Incorrect — ${displayAnswer}`
                     }
+                    const displayAnswer = question.correct.replace(/\s*\(.*?\)\s*/g, '').trim()
                     return isCorrect ? 'Correct!' : `Incorrect — ${displayAnswer}`
                   })()}
                 </span>
-                {question.type === 'typed' && !question.prompt && question.verb.english_alt1 && (
+                {question.type === 'typed' && !question.prompt && !question.multiInput && question.verb.english_alt1 && (
                   <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
                     {'* also means: "'}
                     {question.verb.english_alt1}
