@@ -946,22 +946,32 @@ export default function VerbQuiz() {
                 ? (matchResult === 'exact' ? '#dcfce7' : matchResult === 'close' ? '#fef3c7' : '#fee2e2')
                 : (isCorrect ? '#dcfce7' : '#fee2e2'),
             }}>
-              <span style={{
-                fontWeight: 600,
-                color: question.type === 'typed'
-                  ? (matchResult === 'exact' ? '#16a34a' : matchResult === 'close' ? '#d97706' : '#dc2626')
-                  : (isCorrect ? '#16a34a' : '#dc2626'),
-              }}>
-                {(() => {
-                  const displayAnswer = question.correct.replace(/\s*\(.*?\)\s*/g, '').trim()
-                  if (question.type === 'typed') {
-                    if (matchResult === 'exact') return 'Correct!'
-                    if (matchResult === 'close') return `Close — ${displayAnswer}`
-                    return `Incorrect — ${displayAnswer}`
-                  }
-                  return isCorrect ? 'Correct!' : `Incorrect — ${displayAnswer}`
-                })()}
-              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                <span style={{
+                  fontWeight: 600,
+                  color: question.type === 'typed'
+                    ? (matchResult === 'exact' ? '#16a34a' : matchResult === 'close' ? '#d97706' : '#dc2626')
+                    : (isCorrect ? '#16a34a' : '#dc2626'),
+                }}>
+                  {(() => {
+                    const displayAnswer = question.correct.replace(/\s*\(.*?\)\s*/g, '').trim()
+                    if (question.type === 'typed') {
+                      if (matchResult === 'exact') return 'Correct!'
+                      if (matchResult === 'close') return `Close — ${displayAnswer}`
+                      return `Incorrect — ${displayAnswer}`
+                    }
+                    return isCorrect ? 'Correct!' : `Incorrect — ${displayAnswer}`
+                  })()}
+                </span>
+                {question.type === 'typed' && !question.prompt && question.verb.english_alt1 && (
+                  <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
+                    {'* also means: "'}
+                    {question.verb.english_alt1}
+                    {question.verb.english_alt2 ? ` / ${question.verb.english_alt2}` : ''}
+                    {'"'}
+                  </span>
+                )}
+              </div>
               <button style={styles.nextBtn} onClick={handleNext}>
                 {currentIdx + 1 >= session.length ? 'Finish' : 'Next →'}
               </button>
