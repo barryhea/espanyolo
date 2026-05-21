@@ -119,24 +119,35 @@ function EyeIcon() {
   )
 }
 
-function MasteryBar({ stage, stage2_mastery, stage3_mastery, l4_score }) {
-  const effectiveStage = Math.max(stage ?? 1, 2)
-  let count, filled
-  if (effectiveStage === 2) { count = 3; filled = stage2_mastery ?? 0 }
-  else if (effectiveStage === 3) { count = 3; filled = stage3_mastery ?? 0 }
-  else { count = 5; filled = l4_score ?? 0 }
+function MasteryBar({ stage, stage2_mastery, stage3_mastery, l4_score, mastered }) {
+  const BRONZE = '#cd7f32', SILVER = '#a8a9ad', GOLD = '#f5c518', GREEN = '#16a34a'
+  const s1Filled = (mastered || (stage ?? 1) >= 2) ? 1 : 0
+  const s2Filled = mastered ? 3 : (stage ?? 1) >= 3 ? 3 : (stage ?? 1) === 2 ? Math.min(stage2_mastery ?? 0, 3) : 0
+  const s3Filled = mastered ? 3 : (stage ?? 1) >= 4 ? 3 : (stage ?? 1) === 3 ? Math.min(stage3_mastery ?? 0, 3) : 0
+  const s4Filled = mastered ? 5 : (stage ?? 1) === 4 ? Math.min(l4_score ?? 0, 5) : 0
+  const segs = [
+    { filled: s1Filled > 0, color: GREEN },
+    ...Array(3).fill(null).map((_, i) => ({ filled: i < s2Filled, color: BRONZE })),
+    ...Array(3).fill(null).map((_, i) => ({ filled: i < s3Filled, color: SILVER })),
+    ...Array(5).fill(null).map((_, i) => ({ filled: i < s4Filled, color: GOLD })),
+  ]
   return (
-    <div style={{ display: 'flex', gap: '3px' }}>
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} style={{
-          flex: 1,
-          height: '8px',
-          borderRadius: '3px',
-          backgroundColor: i < filled ? '#3b82f6' : '#fff',
-          border: `1.5px solid ${i < filled ? '#3b82f6' : '#d1d5db'}`,
-          boxSizing: 'border-box',
-        }} />
-      ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+      <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        Verb Mastery
+      </span>
+      <div style={{ display: 'flex', gap: '3px' }}>
+        {segs.map((seg, i) => (
+          <div key={i} style={{
+            flex: 1,
+            height: '8px',
+            borderRadius: '3px',
+            backgroundColor: seg.filled ? seg.color : '#fff',
+            border: `1.5px solid ${seg.filled ? seg.color : '#d1d5db'}`,
+            boxSizing: 'border-box',
+          }} />
+        ))}
+      </div>
     </div>
   )
 }
@@ -1024,6 +1035,7 @@ export default function VerbQuiz() {
             stage2_mastery={currentProg?.stage2_mastery ?? 0}
             stage3_mastery={currentProg?.stage3_mastery ?? 0}
             l4_score={currentProg?.l4_score ?? 0}
+            mastered={currentProg?.mastered ?? false}
           />
 
           {question.type === 'mc' && (
