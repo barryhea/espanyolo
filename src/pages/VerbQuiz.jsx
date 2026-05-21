@@ -100,6 +100,25 @@ function ProgressRing({ pct }) {
   )
 }
 
+function EyeSlashIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  )
+}
+
+function EyeIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
 function MasteryBar({ stage, stage2_mastery, stage3_mastery, l4_score }) {
   const effectiveStage = Math.max(stage ?? 1, 2)
   let count, filled
@@ -396,6 +415,7 @@ export default function VerbQuiz() {
   const [matchResult, setMatchResult] = useState(null)         // L3/L4 overall fuzzy result
   const [typedAnswers, setTypedAnswers] = useState([])         // L3 multi
   const [matchResults, setMatchResults] = useState([])         // L3 multi per-answer
+  const [hiddenVerbs, setHiddenVerbs] = useState(new Set())
   const [results, setResults] = useState([])
 
   useEffect(() => {
@@ -448,11 +468,12 @@ export default function VerbQuiz() {
     const verbIds = verbs.map(v => v.id)
     const { data: progress } = await supabase
       .from('user_verb_progress')
-      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score')
+      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, hidden')
       .eq('user_id', user.id)
       .in('verb_id', verbIds)
 
     const progMap = {}
+    const hiddenVerbIds = new Set()
     for (const p of progress ?? []) {
       const l4 = p.l4_score ?? 0
       progMap[p.verb_id] = {
@@ -461,12 +482,15 @@ export default function VerbQuiz() {
         stage3_mastery: p.stage3_mastery ?? 0,
         l4_score: l4,
         drag_match_score: p.drag_match_score ?? 0,
+        hidden: p.hidden ?? false,
         mastered: l4 >= 5,
         db_id: p.id,
         consecutive_incorrect: 0,
       }
+      if (p.hidden) hiddenVerbIds.add(p.verb_id)
     }
     progressRef.current = progMap
+    setHiddenVerbs(hiddenVerbIds)
 
     // ── L1: if any verbs still at stage 1, run a drag-match round ────────────
     const l1All = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 1)
@@ -530,13 +554,14 @@ export default function VerbQuiz() {
   async function saveProgress(verbId) {
     const prog = progressRef.current[verbId]
     if (!prog) return
-    const { stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, db_id } = prog
+    const { stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, hidden, db_id } = prog
     const payload = {
       current_stage: stage,
       stage2_mastery: stage2_mastery ?? 0,
       stage3_mastery: stage3_mastery ?? 0,
       l4_score: l4_score ?? 0,
       drag_match_score: drag_match_score ?? 0,
+      hidden: hidden ?? false,
     }
     if (db_id) {
       await supabase.from('user_verb_progress')
@@ -550,6 +575,30 @@ export default function VerbQuiz() {
         )
         .select('id').single()
       if (data) progressRef.current[verbId] = { ...prog, db_id: data.id }
+    }
+  }
+
+  async function toggleHidden(verbId) {
+    const willBeHidden = !hiddenVerbs.has(verbId)
+    setHiddenVerbs(prev => {
+      const next = new Set(prev)
+      willBeHidden ? next.add(verbId) : next.delete(verbId)
+      return next
+    })
+    const prog = progressRef.current[verbId] ?? {
+      stage: 1, stage2_mastery: 0, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, hidden: false, mastered: false, db_id: null, consecutive_incorrect: 0,
+    }
+    progressRef.current[verbId] = { ...prog, hidden: willBeHidden }
+    if (prog.db_id) {
+      await supabase.from('user_verb_progress').update({ hidden: willBeHidden }).eq('id', prog.db_id)
+    } else {
+      const { data } = await supabase.from('user_verb_progress')
+        .upsert(
+          { user_id: user.id, verb_id: verbId, hidden: willBeHidden, current_stage: prog.stage ?? 1, stage2_mastery: prog.stage2_mastery ?? 0, stage3_mastery: prog.stage3_mastery ?? 0, l4_score: prog.l4_score ?? 0, drag_match_score: prog.drag_match_score ?? 0 },
+          { onConflict: 'user_id,verb_id' }
+        )
+        .select('id').single()
+      if (data) progressRef.current[verbId] = { ...progressRef.current[verbId], db_id: data.id }
     }
   }
 
@@ -868,7 +917,7 @@ export default function VerbQuiz() {
             <div style={styles.cardLeft}>
               <span style={styles.themeTitle}>{category.title}</span>
               <span style={styles.themeSubtitle}>
-                {allVerbs.length} verbs · {masteredCount} mastered
+                {allVerbs.length} verbs · {masteredCount} mastered · {hiddenVerbs.size} hidden · {allVerbs.length - masteredCount - hiddenVerbs.size} remaining
               </span>
             </div>
             <div style={styles.cardDivider} />
@@ -883,10 +932,11 @@ export default function VerbQuiz() {
                 <tr>
                   <th style={{ ...styles.thLeft, textAlign: 'center', position: 'sticky', top: 0 }}>Spanish</th>
                   <th style={{ ...styles.thLeft, textAlign: 'center', position: 'sticky', top: 0 }}>English</th>
-                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>L1</th>
-                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>L2</th>
-                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>L3</th>
-                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>L4</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>✓</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>🥉</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>🥈</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>🥇</th>
+                  <th style={{ ...styles.thRight, position: 'sticky', top: 0 }} />
                 </tr>
               </thead>
               <tbody>
@@ -901,6 +951,7 @@ export default function VerbQuiz() {
                   const l4done = isMastered || (stage === 4 && l4Score >= 5)
                   const verbResult = resultByVerbId[verb.id]
                   const textColor = verbResult === 'exact' ? '#16a34a' : verbResult === 'close' ? '#d97706' : verbResult === 'wrong' ? '#dc2626' : '#333'
+                  const isHidden = hiddenVerbs.has(verb.id)
                   return (
                     <tr key={verb.id} style={styles.tableRow}>
                       <td style={{ ...styles.tdEn, color: textColor }}>{verb.spanish_infinitive}</td>
@@ -909,6 +960,14 @@ export default function VerbQuiz() {
                       <StageCell done={l2done} />
                       <StageCell done={l3done} />
                       <StageCell done={l4done} />
+                      <td style={styles.tdHide}>
+                        <button
+                          style={{ ...styles.hideBtn, color: isHidden ? '#3b82f6' : '#bbb' }}
+                          onClick={() => toggleHidden(verb.id)}
+                        >
+                          {isHidden ? <EyeSlashIcon /> : <EyeIcon />}
+                        </button>
+                      </td>
                     </tr>
                   )
                 })}
@@ -920,6 +979,14 @@ export default function VerbQuiz() {
             <button style={{ ...styles.primaryBtn, width: '100%', textAlign: 'center' }} onClick={loadQuiz}>
               Play again
             </button>
+            <div style={styles.summaryBtnRow}>
+              <button style={styles.secondaryBtn} onClick={() => navigate('/verbs')}>
+                Progress
+              </button>
+              <button style={styles.secondaryBtn} onClick={() => navigate('/verbs?filter=hidden')}>
+                Hidden Verbs
+              </button>
+            </div>
             <button style={styles.backToThemesBtn} onClick={() => navigate('/verbs')}>
               ← Back to Verb Trainer
             </button>
@@ -1320,6 +1387,42 @@ const styles = {
     flexDirection: 'column',
     gap: '0.75rem',
     paddingTop: '0.25rem',
+  },
+  summaryBtnRow: {
+    display: 'flex',
+    gap: '0.5rem',
+  },
+  secondaryBtn: {
+    flex: 1,
+    padding: '0.75rem 0.5rem',
+    fontSize: '0.9rem',
+    fontWeight: 600,
+    backgroundColor: '#f5f5f5',
+    color: '#333',
+    border: '1px solid #e5e5e5',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    textAlign: 'center',
+  },
+  tdHide: {
+    width: '36px',
+    textAlign: 'center',
+    padding: '0',
+  },
+  hideBtn: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '4px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thRight: {
+    padding: '0.5rem 0.25rem',
+    backgroundColor: '#fafafa',
+    borderBottom: '1px solid #f0f0f0',
+    width: '36px',
   },
   backToThemesBtn: {
     padding: '0.75rem 1.25rem',
