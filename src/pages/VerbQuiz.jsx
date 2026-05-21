@@ -526,6 +526,7 @@ export default function VerbQuiz() {
   // ── L1: round complete — increment drag_match_score per credited verb ────────
   async function handleL1RoundComplete(creditedIds, wrongIds) {
     recentlyUsedRef.current = wrongIds ?? []
+    console.log(`[L1] round complete — ${creditedIds.length} credited, ${(wrongIds ?? []).length} wrong`)
     for (const verbId of creditedIds) {
       const prog = progressRef.current[verbId] ?? {
         stage: 1, consecutive_correct: 0, drag_match_score: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
@@ -538,6 +539,8 @@ export default function VerbQuiz() {
         stage: graduated ? 2 : 1,
         consecutive_correct: graduated ? 0 : prog.consecutive_correct,
       }
+      const verbName = allVerbs.find(v => v.id === verbId)?.spanish_infinitive ?? String(verbId)
+      console.log(`[L1] ${verbName}: match count ${newScore}/5${graduated ? ' → graduated to L2' : ''}`)
     }
     await Promise.all(creditedIds.map(saveProgress))
     l1RoundCountRef.current += 1
