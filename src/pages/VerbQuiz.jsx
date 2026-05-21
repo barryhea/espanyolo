@@ -100,29 +100,24 @@ function ProgressRing({ pct }) {
   )
 }
 
-function MasteryBar({ stage, mastered }) {
-  const l1done = stage >= 2 || mastered
-  const l2done = stage >= 3 || mastered
-  const l3done = stage >= 4 || mastered
-  const l4done = mastered
+function MasteryBar({ stage, stage2_mastery, stage3_mastery, l4_score }) {
+  const effectiveStage = Math.max(stage ?? 1, 2)
+  let count, filled
+  if (effectiveStage === 2) { count = 3; filled = stage2_mastery ?? 0 }
+  else if (effectiveStage === 3) { count = 3; filled = stage3_mastery ?? 0 }
+  else { count = 5; filled = l4_score ?? 0 }
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-      <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
-        Mastery
-      </span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: '26px', height: '18px', borderRadius: '5px',
-          backgroundColor: l1done ? '#16a34a' : '#e5e7eb',
-          transition: 'background-color 0.2s',
-        }}>
-          <span style={{ fontSize: '0.7rem', color: l1done ? '#fff' : '#9ca3af', fontWeight: 700, lineHeight: 1 }}>✓</span>
-        </div>
-        <span style={{ fontSize: '1.15rem', opacity: l2done ? 1 : 0.2, transition: 'opacity 0.2s', lineHeight: 1 }}>🥉</span>
-        <span style={{ fontSize: '1.15rem', opacity: l3done ? 1 : 0.2, transition: 'opacity 0.2s', lineHeight: 1 }}>🥈</span>
-        <span style={{ fontSize: '1.15rem', opacity: l4done ? 1 : 0.2, transition: 'opacity 0.2s', lineHeight: 1 }}>🥇</span>
-      </div>
+    <div style={{ display: 'flex', gap: '3px' }}>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} style={{
+          flex: 1,
+          height: '8px',
+          borderRadius: '3px',
+          backgroundColor: i < filled ? '#3b82f6' : '#fff',
+          border: `1.5px solid ${i < filled ? '#3b82f6' : '#d1d5db'}`,
+          boxSizing: 'border-box',
+        }} />
+      ))}
     </div>
   )
 }
@@ -943,7 +938,9 @@ export default function VerbQuiz() {
 
           <MasteryBar
             stage={currentProg?.stage ?? 1}
-            mastered={currentProg?.mastered ?? false}
+            stage2_mastery={currentProg?.stage2_mastery ?? 0}
+            stage3_mastery={currentProg?.stage3_mastery ?? 0}
+            l4_score={currentProg?.l4_score ?? 0}
           />
 
           {question.type === 'mc' && (
