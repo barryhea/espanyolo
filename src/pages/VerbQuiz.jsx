@@ -596,7 +596,7 @@ export default function VerbQuiz() {
 
   // ── L3 & L4: typed answer (unchanged) ─────────────────────────────────────
   function handleTyped() {
-    const result = fuzzyMatch(typedAnswer, question.correct)
+    const result = fuzzyMatch(typedAnswer, question.correct.replace(/\s*\(.*?\)/g, '').trim())
     const correct = result !== 'wrong'
     const verbId = question.verb.id
     const stage = progressRef.current[verbId]?.stage ?? 3
