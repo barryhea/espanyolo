@@ -952,9 +952,15 @@ export default function VerbQuiz() {
                   ? (matchResult === 'exact' ? '#16a34a' : matchResult === 'close' ? '#d97706' : '#dc2626')
                   : (isCorrect ? '#16a34a' : '#dc2626'),
               }}>
-                {question.type === 'typed'
-                  ? (matchResult === 'exact' ? 'Correct!' : matchResult === 'close' ? `Close — ${question.correct}` : `Incorrect — ${question.correct}`)
-                  : (isCorrect ? 'Correct!' : `Incorrect — ${question.correct}`)}
+                {(() => {
+                  const displayAnswer = question.correct.replace(/\s*\(.*?\)\s*/g, '').trim()
+                  if (question.type === 'typed') {
+                    if (matchResult === 'exact') return 'Correct!'
+                    if (matchResult === 'close') return `Close — ${displayAnswer}`
+                    return `Incorrect — ${displayAnswer}`
+                  }
+                  return isCorrect ? 'Correct!' : `Incorrect — ${displayAnswer}`
+                })()}
               </span>
               <button style={styles.nextBtn} onClick={handleNext}>
                 {currentIdx + 1 >= session.length ? 'Finish' : 'Next →'}
