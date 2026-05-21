@@ -364,6 +364,7 @@ export default function VerbQuiz() {
   const progressRef = useRef({})
   const inputRef = useRef(null)
   const recentlyUsedRef = useRef([])
+  const s1RoundCountRef = useRef(0)
 
   const [phase, setPhase] = useState('loading')
   const [allVerbs, setAllVerbs] = useState([])
@@ -520,7 +521,12 @@ export default function VerbQuiz() {
       }
     }
     await Promise.all(creditedIds.map(saveProgress))
-    loadQuiz()
+    s1RoundCountRef.current += 1
+    if (s1RoundCountRef.current % 10 === 0) {
+      setPhase('s1summary')
+    } else {
+      loadQuiz()
+    }
   }
 
   // ── S2: multiple choice answer (unchanged) ────────────────────────────────
@@ -684,6 +690,61 @@ export default function VerbQuiz() {
             roundVerbs={roundVerbs}
             onComplete={handleS1RoundComplete}
           />
+        </main>
+      </div>
+    )
+  }
+
+  // ── S1 mid-session summary (every 10 rounds) ─────────────────────────────
+  if (phase === 's1summary') {
+    const sorted = [...allVerbs].sort((a, b) => {
+      const cntA = (progressRef.current[a.id]?.stage ?? 1) >= 2 ? 5 : (progressRef.current[a.id]?.consecutive_correct ?? 0)
+      const cntB = (progressRef.current[b.id]?.stage ?? 1) >= 2 ? 5 : (progressRef.current[b.id]?.consecutive_correct ?? 0)
+      return cntB - cntA
+    })
+    return (
+      <div style={styles.s1Page}>
+        <NavBar />
+        <main style={styles.s1Main}>
+          <div style={styles.s1SummaryCard}>
+            <div style={styles.s1SummaryHeader}>
+              <span style={styles.s1SummaryTitle}>Stage 1 Progress</span>
+              <span style={styles.s1SummarySubtitle}>{category.title}</span>
+            </div>
+            {sorted.map(verb => {
+              const prog = progressRef.current[verb.id]
+              const matchCount = (prog?.stage ?? 1) >= 2 ? 5 : (prog?.consecutive_correct ?? 0)
+              return (
+                <div key={verb.id} style={styles.s1SummaryRow}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={styles.s1SummarySpanish}>{verb.spanish_infinitive}</div>
+                    <div style={styles.s1SummaryEnglish}>{verb.english}</div>
+                  </div>
+                  <div style={styles.s1MatchDots}>
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} style={{
+                        width: '11px',
+                        height: '11px',
+                        borderRadius: '50%',
+                        backgroundColor: i < matchCount ? '#16a34a' : 'transparent',
+                        border: `2px solid ${i < matchCount ? '#16a34a' : '#d1d5db'}`,
+                        flexShrink: 0,
+                        boxSizing: 'border-box',
+                      }} />
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div style={styles.summaryActions}>
+            <button style={{ ...styles.primaryBtn, width: '100%', textAlign: 'center' }} onClick={loadQuiz}>
+              Continue
+            </button>
+            <button style={styles.backToThemesBtn} onClick={() => navigate('/verbs')}>
+              ← Back to verbs
+            </button>
+          </div>
         </main>
       </div>
     )
@@ -1313,6 +1374,58 @@ const styles = {
     fontSize: '1rem',
     textShadow: '0 1px 3px rgba(0,0,0,0.35)',
   },
+  // ── S1 mid-session summary styles ─────────────────────────────────────────
+  s1SummaryCard: {
+    backgroundColor: '#fff',
+    border: '1px solid #e5e5e5',
+    borderRadius: '12px',
+    overflow: 'hidden',
+  },
+  s1SummaryHeader: {
+    padding: '1rem 1.25rem 0.75rem',
+    borderBottom: '1px solid #f0f0f0',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  s1SummaryTitle: {
+    fontSize: '0.9rem',
+    fontWeight: 700,
+    color: '#111',
+  },
+  s1SummarySubtitle: {
+    fontSize: '0.75rem',
+    color: '#888',
+  },
+  s1SummaryRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.75rem',
+    padding: '0.6rem 1.25rem',
+    borderBottom: '1px solid #f5f5f5',
+  },
+  s1SummarySpanish: {
+    fontSize: '0.9rem',
+    fontWeight: 600,
+    color: '#111',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  s1SummaryEnglish: {
+    fontSize: '0.78rem',
+    color: '#666',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  s1MatchDots: {
+    display: 'flex',
+    gap: '4px',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+
   dmChipGhost: {
     position: 'fixed',
     padding: '0.4rem 0.875rem',
