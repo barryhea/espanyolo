@@ -386,6 +386,7 @@ export default function VerbQuiz() {
   const inputRef = useRef(null)
   const inputRefsArr = useRef([])
   const recentlyUsedRef = useRef([])
+  const feedbackTimerRef = useRef(null)
   const l1RoundCountRef = useRef(0)
 
   const [phase, setPhase] = useState('loading')
@@ -424,6 +425,13 @@ export default function VerbQuiz() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [phase, currentIdx])
+
+  // Auto-advance after 3 s on wrong typed answers (L3/L4)
+  useEffect(() => {
+    if (phase !== 'feedback' || question?.type !== 'typed' || matchResult !== 'wrong') return
+    feedbackTimerRef.current = setTimeout(handleNext, 3000)
+    return () => clearTimeout(feedbackTimerRef.current)
+  }, [phase, matchResult])
 
   async function loadQuiz() {
     setPhase('loading')
@@ -690,6 +698,8 @@ export default function VerbQuiz() {
   }
 
   function handleNext() {
+    clearTimeout(feedbackTimerRef.current)
+    feedbackTimerRef.current = null
     const nextIdx = currentIdx + 1
     if (nextIdx >= session.length) {
       setPhase('summary')
@@ -917,7 +927,13 @@ export default function VerbQuiz() {
       <main style={styles.main}>
         <div style={styles.progressRow}>
           <div style={styles.progressBar}>
-            <div style={{ ...styles.progressFill, width: `${(currentIdx / session.length) * 100}%` }} />
+            <div style={{ display: 'flex', height: '100%' }}>
+              {session.map((_, i) => {
+                const r = results[i]
+                const bg = r ? (r.correct ? '#16a34a' : '#dc2626') : '#e5e5e5'
+                return <div key={i} style={{ flex: 1, backgroundColor: bg }} />
+              })}
+            </div>
           </div>
           <span style={styles.progressLabel}>{currentIdx + 1} / {session.length}</span>
         </div>
@@ -1044,10 +1060,12 @@ export default function VerbQuiz() {
                 }}>
                   {(() => {
                     if (question.type === 'typed') {
-                      const displayAnswer = question.multiInput
-                        ? question.correctAll.join(' / ')
-                        : question.correct.replace(/\s*\(.*?\)\s*/g, '').trim()
                       if (matchResult === 'exact') return 'Correct!'
+                      if (question.multiInput) {
+                        const label = `Correct answers: ${question.correctAll.join(' / ')}`
+                        return matchResult === 'close' ? `Close — ${label}` : label
+                      }
+                      const displayAnswer = question.correct.replace(/\s*\(.*?\)\s*/g, '').trim()
                       if (matchResult === 'close') return `Close — ${displayAnswer}`
                       return `Incorrect — ${displayAnswer}`
                     }
