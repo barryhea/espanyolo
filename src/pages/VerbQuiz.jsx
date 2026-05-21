@@ -426,18 +426,20 @@ export default function VerbQuiz() {
     const verbIds = verbs.map(v => v.id)
     const { data: progress } = await supabase
       .from('user_verb_progress')
-      .select('id, verb_id, stage, consecutive_correct, mastered, l4_score, drag_match_score')
+      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score')
       .eq('user_id', user.id)
       .in('verb_id', verbIds)
 
     const progMap = {}
     for (const p of progress ?? []) {
+      const l4 = p.l4_score ?? 0
       progMap[p.verb_id] = {
-        stage: p.stage ?? 1,
-        consecutive_correct: p.consecutive_correct ?? 0,
-        mastered: p.mastered ?? false,
-        l4_score: p.l4_score ?? 0,
+        stage: p.current_stage ?? 1,
+        stage2_mastery: p.stage2_mastery ?? 0,
+        stage3_mastery: p.stage3_mastery ?? 0,
+        l4_score: l4,
         drag_match_score: p.drag_match_score ?? 0,
+        mastered: l4 >= 5,
         db_id: p.id,
         consecutive_incorrect: 0,
       }
@@ -506,8 +508,14 @@ export default function VerbQuiz() {
   async function saveProgress(verbId) {
     const prog = progressRef.current[verbId]
     if (!prog) return
-    const { stage, consecutive_correct, mastered, l4_score, drag_match_score, db_id } = prog
-    const payload = { stage, consecutive_correct, mastered, l4_score: l4_score ?? 0, drag_match_score: drag_match_score ?? 0 }
+    const { stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, db_id } = prog
+    const payload = {
+      current_stage: stage,
+      stage2_mastery: stage2_mastery ?? 0,
+      stage3_mastery: stage3_mastery ?? 0,
+      l4_score: l4_score ?? 0,
+      drag_match_score: drag_match_score ?? 0,
+    }
     if (db_id) {
       await supabase.from('user_verb_progress')
         .update(payload)
@@ -529,7 +537,7 @@ export default function VerbQuiz() {
     console.log(`[L1] round complete — ${creditedIds.length} credited, ${(wrongIds ?? []).length} wrong`)
     for (const verbId of creditedIds) {
       const prog = progressRef.current[verbId] ?? {
-        stage: 1, consecutive_correct: 0, drag_match_score: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
+        stage: 1, stage2_mastery: 0, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
       }
       const newScore = (prog.drag_match_score ?? 0) + 1
       const graduated = newScore >= 5
@@ -537,7 +545,7 @@ export default function VerbQuiz() {
         ...prog,
         drag_match_score: newScore,
         stage: graduated ? 2 : 1,
-        consecutive_correct: graduated ? 0 : prog.consecutive_correct,
+        stage2_mastery: graduated ? 0 : prog.stage2_mastery,
       }
       const verbName = allVerbs.find(v => v.id === verbId)?.spanish_infinitive ?? String(verbId)
       console.log(`[L1] ${verbName}: match count ${newScore}/5${graduated ? ' → graduated to L2' : ''}`)
@@ -556,25 +564,25 @@ export default function VerbQuiz() {
     const correct = option === question.correct
     const verbId = question.verb.id
     const prog = progressRef.current[verbId] ?? {
-      stage: 1, consecutive_correct: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
+      stage: 1, stage2_mastery: 0, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
     }
 
     const effectiveStage = Math.max(prog.stage, 2)
     let newProg
 
     if (correct) {
-      const newConsec = prog.consecutive_correct + 1
-      if (newConsec >= 3 && effectiveStage === 2) {
-        newProg = { ...prog, stage: 3, consecutive_correct: 0, consecutive_incorrect: 0 }
+      const newMastery = (prog.stage2_mastery ?? 0) + 1
+      if (newMastery >= 3 && effectiveStage === 2) {
+        newProg = { ...prog, stage: 3, stage2_mastery: 0, consecutive_incorrect: 0 }
       } else {
-        newProg = { ...prog, stage: effectiveStage, consecutive_correct: newConsec, consecutive_incorrect: 0 }
+        newProg = { ...prog, stage: effectiveStage, stage2_mastery: newMastery, consecutive_incorrect: 0 }
       }
     } else {
       const newConsecIncorrect = (prog.consecutive_incorrect ?? 0) + 1
       if (newConsecIncorrect >= 2) {
-        newProg = { ...prog, stage: 1, consecutive_correct: 0, consecutive_incorrect: 0 }
+        newProg = { ...prog, stage: 1, stage2_mastery: 0, consecutive_incorrect: 0 }
       } else {
-        newProg = { ...prog, stage: effectiveStage, consecutive_correct: 0, consecutive_incorrect: newConsecIncorrect }
+        newProg = { ...prog, stage: effectiveStage, stage2_mastery: 0, consecutive_incorrect: newConsecIncorrect }
       }
     }
 
@@ -596,7 +604,7 @@ export default function VerbQuiz() {
     if (stage === 4) {
       // L4: EN→ES — mastery via l4_score (5 consecutive correct)
       const prog = progressRef.current[verbId] ?? {
-        stage: 4, consecutive_correct: 0, l4_score: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
+        stage: 4, stage2_mastery: 0, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
       }
       let newProg
       if (correct) {
@@ -617,20 +625,20 @@ export default function VerbQuiz() {
 
     // L3: ES→EN — graduate to stage 4 on 3 consecutive correct
     const prog = progressRef.current[verbId] ?? {
-      stage: 3, consecutive_correct: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
+      stage: 3, stage2_mastery: 0, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
     }
     let newProg
     if (correct) {
-      const newConsec = prog.consecutive_correct + 1
-      if (newConsec >= 3) {
-        newProg = { ...prog, stage: 4, consecutive_correct: 0, consecutive_incorrect: 0 }
+      const newMastery = (prog.stage3_mastery ?? 0) + 1
+      if (newMastery >= 3) {
+        newProg = { ...prog, stage: 4, stage3_mastery: 0, consecutive_incorrect: 0 }
       } else {
-        newProg = { ...prog, consecutive_correct: newConsec, consecutive_incorrect: 0 }
+        newProg = { ...prog, stage3_mastery: newMastery, consecutive_incorrect: 0 }
       }
     } else {
       const newConsecIncorrect = (prog.consecutive_incorrect ?? 0) + 1
       if (newConsecIncorrect >= 2) {
-        newProg = { ...prog, consecutive_correct: 0, consecutive_incorrect: 0 }
+        newProg = { ...prog, stage3_mastery: 0, consecutive_incorrect: 0 }
       } else {
         newProg = { ...prog, consecutive_incorrect: newConsecIncorrect }
       }
