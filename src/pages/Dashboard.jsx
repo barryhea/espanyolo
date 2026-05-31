@@ -141,6 +141,8 @@ export default function Dashboard() {
   const [modalProgress, setModalProgress] = useState({})
   const [modalLoading, setModalLoading] = useState(false)
 
+  const [resetting, setResetting] = useState(false)
+
   // Custom Quiz selector state
   const [selectorOpen, setSelectorOpen] = useState(false)
   const [selectorSourceTheme, setSelectorSourceTheme] = useState(null)
@@ -270,6 +272,7 @@ export default function Dashboard() {
 
   function closeModal() {
     setModalTheme(null)
+    setModalView('menu')
   }
 
   async function toggleHiddenInModal(wordId) {
@@ -302,6 +305,22 @@ export default function Dashboard() {
     setSelectedWordMap({})
     setSelectorOpen(true)
     await loadSelectorTheme(theme.id)
+  }
+
+  async function handleResetTheme() {
+    if (!modalTheme || !user || resetting) return
+    setResetting(true)
+    const wordIds = modalWords.map(w => w.id)
+    if (wordIds.length > 0) {
+      await supabase
+        .from('user_word_progress')
+        .update({ stage: 1, consecutive_correct: 0, mastered: false })
+        .eq('user_id', user.id)
+        .in('word_id', wordIds)
+    }
+    setResetting(false)
+    closeModal()
+    loadProgress()
   }
 
   async function loadSelectorTheme(themeId) {
@@ -486,6 +505,16 @@ export default function Dashboard() {
                   </span>
                   <span style={styles.menuOptionDesc}>Words you've excluded from quizzes</span>
                 </button>
+                <button
+                  style={styles.menuOptionDestructive}
+                  onClick={() => setModalView('confirm-reset')}
+                  disabled={modalLoading}
+                >
+                  <span style={styles.menuOptionLabelDestructive}>
+                    Reset to S1 {modalLoading && <span style={styles.loadingDot}>…</span>}
+                  </span>
+                  <span style={styles.menuOptionDesc}>Restart all words from Stage 1</span>
+                </button>
               </div>
             )}
 
@@ -528,6 +557,25 @@ export default function Dashboard() {
                     ? <p style={styles.emptyMsg}>No hidden words for this theme.</p>
                     : <WordTable words={hiddenWords} progressMap={modalProgress} onToggleHidden={toggleHiddenInModal} />
                 }
+              </div>
+            )}
+
+            {modalView === 'confirm-reset' && (
+              <div style={styles.confirmBody}>
+                <p style={styles.confirmText}>
+                  All S2 and S3 progress for <strong>{modalTheme.title}</strong> will be reset to Stage 1.
+                </p>
+                <p style={styles.confirmSubText}>
+                  Hidden words will be preserved.
+                </p>
+                <div style={styles.confirmBtns}>
+                  <button style={styles.cancelBtn} onClick={() => setModalView('menu')} disabled={resetting}>
+                    Cancel
+                  </button>
+                  <button style={styles.confirmResetBtn} onClick={handleResetTheme} disabled={resetting}>
+                    {resetting ? 'Resetting…' : 'Reset'}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -883,9 +931,73 @@ const styles = {
     fontWeight: 600,
     color: '#111',
   },
+  menuOptionDestructive: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '0.2rem',
+    padding: '0.875rem 1rem',
+    background: 'none',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    textAlign: 'left',
+    transition: 'background-color 0.12s',
+    borderTop: '1px solid #f0f0f0',
+    marginTop: '0.15rem',
+  },
+  menuOptionLabelDestructive: {
+    fontSize: '0.95rem',
+    fontWeight: 600,
+    color: '#dc2626',
+  },
   menuOptionDesc: {
     fontSize: '0.8rem',
     color: '#888',
+  },
+  confirmBody: {
+    padding: '1.25rem 1.5rem 1.5rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.75rem',
+  },
+  confirmText: {
+    margin: 0,
+    fontSize: '0.95rem',
+    color: '#111',
+    lineHeight: 1.5,
+  },
+  confirmSubText: {
+    margin: 0,
+    fontSize: '0.85rem',
+    color: '#666',
+  },
+  confirmBtns: {
+    display: 'flex',
+    gap: '0.75rem',
+    marginTop: '0.5rem',
+  },
+  cancelBtn: {
+    flex: 1,
+    padding: '0.7rem 1rem',
+    fontSize: '0.95rem',
+    fontWeight: 600,
+    backgroundColor: '#f5f5f5',
+    color: '#333',
+    border: '1px solid #e5e5e5',
+    borderRadius: '8px',
+    cursor: 'pointer',
+  },
+  confirmResetBtn: {
+    flex: 1,
+    padding: '0.7rem 1rem',
+    fontSize: '0.95rem',
+    fontWeight: 600,
+    backgroundColor: '#dc2626',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
   },
   loadingDot: {
     fontWeight: 400,
