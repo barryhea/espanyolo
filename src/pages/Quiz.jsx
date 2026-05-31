@@ -200,6 +200,12 @@ export default function Quiz() {
     if (question?.type === 'typed') inputRef.current?.focus({ preventScroll: true })
   }, [question])
 
+  useEffect(() => {
+    if (phase === 'feedback' && matchResult === 'wrong' && question?.type === 'typed') {
+      inputRef.current?.focus({ preventScroll: true })
+    }
+  }, [phase, matchResult])
+
   async function ensureProfile() {
     await supabase
       .from('profiles')
@@ -372,6 +378,7 @@ export default function Quiz() {
     setSelectedOption(answer)
     setResults(r => [...r, { word: question.word, correct: isCorrect, result, stage: question.stage }])
     setPhase('feedback')
+    if (result === 'wrong' && question.type === 'typed') setTypedAnswer('')
   }
 
   function handleNext() {
@@ -574,17 +581,25 @@ export default function Quiz() {
             <div style={styles.typedArea}>
               <input
                 ref={inputRef}
-                style={styles.typedInput}
+                style={{
+                  ...styles.typedInput,
+                  ...(phase === 'feedback' && matchResult === 'wrong' ? { borderColor: '#3b82f6', borderWidth: 2 } : {}),
+                }}
                 type="text"
                 value={typedAnswer}
                 onChange={e => setTypedAnswer(e.target.value)}
                 onKeyDown={e => {
-                  if (e.key === 'Enter' && phase === 'question') {
-                    handleAnswer(typedAnswer)
+                  if (e.key === 'Enter') {
+                    if (phase === 'question') {
+                      handleAnswer(typedAnswer)
+                    } else if (phase === 'feedback' && matchResult === 'wrong' &&
+                               fuzzyMatch(typedAnswer, question.correct) !== 'wrong') {
+                      handleNext()
+                    }
                   }
                 }}
-                disabled={phase === 'feedback'}
-                placeholder={question.placeholder}
+                disabled={phase === 'feedback' && matchResult !== 'wrong'}
+                placeholder={phase === 'feedback' && matchResult === 'wrong' ? 'Type the correct answer to continue…' : question.placeholder}
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
@@ -602,22 +617,30 @@ export default function Quiz() {
             </div>
           )}
 
-          {phase === 'feedback' && (
-            <div style={{
-              ...styles.feedbackBanner,
-              backgroundColor: matchResult === 'exact' ? '#dcfce7' : matchResult === 'close' ? '#fef3c7' : '#fee2e2',
-            }}>
-              <span style={{
-                color: matchResult === 'exact' ? '#16a34a' : matchResult === 'close' ? '#d97706' : '#dc2626',
-                fontWeight: 600,
+          {phase === 'feedback' && (() => {
+            const confirmOk = question.type !== 'typed' || matchResult !== 'wrong' ||
+              fuzzyMatch(typedAnswer, question.correct) !== 'wrong'
+            return (
+              <div style={{
+                ...styles.feedbackBanner,
+                backgroundColor: matchResult === 'exact' ? '#dcfce7' : matchResult === 'close' ? '#fef3c7' : '#fee2e2',
               }}>
-                {matchResult === 'exact' ? 'Correct!' : matchResult === 'close' ? `Close — ${question.correct}` : `Incorrect — ${question.correct}`}
-              </span>
-              <button style={styles.nextBtn} onClick={handleNext}>
-                {currentIdx + 1 >= session.length ? 'Finish' : 'Next →'}
-              </button>
-            </div>
-          )}
+                <span style={{
+                  color: matchResult === 'exact' ? '#16a34a' : matchResult === 'close' ? '#d97706' : '#dc2626',
+                  fontWeight: 600,
+                }}>
+                  {matchResult === 'exact' ? 'Correct!' : matchResult === 'close' ? `Close — ${question.correct}` : `Incorrect — ${question.correct}`}
+                </span>
+                <button
+                  style={{ ...styles.nextBtn, ...(confirmOk ? {} : { opacity: 0.35, cursor: 'not-allowed' }) }}
+                  onClick={confirmOk ? handleNext : undefined}
+                  disabled={!confirmOk}
+                >
+                  {currentIdx + 1 >= session.length ? 'Finish' : 'Next →'}
+                </button>
+              </div>
+            )
+          })()}
         </div>
       </main>
     </div>

@@ -444,19 +444,23 @@ export default function VerbQuiz() {
     }
   }, [question, phase])
 
-  // Enter to advance when feedback banner is showing
+  // Enter to advance when feedback banner is showing — MC only; typed handles its own Enter
   useEffect(() => {
-    if (phase !== 'feedback') return
+    if (phase !== 'feedback' || question?.type === 'typed') return
     const onKey = (e) => { if (e.key === 'Enter') handleNext() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [phase, currentIdx])
 
-  // Auto-advance after 3 s on wrong typed answers (L3/L4)
+  // Auto-focus input when feedback reveals a wrong typed answer
   useEffect(() => {
-    if (phase !== 'feedback' || question?.type !== 'typed' || matchResult !== 'wrong') return
-    feedbackTimerRef.current = setTimeout(handleNext, 3000)
-    return () => clearTimeout(feedbackTimerRef.current)
+    if (phase === 'feedback' && matchResult === 'wrong' && question?.type === 'typed') {
+      if (question.multiInput) {
+        inputRefsArr.current[0]?.focus({ preventScroll: true })
+      } else {
+        inputRef.current?.focus({ preventScroll: true })
+      }
+    }
   }, [phase, matchResult])
 
   async function loadQuiz() {
@@ -731,6 +735,7 @@ export default function VerbQuiz() {
       setMatchResult(overallResult)
       setResults(r => [...r, { verb: question.verb, correct, matchResult: overallResult }])
       setPhase('feedback')
+      if (!correct) setTypedAnswers([])
       return
     }
 
@@ -755,6 +760,7 @@ export default function VerbQuiz() {
       setMatchResult(result)
       setResults(r => [...r, { verb: question.verb, correct, matchResult: result }])
       setPhase('feedback')
+      if (!correct) setTypedAnswer('')
       return
     }
 
@@ -766,6 +772,7 @@ export default function VerbQuiz() {
     setMatchResult(result)
     setResults(r => [...r, { verb: question.verb, correct, matchResult: result }])
     setPhase('feedback')
+    if (!correct) setTypedAnswer('')
   }
 
   function handleNext() {
@@ -1064,13 +1071,26 @@ export default function VerbQuiz() {
             <div style={styles.typedArea}>
               <input
                 ref={inputRef}
-                style={styles.typedInput}
+                style={{
+                  ...styles.typedInput,
+                  ...(phase === 'feedback' && matchResult === 'wrong' ? { borderColor: '#3b82f6', borderWidth: 2 } : {}),
+                }}
                 type="text"
                 value={typedAnswer}
                 onChange={e => setTypedAnswer(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && phase === 'question') handleTyped() }}
-                disabled={phase === 'feedback'}
-                placeholder={question.placeholder}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    if (phase === 'question') {
+                      handleTyped()
+                    } else if (phase === 'feedback' && matchResult === 'wrong') {
+                      const candidates = question.correctCandidates ??
+                        [question.correct.replace(/\s*\(.*?\)/g, '').trim()]
+                      if (candidates.some(c => fuzzyMatch(typedAnswer, c) !== 'wrong')) handleNext()
+                    }
+                  }
+                }}
+                disabled={phase === 'feedback' && matchResult !== 'wrong'}
+                placeholder={phase === 'feedback' && matchResult === 'wrong' ? 'Type the correct answer to continue…' : question.placeholder}
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
@@ -1090,16 +1110,20 @@ export default function VerbQuiz() {
 
           {question.type === 'typed' && question.multiInput && (
             <div style={styles.typedArea}>
-              {question.correctAll.map((_, i) => (
+              {question.correctAll.map((expected, i) => (
                 <input
                   key={i}
                   ref={el => { inputRefsArr.current[i] = el }}
                   style={{
                     ...styles.typedInput,
-                    ...(phase === 'feedback' && matchResults[i] ? {
-                      borderColor: matchResults[i] === 'wrong' ? '#dc2626' : matchResults[i] === 'close' ? '#d97706' : '#16a34a',
-                      borderWidth: 2,
-                    } : {}),
+                    ...(phase === 'feedback' && matchResult === 'wrong'
+                      ? { borderColor: '#3b82f6', borderWidth: 2 }
+                      : phase === 'feedback' && matchResults[i]
+                        ? {
+                            borderColor: matchResults[i] === 'wrong' ? '#dc2626' : matchResults[i] === 'close' ? '#d97706' : '#16a34a',
+                            borderWidth: 2,
+                          }
+                        : {}),
                   }}
                   type="text"
                   value={typedAnswers[i] ?? ''}
@@ -1108,16 +1132,24 @@ export default function VerbQuiz() {
                     setTypedAnswers(prev => { const a = [...prev]; a[i] = v; return a })
                   }}
                   onKeyDown={e => {
-                    if (e.key === 'Enter' && phase === 'question') {
-                      if (i < question.correctAll.length - 1) {
-                        inputRefsArr.current[i + 1]?.focus()
-                      } else {
-                        handleTyped()
+                    if (e.key === 'Enter') {
+                      if (phase === 'question') {
+                        if (i < question.correctAll.length - 1) {
+                          inputRefsArr.current[i + 1]?.focus()
+                        } else {
+                          handleTyped()
+                        }
+                      } else if (phase === 'feedback' && matchResult === 'wrong') {
+                        const allOk = question.correctAll.every((exp, j) =>
+                          fuzzyMatch(typedAnswers[j] ?? '', exp) !== 'wrong'
+                        )
+                        if (allOk) handleNext()
+                        else inputRefsArr.current[i + 1]?.focus()
                       }
                     }
                   }}
-                  disabled={phase === 'feedback'}
-                  placeholder={`Meaning ${i + 1}…`}
+                  disabled={phase === 'feedback' && matchResult !== 'wrong'}
+                  placeholder={phase === 'feedback' && matchResult === 'wrong' ? `Meaning ${i + 1}…` : `Meaning ${i + 1}…`}
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -1136,49 +1168,67 @@ export default function VerbQuiz() {
             </div>
           )}
 
-          {phase === 'feedback' && (
-            <div style={{
-              ...styles.feedbackBanner,
-              backgroundColor: question.type === 'typed'
-                ? (matchResult === 'exact' ? '#dcfce7' : matchResult === 'close' ? '#fef3c7' : '#fee2e2')
-                : (isCorrect ? '#dcfce7' : '#fee2e2'),
-            }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                <span style={{
-                  fontWeight: 600,
-                  color: question.type === 'typed'
-                    ? (matchResult === 'exact' ? '#16a34a' : matchResult === 'close' ? '#d97706' : '#dc2626')
-                    : (isCorrect ? '#16a34a' : '#dc2626'),
-                }}>
-                  {(() => {
-                    if (question.type === 'typed') {
-                      if (matchResult === 'exact') return 'Correct!'
-                      if (question.multiInput) {
-                        const label = `Correct answers: ${question.correctAll.join(' / ')}`
-                        return matchResult === 'close' ? `Close — ${label}` : label
+          {phase === 'feedback' && (() => {
+            let confirmOk = true
+            if (question.type === 'typed' && matchResult === 'wrong') {
+              if (question.multiInput) {
+                confirmOk = question.correctAll.every((exp, i) =>
+                  fuzzyMatch(typedAnswers[i] ?? '', exp) !== 'wrong'
+                )
+              } else {
+                const candidates = question.correctCandidates ??
+                  [question.correct.replace(/\s*\(.*?\)/g, '').trim()]
+                confirmOk = candidates.some(c => fuzzyMatch(typedAnswer, c) !== 'wrong')
+              }
+            }
+            return (
+              <div style={{
+                ...styles.feedbackBanner,
+                backgroundColor: question.type === 'typed'
+                  ? (matchResult === 'exact' ? '#dcfce7' : matchResult === 'close' ? '#fef3c7' : '#fee2e2')
+                  : (isCorrect ? '#dcfce7' : '#fee2e2'),
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <span style={{
+                    fontWeight: 600,
+                    color: question.type === 'typed'
+                      ? (matchResult === 'exact' ? '#16a34a' : matchResult === 'close' ? '#d97706' : '#dc2626')
+                      : (isCorrect ? '#16a34a' : '#dc2626'),
+                  }}>
+                    {(() => {
+                      if (question.type === 'typed') {
+                        if (matchResult === 'exact') return 'Correct!'
+                        if (question.multiInput) {
+                          const label = `Correct answers: ${question.correctAll.join(' / ')}`
+                          return matchResult === 'close' ? `Close — ${label}` : label
+                        }
+                        const displayAnswer = question.correct.replace(/\s*\(.*?\)\s*/g, '').trim()
+                        if (matchResult === 'close') return `Close — ${displayAnswer}`
+                        return `Incorrect — ${displayAnswer}`
                       }
                       const displayAnswer = question.correct.replace(/\s*\(.*?\)\s*/g, '').trim()
-                      if (matchResult === 'close') return `Close — ${displayAnswer}`
-                      return `Incorrect — ${displayAnswer}`
-                    }
-                    const displayAnswer = question.correct.replace(/\s*\(.*?\)\s*/g, '').trim()
-                    return isCorrect ? 'Correct!' : `Incorrect — ${displayAnswer}`
-                  })()}
-                </span>
-                {question.type === 'typed' && !question.prompt && !question.multiInput && question.verb.english_alt1 && (
-                  <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
-                    {'* also means: "'}
-                    {question.verb.english_alt1}
-                    {question.verb.english_alt2 ? ` / ${question.verb.english_alt2}` : ''}
-                    {'"'}
+                      return isCorrect ? 'Correct!' : `Incorrect — ${displayAnswer}`
+                    })()}
                   </span>
-                )}
+                  {question.type === 'typed' && !question.prompt && !question.multiInput && question.verb.english_alt1 && (
+                    <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
+                      {'* also means: "'}
+                      {question.verb.english_alt1}
+                      {question.verb.english_alt2 ? ` / ${question.verb.english_alt2}` : ''}
+                      {'"'}
+                    </span>
+                  )}
+                </div>
+                <button
+                  style={{ ...styles.nextBtn, ...(confirmOk ? {} : { opacity: 0.35, cursor: 'not-allowed' }) }}
+                  onClick={confirmOk ? handleNext : undefined}
+                  disabled={!confirmOk}
+                >
+                  {currentIdx + 1 >= session.length ? 'Finish' : 'Next →'}
+                </button>
               </div>
-              <button style={styles.nextBtn} onClick={handleNext}>
-                {currentIdx + 1 >= session.length ? 'Finish' : 'Next →'}
-              </button>
-            </div>
-          )}
+            )
+          })()}
         </div>
       </main>
     </div>
