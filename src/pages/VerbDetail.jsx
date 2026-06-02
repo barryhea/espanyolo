@@ -85,7 +85,7 @@ export default function VerbDetail() {
       const progressPromise = user
         ? supabase
             .from('user_verb_progress')
-            .select('times_seen, times_correct, times_incorrect')
+            .select('times_seen, times_correct, times_incorrect, current_stage, l4_score, t1_score, t2_score, t3_score')
             .eq('user_id', user.id)
             .eq('verb_id', verbId)
             .maybeSingle()
@@ -121,6 +121,28 @@ export default function VerbDetail() {
   const correct   = progress?.times_correct   ?? 0
   const incorrect = progress?.times_incorrect ?? 0
 
+  const stage   = progress?.current_stage ?? 1
+  const l4Score = progress?.l4_score     ?? 0
+  const stageFlags = {
+    l1: stage >= 2 || l4Score >= 5,
+    l2: stage >= 3 || l4Score >= 5,
+    l3: stage >= 4 || l4Score >= 5,
+    l4: l4Score >= 5,
+    t1: (progress?.t1_score ?? 0) >= 3,
+    t2: (progress?.t2_score ?? 0) >= 3,
+    t3: (progress?.t3_score ?? 0) >= 3,
+  }
+
+  const STAGE_SEGS = [
+    { key: 'l1', label: 'L1',      color: '#22c55e' },
+    { key: 'l2', label: 'L2',      color: '#cd7f32' },
+    { key: 'l3', label: 'L3',      color: '#a8a9ad' },
+    { key: 'l4', label: 'L4',      color: '#f5c518' },
+    { key: 't1', label: 'Present', color: '#3b82f6' },
+    { key: 't2', label: 'Past',    color: '#f97316' },
+    { key: 't3', label: 'Future',  color: '#16a34a' },
+  ]
+
   return (
     <div style={styles.page}>
       <NavBar />
@@ -143,6 +165,22 @@ export default function VerbDetail() {
           <StatCallout label="Attempts"  value={attempts} />
           <StatCallout label="Correct"   value={correct}   color="#16a34a" />
           <StatCallout label="Incorrect" value={incorrect} color="#dc2626" />
+        </div>
+
+        {/* Stage progress */}
+        <div style={styles.stageCard}>
+          <span style={styles.stageCardTitle}>Stage Progress</span>
+          <div style={styles.stageRow}>
+            {STAGE_SEGS.map(({ key, label, color }, i) => {
+              const done = stageFlags[key]
+              return (
+                <div key={key} style={{ ...styles.stageSeg, marginLeft: i === 4 ? '8px' : 0 }}>
+                  <div style={{ ...styles.stageRect, backgroundColor: done ? color : '#e5e7eb' }} />
+                  <span style={{ ...styles.stageLabel, color: done ? color : '#bbb' }}>{label}</span>
+                </div>
+              )
+            })}
+          </div>
         </div>
 
         {/* Conjugation table */}
@@ -260,6 +298,44 @@ const styles = {
     fontWeight: 500,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
+  },
+  stageCard: {
+    backgroundColor: '#fff',
+    border: '1px solid #e5e5e5',
+    borderRadius: '10px',
+    padding: '0.875rem 1rem',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.6rem',
+  },
+  stageCardTitle: {
+    fontSize: '0.72rem',
+    fontWeight: 700,
+    color: '#888',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+  stageRow: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'flex-end',
+    flexWrap: 'wrap',
+  },
+  stageSeg: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '4px',
+  },
+  stageRect: {
+    width: '32px',
+    height: '8px',
+    borderRadius: '3px',
+  },
+  stageLabel: {
+    fontSize: '0.62rem',
+    fontWeight: 600,
+    lineHeight: 1,
   },
   tableWrap: {
     backgroundColor: '#fff',

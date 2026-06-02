@@ -66,34 +66,38 @@ function CheckIcon() {
   )
 }
 
-// State: 'locked' | 'active' | 'done'
-function TenseRow({ t1, t2, t3 }) {
-  const INDIGO = '#6366f1'
-  const entries = [
-    { label: 'Present', state: t1 },
-    { label: 'Past',    state: t2 },
-    { label: 'Future',  state: t3 },
-  ]
+const STRIP_SEGS = [
+  { key: 'l1', label: 'L1',   color: '#22c55e' },
+  { key: 'l2', label: 'L2',   color: '#cd7f32' },
+  { key: 'l3', label: 'L3',   color: '#a8a9ad' },
+  { key: 'l4', label: 'L4',   color: '#f5c518' },
+  { key: 't1', label: 'Pres', color: '#3b82f6' },
+  { key: 't2', label: 'Past', color: '#f97316' },
+  { key: 't3', label: 'Fut',  color: '#16a34a' },
+]
+
+function MasteryStrip7({ l1, l2, l3, l4, t1, t2, t3, locked }) {
+  const done = { l1, l2, l3, l4, t1, t2, t3 }
   return (
-    <div style={{ display: 'flex', gap: '5px', marginTop: '5px' }}>
-      {entries.map(({ label, state }) => (
-        <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-          <div style={{
-            width: '20px',
-            height: '4px',
-            borderRadius: '2px',
-            backgroundColor: state === 'done' ? INDIGO : '#e5e7eb',
-            outline: state === 'active' ? `1.5px solid ${INDIGO}` : 'none',
-            boxSizing: 'border-box',
-          }} />
-          <span style={{
-            fontSize: '0.52rem',
-            fontWeight: 600,
-            color: state === 'locked' ? '#d1d5db' : INDIGO,
-            lineHeight: 1,
-          }}>{label}</span>
-        </div>
-      ))}
+    <div style={{ display: 'flex', gap: '3px', marginTop: '5px', alignItems: 'flex-end' }}>
+      {STRIP_SEGS.map(({ key, label, color }, i) => {
+        const isDone = done[key]
+        return (
+          <div key={key} style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px',
+            marginLeft: i === 4 ? '4px' : 0,
+          }}>
+            <div style={{
+              width: '14px', height: '5px', borderRadius: '2px',
+              backgroundColor: locked ? '#e5e7eb' : isDone ? color : '#f0f0f0',
+            }} />
+            <span style={{
+              fontSize: '0.46rem', fontWeight: 700, lineHeight: 1,
+              color: locked ? '#d1d5db' : isDone ? color : '#ccc',
+            }}>{label}</span>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -158,11 +162,15 @@ export default function VerbTrainer() {
       progress[cat.title] = maxPts > 0 ? Math.round((pts / maxPts) * 100) : 0
       stats[cat.title]    = { total: verbIds.length, mastered: masteredCt }
 
-      const allL4Done = verbIds.length > 0 && verbIds.every(id => (progByVerb[id]?.l4_score ?? 0) >= 5)
+      const any       = verbIds.length > 0
+      const allL1Done = any && verbIds.every(id => (progByVerb[id]?.stage    ?? 1) >= 2)
+      const allL2Done = any && verbIds.every(id => (progByVerb[id]?.stage    ?? 1) >= 3)
+      const allL3Done = any && verbIds.every(id => (progByVerb[id]?.stage    ?? 1) >= 4)
+      const allL4Done = any && verbIds.every(id => (progByVerb[id]?.l4_score ?? 0) >= 5)
       const t1Done    = allL4Done && verbIds.every(id => (progByVerb[id]?.t1_score ?? 0) >= 3)
       const t2Done    = t1Done    && verbIds.every(id => (progByVerb[id]?.t2_score ?? 0) >= 3)
       const t3Done    = t2Done    && verbIds.every(id => (progByVerb[id]?.t3_score ?? 0) >= 3)
-      tense[cat.title] = { allL4Done, t1Done, t2Done, t3Done }
+      tense[cat.title] = { allL1Done, allL2Done, allL3Done, allL4Done, t1Done, t2Done, t3Done }
     }
 
     setCategoryProgress(progress)
@@ -180,18 +188,11 @@ export default function VerbTrainer() {
         <section style={styles.section}>
           <div style={styles.themeGrid}>
             {VERB_CATEGORIES.map((cat, idx) => {
-              const prevT     = idx > 0 ? (categoryTense[VERB_CATEGORIES[idx - 1].title] ?? {}) : { t3Done: true }
-              // Locked until the previous group has completed every stage (L1–L4 + T1–T3)
-              const locked    = !prevT.t3Done
-              const t         = categoryTense[cat.title] ?? { allL4Done: false, t1Done: false, t2Done: false, t3Done: false }
-              const pct       = categoryProgress[cat.title] ?? 0
-              const stats     = categoryStats[cat.title]
-              const complete  = t.t3Done  // all 7 stages done
-
-              // Tense rect states — each stage locked until its prerequisite is met
-              const t1State = locked || !t.allL4Done ? 'locked' : t.t1Done ? 'done' : 'active'
-              const t2State = locked || !t.t1Done    ? 'locked' : t.t2Done ? 'done' : 'active'
-              const t3State = locked || !t.t2Done    ? 'locked' : t.t3Done ? 'done' : 'active'
+              const prevT    = idx > 0 ? (categoryTense[VERB_CATEGORIES[idx - 1].title] ?? {}) : { t3Done: true }
+              const locked   = !prevT.t3Done
+              const t        = categoryTense[cat.title] ?? {}
+              const stats    = categoryStats[cat.title]
+              const complete = !!t.t3Done
 
               return (
                 <button
@@ -200,9 +201,13 @@ export default function VerbTrainer() {
                   onClick={locked ? undefined : () => navigate(`/verb-quiz/${cat.id}`)}
                 >
                   <div style={styles.cardLeft}>
-                    <span style={locked ? styles.themeTitleLocked : styles.themeTitle}>
-                      {cat.title}
-                    </span>
+                    {/* Title row with inline status icon */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                      <span style={{ ...(locked ? styles.themeTitleLocked : styles.themeTitle), flex: 1 }}>
+                        {cat.title}
+                      </span>
+                      {locked   ? <LockIcon />  : complete ? <CheckIcon /> : null}
+                    </div>
                     {stats && (
                       <span style={styles.themeSubtitle}>
                         {locked
@@ -210,13 +215,11 @@ export default function VerbTrainer() {
                           : `${stats.total} verbs · ${stats.mastered} mastered`}
                       </span>
                     )}
-                    <TenseRow t1={t1State} t2={t2State} t3={t3State} />
-                  </div>
-                  <div style={styles.cardDivider} />
-                  <div style={styles.cardRight}>
-                    {locked    ? <LockIcon />          :
-                     complete  ? <CheckIcon />          :
-                                 <ProgressRing pct={pct} />}
+                    <MasteryStrip7
+                      l1={!!t.allL1Done} l2={!!t.allL2Done} l3={!!t.allL3Done} l4={!!t.allL4Done}
+                      t1={!!t.t1Done}    t2={!!t.t2Done}    t3={!!t.t3Done}
+                      locked={locked}
+                    />
                   </div>
                 </button>
               )

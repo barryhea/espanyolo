@@ -193,6 +193,25 @@ function StageCell({ done }) {
   )
 }
 
+function TenseCell({ done, color }) {
+  return (
+    <td style={styles.stageCell}>
+      <div style={{
+        width: '14px', height: '6px', borderRadius: '2px', margin: '0 auto',
+        backgroundColor: done ? color : '#e5e7eb',
+      }} />
+    </td>
+  )
+}
+
+function TenseHeader({ color }) {
+  return (
+    <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>
+      <div style={{ width: '14px', height: '6px', borderRadius: '2px', margin: '0 auto', backgroundColor: color }} />
+    </th>
+  )
+}
+
 // ── L1: Drag & Match ──────────────────────────────────────────────────────────
 // Props: roundVerbs [{id, english, spanish_infinitive}], onComplete(verbIds[])
 function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
@@ -1126,6 +1145,9 @@ export default function VerbQuiz() {
                   <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>🥉</th>
                   <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>🥈</th>
                   <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>🥇</th>
+                  <TenseHeader color="#3b82f6" />
+                  <TenseHeader color="#f97316" />
+                  <TenseHeader color="#16a34a" />
                   <th style={{ ...styles.thRight, position: 'sticky', top: 0 }} />
                 </tr>
               </thead>
@@ -1139,6 +1161,9 @@ export default function VerbQuiz() {
                   const l2done = stage >= 3 || isMastered
                   const l3done = stage >= 4 || isMastered
                   const l4done = isMastered || (stage === 4 && l4Score >= 5)
+                  const t1done = (prog?.t1_score ?? 0) >= 3
+                  const t2done = (prog?.t2_score ?? 0) >= 3
+                  const t3done = (prog?.t3_score ?? 0) >= 3
                   const verbResult = resultByVerbId[verb.id]
                   const textColor = verbResult === 'exact' ? '#16a34a' : verbResult === 'close' ? '#d97706' : verbResult === 'wrong' ? '#dc2626' : '#333'
                   const isHidden = hiddenVerbs.has(verb.id)
@@ -1150,6 +1175,9 @@ export default function VerbQuiz() {
                       <StageCell done={l2done} />
                       <StageCell done={l3done} />
                       <StageCell done={l4done} />
+                      <TenseCell done={t1done} color="#3b82f6" />
+                      <TenseCell done={t2done} color="#f97316" />
+                      <TenseCell done={t3done} color="#16a34a" />
                       <td style={styles.tdHide}>
                         <button
                           style={{ ...styles.hideBtn, color: isHidden ? '#3b82f6' : '#bbb' }}
