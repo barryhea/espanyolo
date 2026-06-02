@@ -19,8 +19,8 @@ export const VOCAB_THEMES = [
 ]
 
 export const VERB_CATEGORIES = [
-  { id: 1, title: 'Core Verbs', description: '10 essential verbs', count: 10 },
-  { id: 2, title: 'Everyday Verbs', description: '20 high-frequency verbs', count: 20 },
-  { id: 3, title: 'Vivid & Interactive Verbs', description: '20 action verbs', count: 20 },
-  { id: 4, title: 'Expressive & Emotional Verbs', description: '20 expressive verbs', count: 20 },
+  { id: 1, title: 'Verbos -AR',         description: 'Regular -AR verbs' },
+  { id: 2, title: 'Verbos -ER',         description: 'Regular -ER verbs' },
+  { id: 3, title: 'Verbos -IR',         description: 'Regular -IR verbs' },
+  { id: 4, title: 'Verbos Irregulares', description: 'Irregular verbs'   },
 ]
