@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
+import { VERB_CATEGORIES } from '../utils/courseData'
 import NavBar from '../components/NavBar'
 
 function familyLabel(f) {
@@ -28,19 +29,52 @@ export default function VerbDictionary() {
   useEffect(() => {
     supabase
       .from('verbs')
-      .select('id, spanish_infinitive, english, verb_family')
+      .select('id, spanish_infinitive, english, verb_family, category')
       .order('spanish_infinitive')
       .then(({ data }) => { setVerbs(data ?? []); setLoading(false) })
     searchRef.current?.focus()
   }, [])
 
   const q = query.trim().toLowerCase()
-  const filtered = q
+  const isSearching = q.length > 0
+
+  // Flat search results
+  const searchResults = isSearching
     ? verbs.filter(v =>
         v.spanish_infinitive.toLowerCase().includes(q) ||
         v.english.toLowerCase().includes(q)
       )
-    : verbs
+    : []
+
+  // Grouped results (when not searching)
+  const grouped = VERB_CATEGORIES.map(cat => ({
+    cat,
+    verbs: verbs.filter(v => v.category === cat.title),
+  })).filter(g => g.verbs.length > 0)
+
+  function VerbRow({ verb, showCategory }) {
+    const fc = familyColors(verb.verb_family)
+    return (
+      <button
+        style={styles.verbRow}
+        onClick={() => navigate(`/verb-dictionary/${verb.id}`)}
+      >
+        <div style={styles.verbNames}>
+          <span style={styles.spanish}>{verb.spanish_infinitive}</span>
+          <span style={styles.english}>{verb.english}</span>
+        </div>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+          {showCategory && verb.category && (
+            <span style={styles.categoryBadge}>{verb.category}</span>
+          )}
+          <span style={{ ...styles.familyBadge, backgroundColor: fc.bg, color: fc.color, borderColor: fc.border }}>
+            {familyLabel(verb.verb_family)}
+          </span>
+        </div>
+        <span style={styles.chevron}>›</span>
+      </button>
+    )
+  }
 
   return (
     <div style={styles.page}>
@@ -48,7 +82,7 @@ export default function VerbDictionary() {
       <main style={styles.main}>
         <div style={styles.statsBar}>
           <span style={styles.statsTitle}>Verb Dictionary</span>
-          <span style={styles.statsSubtitle}>{verbs.length} verbs</span>
+          <span style={styles.statsSubtitle}>{verbs.length} verbs · {VERB_CATEGORIES.length} categories</span>
         </div>
 
         <div style={styles.searchWrap}>
@@ -77,29 +111,33 @@ export default function VerbDictionary() {
 
         {loading ? (
           <p style={styles.muted}>Loading…</p>
-        ) : filtered.length === 0 ? (
-          <p style={styles.muted}>No verbs match "{query}"</p>
+        ) : isSearching ? (
+          // ── Search results — flat list with category label ──────────────────
+          searchResults.length === 0 ? (
+            <p style={styles.muted}>No verbs match "{query}"</p>
+          ) : (
+            <div style={styles.listWrap}>
+              {searchResults.map(verb => (
+                <VerbRow key={verb.id} verb={verb} showCategory />
+              ))}
+            </div>
+          )
         ) : (
-          <div style={styles.listWrap}>
-            {filtered.map(verb => {
-              const fc = familyColors(verb.verb_family)
-              return (
-                <button
-                  key={verb.id}
-                  style={styles.verbRow}
-                  onClick={() => navigate(`/verb-dictionary/${verb.id}`)}
-                >
-                  <div style={styles.verbNames}>
-                    <span style={styles.spanish}>{verb.spanish_infinitive}</span>
-                    <span style={styles.english}>{verb.english}</span>
-                  </div>
-                  <span style={{ ...styles.familyBadge, backgroundColor: fc.bg, color: fc.color, borderColor: fc.border }}>
-                    {familyLabel(verb.verb_family)}
-                  </span>
-                  <span style={styles.chevron}>›</span>
-                </button>
-              )
-            })}
+          // ── Grouped by category ─────────────────────────────────────────────
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {grouped.map(({ cat, verbs: catVerbs }) => (
+              <div key={cat.id}>
+                <div style={styles.groupHeader}>
+                  <span style={styles.groupTitle}>{cat.title}</span>
+                  <span style={styles.groupCount}>{catVerbs.length} verbs</span>
+                </div>
+                <div style={styles.listWrap}>
+                  {catVerbs.map(verb => (
+                    <VerbRow key={verb.id} verb={verb} showCategory={false} />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </main>
@@ -155,10 +193,7 @@ const styles = {
     padding: '0 0.875rem',
     gap: '0.5rem',
   },
-  searchIcon: {
-    color: '#aaa',
-    flexShrink: 0,
-  },
+  searchIcon: { color: '#aaa', flexShrink: 0 },
   searchInput: {
     flex: 1,
     padding: '0.75rem 0',
@@ -169,24 +204,31 @@ const styles = {
     color: '#111',
   },
   clearBtn: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    color: '#aaa',
-    fontSize: '0.85rem',
-    padding: '0.25rem',
-    lineHeight: 1,
-    flexShrink: 0,
+    background: 'none', border: 'none', cursor: 'pointer',
+    color: '#aaa', fontSize: '0.85rem', padding: '0.25rem', lineHeight: 1, flexShrink: 0,
   },
-  muted: {
-    margin: 0,
-    color: '#888',
-    fontSize: '0.9rem',
+  muted: { margin: 0, color: '#888', fontSize: '0.9rem' },
+  groupHeader: {
+    display: 'flex',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    padding: '0 0.25rem 0.4rem',
+  },
+  groupTitle: {
+    fontSize: '0.82rem',
+    fontWeight: 700,
+    color: '#555',
+    letterSpacing: '0.01em',
+  },
+  groupCount: {
+    fontSize: '0.68rem',
+    color: '#bbb',
+    fontWeight: 500,
   },
   listWrap: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '0',
+    gap: 0,
     backgroundColor: '#fff',
     border: '1px solid #e5e5e5',
     borderRadius: '12px',
@@ -197,18 +239,18 @@ const styles = {
     alignItems: 'center',
     gap: '0.75rem',
     padding: '0.75rem 1rem',
+    textAlign: 'left',
     background: 'none',
     border: 'none',
     borderBottom: '1px solid #f5f5f5',
     cursor: 'pointer',
-    textAlign: 'left',
     width: '100%',
   },
   verbNames: {
     flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    gap: '1px',
+    gap: '2px',
     minWidth: 0,
   },
   spanish: {
@@ -217,21 +259,32 @@ const styles = {
     color: '#111',
   },
   english: {
-    fontSize: '0.78rem',
+    fontSize: '0.75rem',
     color: '#888',
   },
-  familyBadge: {
-    fontSize: '0.65rem',
+  categoryBadge: {
+    fontSize: '0.62rem',
     fontWeight: 600,
-    padding: '2px 7px',
-    borderRadius: '20px',
+    color: '#6366f1',
+    backgroundColor: '#eef2ff',
+    border: '1px solid #c7d2fe',
+    borderRadius: '4px',
+    padding: '1px 5px',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+  },
+  familyBadge: {
+    fontSize: '0.62rem',
+    fontWeight: 600,
+    borderRadius: '4px',
     border: '1px solid',
+    padding: '1px 5px',
     whiteSpace: 'nowrap',
     flexShrink: 0,
   },
   chevron: {
-    fontSize: '1.1rem',
     color: '#ccc',
+    fontSize: '1.1rem',
     flexShrink: 0,
   },
 }

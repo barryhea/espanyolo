@@ -34,7 +34,7 @@ const TENSE_CONFIG = {
 function buildTenseSession(verbs, progMap, tenseKey) {
   const scoreKey = `${tenseKey}_score`
   const conjKey  = TENSE_CONFIG[tenseKey].conjKey
-  const active   = verbs.filter(v => (progMap[v.id]?.[scoreKey] ?? 0) < 3)
+  const active   = verbs.filter(v => !progMap[v.id]?.hidden && (progMap[v.id]?.[scoreKey] ?? 0) < 3)
   const pool     = []
   for (const verb of active) {
     for (const pronoun of PRONOUNS) {
@@ -563,7 +563,7 @@ export default function VerbQuiz() {
     setHiddenVerbs(hiddenVerbIds)
 
     // ── L1: if any verbs still at stage 1, run a drag-match round ────────────
-    const l1All = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 1)
+    const l1All = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 1 && !progMap[v.id]?.hidden)
     if (l1All.length > 0) {
       // Exclude recently wrong verbs if enough others are available
       const exclude = recentlyUsedRef.current
@@ -630,19 +630,19 @@ export default function VerbQuiz() {
 
     // ── L2 first; fall back to L3 only when no L2 verbs remain ───────────────
     const l2 = verbs.filter(v => {
-      const stage = progMap[v.id]?.stage ?? 1
-      return stage <= 2 && !progMap[v.id]?.mastered
+      const p = progMap[v.id]
+      return (p?.stage ?? 1) <= 2 && !p?.mastered && !p?.hidden
     })
     let sess
     if (l2.length > 0) {
-      sess = shuffle(l2).slice(0, 5) // TESTING STATE
+      sess = shuffle(l2).slice(0, 25)
     } else {
-      const l3 = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 3 && !progMap[v.id]?.mastered)
+      const l3 = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 3 && !progMap[v.id]?.mastered && !progMap[v.id]?.hidden)
       if (l3.length > 0) {
-        sess = shuffle(l3).slice(0, 5) // TESTING STATE
+        sess = shuffle(l3).slice(0, 10)
       } else {
-        const l4 = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 4 && !progMap[v.id]?.mastered)
-        sess = shuffle(l4).slice(0, 5) // TESTING STATE
+        const l4 = verbs.filter(v => (progMap[v.id]?.stage ?? 1) === 4 && !progMap[v.id]?.mastered && !progMap[v.id]?.hidden)
+        sess = shuffle(l4).slice(0, 10)
       }
     }
 
