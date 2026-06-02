@@ -14,6 +14,37 @@ function shuffle(arr) {
   return a
 }
 
+// ── Tense-stage constants ─────────────────────────────────────────────────────
+const PRONOUNS = [
+  { key: 'yo',       label: 'Yo'           },
+  { key: 'tu',       label: 'Tú'           },
+  { key: 'el',       label: 'Él / Ella'    },
+  { key: 'nosotros', label: 'Nosotros'     },
+  { key: 'ellos',    label: 'Ellos / Ellas'},
+]
+
+const TENSE_CONFIG = {
+  t1: { conjKey: 'present_conjugations', label: 'Present Tense' },
+  t2: { conjKey: 'past_conjugations',    label: 'Past Tense'    },
+  t3: { conjKey: 'future_conjugations',  label: 'Future Tense'  },
+}
+
+// Build a 10-question tense session from (verb × pronoun) pairs that still
+// need practice. Verbs with a lower score are weighted toward the front.
+function buildTenseSession(verbs, progMap, tenseKey) {
+  const scoreKey = `${tenseKey}_score`
+  const conjKey  = TENSE_CONFIG[tenseKey].conjKey
+  const active   = verbs.filter(v => (progMap[v.id]?.[scoreKey] ?? 0) < 3)
+  const pool     = []
+  for (const verb of active) {
+    for (const pronoun of PRONOUNS) {
+      const correct = verb[conjKey]?.[pronoun.key]
+      if (correct) pool.push({ verb, pronoun, correct, tenseKey })
+    }
+  }
+  return shuffle(pool).slice(0, 10)
+}
+
 // ── Fuzzy matching (L3 & L4 typed answers) ────────────────────────────────────
 function levenshtein(a, b) {
   const m = a.length, n = b.length
@@ -428,6 +459,7 @@ export default function VerbQuiz() {
   const [matchResults, setMatchResults] = useState([])         // L3 multi per-answer
   const [hiddenVerbs, setHiddenVerbs] = useState(new Set())
   const [results, setResults] = useState([])
+  const [tenseStage, setTenseStage] = useState(null)  // null | 't1' | 't2' | 't3'
 
   useEffect(() => {
     if (category && user) loadQuiz()
@@ -465,6 +497,7 @@ export default function VerbQuiz() {
 
   async function loadQuiz() {
     setPhase('loading')
+    setTenseStage(null)
 
     await supabase
       .from('profiles')
@@ -472,7 +505,7 @@ export default function VerbQuiz() {
 
     const { data: verbs, error } = await supabase
       .from('verbs')
-      .select('id, english, spanish_infinitive, english_alt1, english_alt2, requires_all_answers')
+      .select('id, english, spanish_infinitive, english_alt1, english_alt2, requires_all_answers, present_conjugations, past_conjugations, future_conjugations')
       .eq('category', category.title)
 
     if (error || !verbs?.length) {
@@ -483,7 +516,7 @@ export default function VerbQuiz() {
     const verbIds = verbs.map(v => v.id)
     const { data: progress } = await supabase
       .from('user_verb_progress')
-      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, hidden')
+      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, hidden, t1_score, t2_score, t3_score')
       .eq('user_id', user.id)
       .in('verb_id', verbIds)
 
@@ -499,6 +532,9 @@ export default function VerbQuiz() {
         drag_match_score: p.drag_match_score ?? 0,
         hidden: p.hidden ?? false,
         mastered: l4 >= 5,
+        t1_score: p.t1_score ?? 0,
+        t2_score: p.t2_score ?? 0,
+        t3_score: p.t3_score ?? 0,
         db_id: p.id,
         consecutive_incorrect: 0,
       }
@@ -527,6 +563,49 @@ export default function VerbQuiz() {
       setAllVerbs(verbs)
       setRoundVerbs(round)
       setPhase('l1')
+      return
+    }
+
+    // ── T1/T2/T3: once all verbs are L4 mastered, unlock tense stages ─────────
+    const allL4Mastered = verbs.every(v => {
+      const p = progMap[v.id]
+      return p?.mastered || ((p?.stage ?? 1) === 4 && (p?.l4_score ?? 0) >= 5)
+    })
+
+    if (allL4Mastered) {
+      const t1Done = verbs.every(v => (progMap[v.id]?.t1_score ?? 0) >= 3)
+      const t2Done = t1Done && verbs.every(v => (progMap[v.id]?.t2_score ?? 0) >= 3)
+      const t3Done = t2Done && verbs.every(v => (progMap[v.id]?.t3_score ?? 0) >= 3)
+      const activeStage = !t1Done ? 't1' : !t2Done ? 't2' : !t3Done ? 't3' : null
+
+      if (!activeStage) {
+        setAllVerbs(verbs)
+        setPhase('empty')
+        return
+      }
+
+      const tenseSess = buildTenseSession(verbs, progMap, activeStage)
+      setAllVerbs(verbs)
+      setTenseStage(activeStage)
+      setSession(tenseSess)
+      setCurrentIdx(0)
+      setResults([])
+      setTypedAnswer('')
+      setMatchResult(null)
+
+      if (!tenseSess.length) { setPhase('empty'); return }
+
+      const fq = tenseSess[0]
+      setQuestion({
+        type: 'tense',
+        verb: fq.verb,
+        pronoun: fq.pronoun,
+        correct: fq.correct,
+        tenseKey: activeStage,
+        prompt: `${fq.pronoun.label}  ·  ${fq.verb.english}`,
+        placeholder: 'Type the Spanish conjugation…',
+      })
+      setPhase('question')
       return
     }
 
@@ -569,7 +648,7 @@ export default function VerbQuiz() {
   async function saveProgress(verbId) {
     const prog = progressRef.current[verbId]
     if (!prog) return
-    const { stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, hidden, db_id } = prog
+    const { stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, hidden, t1_score, t2_score, t3_score, db_id } = prog
     const payload = {
       current_stage: stage,
       stage2_mastery: stage2_mastery ?? 0,
@@ -577,6 +656,9 @@ export default function VerbQuiz() {
       l4_score: l4_score ?? 0,
       drag_match_score: drag_match_score ?? 0,
       hidden: hidden ?? false,
+      t1_score: t1_score ?? 0,
+      t2_score: t2_score ?? 0,
+      t3_score: t3_score ?? 0,
     }
     if (db_id) {
       await supabase.from('user_verb_progress')
@@ -609,7 +691,7 @@ export default function VerbQuiz() {
     } else {
       const { data } = await supabase.from('user_verb_progress')
         .upsert(
-          { user_id: user.id, verb_id: verbId, hidden: willBeHidden, current_stage: prog.stage ?? 1, stage2_mastery: prog.stage2_mastery ?? 0, stage3_mastery: prog.stage3_mastery ?? 0, l4_score: prog.l4_score ?? 0, drag_match_score: prog.drag_match_score ?? 0 },
+          { user_id: user.id, verb_id: verbId, hidden: willBeHidden, current_stage: prog.stage ?? 1, stage2_mastery: prog.stage2_mastery ?? 0, stage3_mastery: prog.stage3_mastery ?? 0, l4_score: prog.l4_score ?? 0, drag_match_score: prog.drag_match_score ?? 0, t1_score: prog.t1_score ?? 0, t2_score: prog.t2_score ?? 0, t3_score: prog.t3_score ?? 0 },
           { onConflict: 'user_id,verb_id' }
         )
         .select('id').single()
@@ -680,6 +762,29 @@ export default function VerbQuiz() {
     setPhase('feedback')
   }
 
+  // ── T1/T2/T3: tense typed answer ──────────────────────────────────────────
+  function handleTenseTyped() {
+    const result = fuzzyMatch(typedAnswer, question.correct)
+    const correct = result !== 'wrong'
+    const verbId = question.verb.id
+    const scoreKey = `${question.tenseKey}_score`
+
+    if (correct) {
+      const prog = progressRef.current[verbId] ?? {
+        stage: 4, stage2_mastery: 0, stage3_mastery: 0, l4_score: 5, drag_match_score: 0,
+        mastered: true, t1_score: 0, t2_score: 0, t3_score: 0, db_id: null, consecutive_incorrect: 0,
+      }
+      const newScore = (prog[scoreKey] ?? 0) + 1
+      progressRef.current[verbId] = { ...prog, [scoreKey]: newScore }
+      saveProgress(verbId)
+    }
+
+    setMatchResult(result)
+    setResults(r => [...r, { verb: question.verb, correct, matchResult: result }])
+    setPhase('feedback')
+    if (!correct) setTypedAnswer('')
+  }
+
   // ── L3 & L4: typed answer ──────────────────────────────────────────────────
   function updateL3Progress(verbId, correct) {
     const prog = progressRef.current[verbId] ?? {
@@ -702,6 +807,7 @@ export default function VerbQuiz() {
   }
 
   function handleTyped() {
+    if (question.type === 'tense') { handleTenseTyped(); return }
     const verbId = question.verb.id
     const stage = progressRef.current[verbId]?.stage ?? 3
 
@@ -780,11 +886,24 @@ export default function VerbQuiz() {
     feedbackTimerRef.current = null
     const nextIdx = currentIdx + 1
     if (nextIdx >= session.length) {
-      setPhase('summary')
+      setPhase(tenseStage ? 'tense-summary' : 'summary')
       return
     }
     setCurrentIdx(nextIdx)
-    setQuestion(makeQuestion(session[nextIdx], allVerbs, progressRef.current))
+    if (tenseStage) {
+      const fq = session[nextIdx]
+      setQuestion({
+        type: 'tense',
+        verb: fq.verb,
+        pronoun: fq.pronoun,
+        correct: fq.correct,
+        tenseKey: fq.tenseKey,
+        prompt: `${fq.pronoun.label}  ·  ${fq.verb.english}`,
+        placeholder: 'Type the Spanish conjugation…',
+      })
+    } else {
+      setQuestion(makeQuestion(session[nextIdx], allVerbs, progressRef.current))
+    }
     setSelectedOption(null)
     setIsCorrect(null)
     setTypedAnswer('')
@@ -903,6 +1022,59 @@ export default function VerbQuiz() {
             </button>
             <button style={styles.backToThemesBtn} onClick={() => navigate('/verbs')}>
               ← Back to verbs
+            </button>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  // ── Tense-stage session summary ───────────────────────────────────────────
+  if (phase === 'tense-summary') {
+    const correct = results.filter(r => r.correct).length
+    const tenseLabel = TENSE_CONFIG[tenseStage]?.label ?? 'Tense Practice'
+    const scoreKey = `${tenseStage}_score`
+    return (
+      <div style={styles.page}>
+        <NavBar />
+        <main style={{ ...styles.main, maxWidth: '560px' }}>
+          <div style={styles.card}>
+            <div style={{ marginBottom: '1.25rem' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                {tenseLabel}
+              </span>
+              <p style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0.2rem 0 0', color: '#111' }}>
+                {correct} / {results.length} correct
+              </p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '280px', overflowY: 'auto' }}>
+              {allVerbs.map(verb => {
+                const score = Math.min(progressRef.current[verb.id]?.[scoreKey] ?? 0, 3)
+                return (
+                  <div key={verb.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.25rem 0' }}>
+                    <span style={{ flex: 1, fontSize: '0.85rem', color: '#333' }}>{verb.spanish_infinitive}</span>
+                    <span style={{ fontSize: '0.75rem', color: '#aaa', flexShrink: 0 }}>{verb.english}</span>
+                    <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} style={{
+                          width: '10px', height: '10px', borderRadius: '50%',
+                          backgroundColor: i < score ? '#16a34a' : 'transparent',
+                          border: `2px solid ${i < score ? '#16a34a' : '#d1d5db'}`,
+                          boxSizing: 'border-box',
+                        }} />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          <div style={styles.summaryActions}>
+            <button style={{ ...styles.primaryBtn, width: '100%', textAlign: 'center' }} onClick={loadQuiz}>
+              Continue
+            </button>
+            <button style={styles.backToThemesBtn} onClick={() => navigate('/verbs')}>
+              ← Back to Verb Trainer
             </button>
           </div>
         </main>
@@ -1035,15 +1207,22 @@ export default function VerbQuiz() {
         </div>
 
         <div style={styles.card}>
+          {tenseStage && (
+            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '0.25rem' }}>
+              {TENSE_CONFIG[tenseStage]?.label}
+            </span>
+          )}
           <p style={styles.word}>{question.prompt ?? question.verb.spanish_infinitive}</p>
 
-          <MasteryBar
-            stage={currentProg?.stage ?? 1}
-            stage2_mastery={currentProg?.stage2_mastery ?? 0}
-            stage3_mastery={currentProg?.stage3_mastery ?? 0}
-            l4_score={currentProg?.l4_score ?? 0}
-            mastered={currentProg?.mastered ?? false}
-          />
+          {!tenseStage && (
+            <MasteryBar
+              stage={currentProg?.stage ?? 1}
+              stage2_mastery={currentProg?.stage2_mastery ?? 0}
+              stage3_mastery={currentProg?.stage3_mastery ?? 0}
+              l4_score={currentProg?.l4_score ?? 0}
+              mastered={currentProg?.mastered ?? false}
+            />
+          )}
 
           {question.type === 'mc' && (
             <div style={styles.optionGrid}>
@@ -1067,7 +1246,7 @@ export default function VerbQuiz() {
             </div>
           )}
 
-          {question.type === 'typed' && !question.multiInput && (
+          {(question.type === 'typed' || question.type === 'tense') && !question.multiInput && (
             <div style={styles.typedArea}>
               <input
                 ref={inputRef}
@@ -1169,8 +1348,9 @@ export default function VerbQuiz() {
           )}
 
           {phase === 'feedback' && (() => {
+            const isTypedLike = question.type === 'typed' || question.type === 'tense'
             let confirmOk = true
-            if (question.type === 'typed' && matchResult === 'wrong') {
+            if (isTypedLike && matchResult === 'wrong') {
               if (question.multiInput) {
                 confirmOk = question.correctAll.every((exp, i) =>
                   fuzzyMatch(typedAnswers[i] ?? '', exp) !== 'wrong'
@@ -1184,19 +1364,19 @@ export default function VerbQuiz() {
             return (
               <div style={{
                 ...styles.feedbackBanner,
-                backgroundColor: question.type === 'typed'
+                backgroundColor: isTypedLike
                   ? (matchResult === 'exact' ? '#dcfce7' : matchResult === 'close' ? '#fef3c7' : '#fee2e2')
                   : (isCorrect ? '#dcfce7' : '#fee2e2'),
               }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
                   <span style={{
                     fontWeight: 600,
-                    color: question.type === 'typed'
+                    color: isTypedLike
                       ? (matchResult === 'exact' ? '#16a34a' : matchResult === 'close' ? '#d97706' : '#dc2626')
                       : (isCorrect ? '#16a34a' : '#dc2626'),
                   }}>
                     {(() => {
-                      if (question.type === 'typed') {
+                      if (isTypedLike) {
                         if (matchResult === 'exact') return 'Correct!'
                         if (question.multiInput) {
                           const label = `Correct answers: ${question.correctAll.join(' / ')}`
