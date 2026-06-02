@@ -46,6 +46,24 @@ function ProgressRing({ pct }) {
   )
 }
 
+function LockIcon() {
+  return (
+    <svg
+      width="20" height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="#ccc"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ display: 'block' }}
+    >
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  )
+}
+
 export default function VerbTrainer() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -116,26 +134,41 @@ export default function VerbTrainer() {
 
         <section style={styles.section}>
           <div style={styles.themeGrid}>
-            {VERB_CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                style={styles.themeCard}
-                onClick={() => navigate(`/verb-quiz/${cat.id}`)}
-              >
-                <div style={styles.cardLeft}>
-                  <span style={styles.themeTitle}>{cat.title}</span>
-                  {categoryStats[cat.title] && (
-                    <span style={styles.themeSubtitle}>
-                      {categoryStats[cat.title].total} verbs · {categoryStats[cat.title].mastered} mastered
+            {VERB_CATEGORIES.map((cat, idx) => {
+              const prevPct = idx > 0
+                ? (categoryProgress[VERB_CATEGORIES[idx - 1].title] ?? 0)
+                : 100
+              const locked = prevPct < 100
+              const pct = categoryProgress[cat.title] ?? 0
+              const stats = categoryStats[cat.title]
+
+              return (
+                <button
+                  key={cat.id}
+                  style={locked ? styles.themeCardLocked : styles.themeCard}
+                  onClick={locked ? undefined : () => navigate(`/verb-quiz/${cat.id}`)}
+                >
+                  <div style={styles.cardLeft}>
+                    <span style={locked ? styles.themeTitleLocked : styles.themeTitle}>
+                      {cat.title}
                     </span>
-                  )}
-                </div>
-                <div style={styles.cardDivider} />
-                <div style={styles.cardRight}>
-                  <ProgressRing pct={categoryProgress[cat.title] ?? 0} />
-                </div>
-              </button>
-            ))}
+                    {stats && (
+                      <span style={styles.themeSubtitle}>
+                        {locked
+                          ? `${stats.total} verbs`
+                          : `${stats.total} verbs · ${stats.mastered} mastered`}
+                      </span>
+                    )}
+                  </div>
+                  <div style={styles.cardDivider} />
+                  <div style={styles.cardRight}>
+                    {locked
+                      ? <LockIcon />
+                      : <ProgressRing pct={pct} />}
+                  </div>
+                </button>
+              )
+            })}
           </div>
 
           <button style={styles.dictBtn} onClick={() => navigate('/verb-dictionary')}>
@@ -187,6 +220,19 @@ const styles = {
     overflow: 'hidden',
     transition: 'border-color 0.15s, box-shadow 0.15s',
   },
+  themeCardLocked: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    height: '72px',
+    padding: 0,
+    background: '#f7f7f7',
+    border: '1px solid #ebebeb',
+    borderRadius: '10px',
+    cursor: 'default',
+    textAlign: 'left',
+    overflow: 'hidden',
+  },
   cardLeft: {
     flex: 1,
     display: 'flex',
@@ -205,14 +251,23 @@ const styles = {
     width: '56px',
     flexShrink: 0,
     display: 'flex',
-    alignItems: 'flex-end',
-    justifyContent: 'flex-end',
-    padding: '0 3px 3px 0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '0 3px 0 0',
   },
   themeTitle: {
     fontSize: '0.875rem',
     fontWeight: 500,
     color: '#111',
+    lineHeight: 1.3,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  themeTitleLocked: {
+    fontSize: '0.875rem',
+    fontWeight: 500,
+    color: '#bbb',
     lineHeight: 1.3,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
