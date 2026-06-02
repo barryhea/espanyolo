@@ -48,18 +48,20 @@ function ProgressRing({ pct }) {
 
 function LockIcon() {
   return (
-    <svg
-      width="20" height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="#ccc"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      style={{ display: 'block' }}
-    >
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ccc"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
       <rect x="3" y="11" width="18" height="11" rx="2" />
       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" style={{ display: 'block' }}>
+      <circle cx="13" cy="13" r="12" fill="#f0fdf4" stroke="#22c55e" strokeWidth="1.5" />
+      <polyline points="8,13 11.5,16.5 18,9.5" stroke="#22c55e" strokeWidth="2.2"
+        strokeLinecap="round" strokeLinejoin="round" fill="none" />
     </svg>
   )
 }
@@ -178,11 +180,13 @@ export default function VerbTrainer() {
         <section style={styles.section}>
           <div style={styles.themeGrid}>
             {VERB_CATEGORIES.map((cat, idx) => {
-              const prevPct  = idx > 0 ? (categoryProgress[VERB_CATEGORIES[idx - 1].title] ?? 0) : 100
-              const locked   = prevPct < 100
-              const pct      = categoryProgress[cat.title] ?? 0
-              const stats    = categoryStats[cat.title]
-              const t        = categoryTense[cat.title] ?? { allL4Done: false, t1Done: false, t2Done: false, t3Done: false }
+              const prevT     = idx > 0 ? (categoryTense[VERB_CATEGORIES[idx - 1].title] ?? {}) : { t3Done: true }
+              // Locked until the previous group has completed every stage (L1–L4 + T1–T3)
+              const locked    = !prevT.t3Done
+              const t         = categoryTense[cat.title] ?? { allL4Done: false, t1Done: false, t2Done: false, t3Done: false }
+              const pct       = categoryProgress[cat.title] ?? 0
+              const stats     = categoryStats[cat.title]
+              const complete  = t.t3Done  // all 7 stages done
 
               // Tense rect states — each stage locked until its prerequisite is met
               const t1State = locked || !t.allL4Done ? 'locked' : t.t1Done ? 'done' : 'active'
@@ -192,7 +196,7 @@ export default function VerbTrainer() {
               return (
                 <button
                   key={cat.id}
-                  style={locked ? styles.themeCardLocked : styles.themeCard}
+                  style={locked ? styles.themeCardLocked : complete ? styles.themeCardComplete : styles.themeCard}
                   onClick={locked ? undefined : () => navigate(`/verb-quiz/${cat.id}`)}
                 >
                   <div style={styles.cardLeft}>
@@ -210,7 +214,9 @@ export default function VerbTrainer() {
                   </div>
                   <div style={styles.cardDivider} />
                   <div style={styles.cardRight}>
-                    {locked ? <LockIcon /> : <ProgressRing pct={pct} />}
+                    {locked    ? <LockIcon />          :
+                     complete  ? <CheckIcon />          :
+                                 <ProgressRing pct={pct} />}
                   </div>
                 </button>
               )
@@ -278,6 +284,21 @@ const styles = {
     cursor: 'default',
     textAlign: 'left',
     overflow: 'hidden',
+  },
+  themeCardComplete: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    height: 'auto',
+    minHeight: '76px',
+    padding: 0,
+    background: '#f0fdf4',
+    border: '1px solid #bbf7d0',
+    borderRadius: '10px',
+    cursor: 'pointer',
+    textAlign: 'left',
+    overflow: 'hidden',
+    transition: 'border-color 0.15s, box-shadow 0.15s',
   },
   cardLeft: {
     flex: 1,
