@@ -19,8 +19,8 @@ export const VOCAB_THEMES = [
 ]
 
 export const VERB_CATEGORIES = [
-  { id: 1, title: 'Verbs -AR',       description: 'Regular -AR verbs' },
-  { id: 2, title: 'Verbs -ER',       description: 'Regular -ER verbs' },
-  { id: 3, title: 'Verbs -IR',       description: 'Regular -IR verbs' },
-  { id: 4, title: 'Irregular Verbs', description: 'Irregular verbs'   },
+  { id: 1, title: 'Verbs -AR',       description: 'Regular -AR verbs', verbFamily: 'regular-ar'  },
+  { id: 2, title: 'Verbs -ER',       description: 'Regular -ER verbs', verbFamily: 'regular-er'  },
+  { id: 3, title: 'Verbs -IR',       description: 'Regular -IR verbs', verbFamily: 'regular-ir'  },
+  { id: 4, title: 'Irregular Verbs', description: 'Irregular verbs',   verbFamily: 'irregular'   },
 ]
