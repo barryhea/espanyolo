@@ -64,11 +64,44 @@ function LockIcon() {
   )
 }
 
+// State: 'locked' | 'active' | 'done'
+function TenseRow({ t1, t2, t3 }) {
+  const INDIGO = '#6366f1'
+  const entries = [
+    { label: 'Present', state: t1 },
+    { label: 'Past',    state: t2 },
+    { label: 'Future',  state: t3 },
+  ]
+  return (
+    <div style={{ display: 'flex', gap: '5px', marginTop: '5px' }}>
+      {entries.map(({ label, state }) => (
+        <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+          <div style={{
+            width: '20px',
+            height: '4px',
+            borderRadius: '2px',
+            backgroundColor: state === 'done' ? INDIGO : '#e5e7eb',
+            outline: state === 'active' ? `1.5px solid ${INDIGO}` : 'none',
+            boxSizing: 'border-box',
+          }} />
+          <span style={{
+            fontSize: '0.52rem',
+            fontWeight: 600,
+            color: state === 'locked' ? '#d1d5db' : INDIGO,
+            lineHeight: 1,
+          }}>{label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function VerbTrainer() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [categoryProgress, setCategoryProgress] = useState({})
-  const [categoryStats, setCategoryStats] = useState({})
+  const [categoryStats, setCategoryStats]       = useState({})
+  const [categoryTense, setCategoryTense]       = useState({})
 
   useEffect(() => {
     if (user) loadProgress()
@@ -79,7 +112,7 @@ export default function VerbTrainer() {
       supabase.from('verbs').select('id, category'),
       supabase
         .from('user_verb_progress')
-        .select('verb_id, stage, consecutive_correct, mastered')
+        .select('verb_id, current_stage, l4_score, t1_score, t2_score, t3_score')
         .eq('user_id', user.id),
     ])
 
@@ -91,38 +124,48 @@ export default function VerbTrainer() {
 
     const progByVerb = {}
     for (const p of progressRows ?? []) {
-      const ex = progByVerb[p.verb_id]
-      if (!ex || (p.stage ?? 1) > (ex.stage ?? 1) ||
-          ((p.stage ?? 1) === (ex.stage ?? 1) && p.mastered && !ex.mastered)) {
-        progByVerb[p.verb_id] = {
-          stage: p.stage ?? 1,
-          consecutive_correct: p.consecutive_correct ?? 0,
-          mastered: p.mastered ?? false,
-        }
+      progByVerb[p.verb_id] = {
+        stage:    p.current_stage ?? 1,
+        l4_score: p.l4_score     ?? 0,
+        t1_score: p.t1_score     ?? 0,
+        t2_score: p.t2_score     ?? 0,
+        t3_score: p.t3_score     ?? 0,
       }
     }
 
-    // Stage-weighted %: S2=1/4, S3=2/4, S4=3/4, mastered=4/4
+    // Stage-weighted %: S2=1/4, S3=2/4, S4=3/4, mastered(l4≥5)=4/4
     const progress = {}
-    const stats = {}
+    const stats    = {}
+    const tense    = {}
+
     for (const cat of VERB_CATEGORIES) {
       const verbIds = verbsByCategory[cat.title] ?? []
       let pts = 0, maxPts = 0, masteredCt = 0
-      for (const verbId of verbIds) {
-        const prog = progByVerb[verbId]
+
+      for (const id of verbIds) {
+        const prog = progByVerb[id]
+        const stage   = prog?.stage    ?? 1
+        const l4Score = prog?.l4_score ?? 0
         maxPts += 4
-        const isMastered = prog?.mastered || ((prog?.stage ?? 1) === 4 && (prog?.consecutive_correct ?? 0) >= 5)
-        if (isMastered) { pts += 4; masteredCt++ }
-        else if ((prog?.stage ?? 1) >= 4) pts += 3
-        else if ((prog?.stage ?? 1) >= 3) pts += 2
-        else if ((prog?.stage ?? 1) >= 2) pts += 1
+        if (l4Score >= 5)  { pts += 4; masteredCt++ }
+        else if (stage >= 4) pts += 3
+        else if (stage >= 3) pts += 2
+        else if (stage >= 2) pts += 1
       }
+
       progress[cat.title] = maxPts > 0 ? Math.round((pts / maxPts) * 100) : 0
-      stats[cat.title] = { total: verbIds.length, mastered: masteredCt }
+      stats[cat.title]    = { total: verbIds.length, mastered: masteredCt }
+
+      const allL4Done = verbIds.length > 0 && verbIds.every(id => (progByVerb[id]?.l4_score ?? 0) >= 5)
+      const t1Done    = allL4Done && verbIds.every(id => (progByVerb[id]?.t1_score ?? 0) >= 3)
+      const t2Done    = t1Done    && verbIds.every(id => (progByVerb[id]?.t2_score ?? 0) >= 3)
+      const t3Done    = t2Done    && verbIds.every(id => (progByVerb[id]?.t3_score ?? 0) >= 3)
+      tense[cat.title] = { allL4Done, t1Done, t2Done, t3Done }
     }
 
     setCategoryProgress(progress)
     setCategoryStats(stats)
+    setCategoryTense(tense)
   }
 
   return (
@@ -135,12 +178,16 @@ export default function VerbTrainer() {
         <section style={styles.section}>
           <div style={styles.themeGrid}>
             {VERB_CATEGORIES.map((cat, idx) => {
-              const prevPct = idx > 0
-                ? (categoryProgress[VERB_CATEGORIES[idx - 1].title] ?? 0)
-                : 100
-              const locked = prevPct < 100
-              const pct = categoryProgress[cat.title] ?? 0
-              const stats = categoryStats[cat.title]
+              const prevPct  = idx > 0 ? (categoryProgress[VERB_CATEGORIES[idx - 1].title] ?? 0) : 100
+              const locked   = prevPct < 100
+              const pct      = categoryProgress[cat.title] ?? 0
+              const stats    = categoryStats[cat.title]
+              const t        = categoryTense[cat.title] ?? { allL4Done: false, t1Done: false, t2Done: false, t3Done: false }
+
+              // Tense rect states — each stage locked until its prerequisite is met
+              const t1State = locked || !t.allL4Done ? 'locked' : t.t1Done ? 'done' : 'active'
+              const t2State = locked || !t.t1Done    ? 'locked' : t.t2Done ? 'done' : 'active'
+              const t3State = locked || !t.t2Done    ? 'locked' : t.t3Done ? 'done' : 'active'
 
               return (
                 <button
@@ -159,12 +206,11 @@ export default function VerbTrainer() {
                           : `${stats.total} verbs · ${stats.mastered} mastered`}
                       </span>
                     )}
+                    <TenseRow t1={t1State} t2={t2State} t3={t3State} />
                   </div>
                   <div style={styles.cardDivider} />
                   <div style={styles.cardRight}>
-                    {locked
-                      ? <LockIcon />
-                      : <ProgressRing pct={pct} />}
+                    {locked ? <LockIcon /> : <ProgressRing pct={pct} />}
                   </div>
                 </button>
               )
@@ -197,9 +243,7 @@ const styles = {
     flexDirection: 'column',
     gap: '3rem',
   },
-  heroSpace: {
-    minHeight: '5rem',
-  },
+  heroSpace: { minHeight: '5rem' },
   section: {},
   themeGrid: {
     display: 'grid',
@@ -210,7 +254,8 @@ const styles = {
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'stretch',
-    height: '72px',
+    height: 'auto',
+    minHeight: '76px',
     padding: 0,
     background: '#fff',
     border: '1px solid #e5e5e5',
@@ -224,7 +269,8 @@ const styles = {
     display: 'flex',
     flexDirection: 'row',
     alignItems: 'stretch',
-    height: '72px',
+    height: 'auto',
+    minHeight: '76px',
     padding: 0,
     background: '#f7f7f7',
     border: '1px solid #ebebeb',
@@ -239,7 +285,7 @@ const styles = {
     flexDirection: 'column',
     justifyContent: 'center',
     gap: '2px',
-    padding: '0.35rem 0.875rem',
+    padding: '0.45rem 0.875rem',
     minWidth: 0,
   },
   cardDivider: {
@@ -293,24 +339,8 @@ const styles = {
     textAlign: 'left',
     marginTop: '0.25rem',
   },
-  dictBtnIcon: {
-    fontSize: '1.25rem',
-    flexShrink: 0,
-  },
-  dictBtnLabel: {
-    fontSize: '0.9rem',
-    fontWeight: 600,
-    color: '#111',
-    flexShrink: 0,
-  },
-  dictBtnSub: {
-    fontSize: '0.75rem',
-    color: '#aaa',
-    flex: 1,
-  },
-  dictBtnChevron: {
-    fontSize: '1.1rem',
-    color: '#ccc',
-    flexShrink: 0,
-  },
+  dictBtnIcon:    { fontSize: '1.25rem', flexShrink: 0 },
+  dictBtnLabel:   { fontSize: '0.9rem', fontWeight: 600, color: '#111', flexShrink: 0 },
+  dictBtnSub:     { fontSize: '0.75rem', color: '#aaa', flex: 1 },
+  dictBtnChevron: { fontSize: '1.1rem', color: '#ccc', flexShrink: 0 },
 }
