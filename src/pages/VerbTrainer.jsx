@@ -5,67 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { VERB_CATEGORIES } from '../utils/courseData'
 import NavBar from '../components/NavBar'
 
-function ringColor(pct) {
-  if (pct === 100) return '#22c55e'
-  if (pct >= 75) return '#eab308'
-  if (pct >= 50) return '#f97316'
-  return '#ef4444'
-}
-
-function ProgressRing({ pct }) {
-  const color = ringColor(pct)
-  const filled = Math.min(100, Math.max(0, pct))
-  const empty = 100 - filled
-  const r = 15.9155
-  return (
-    <svg viewBox="-2 -2 40 40" style={{ width: '100%', height: 'auto', display: 'block' }}>
-      <circle cx="18" cy="18" r={r} fill="none" stroke="#ececec" strokeWidth="3" />
-      {filled > 0 && (
-        <circle
-          cx="18" cy="18" r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth="3"
-          strokeDasharray={`${filled} ${empty}`}
-          strokeDashoffset="25"
-          strokeLinecap="butt"
-        />
-      )}
-      <text
-        x="18" y="18"
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize={pct === 100 ? 7 : 8.5}
-        fontWeight="700"
-        fill={color}
-        fontFamily="system-ui, sans-serif"
-      >
-        {pct}%
-      </text>
-    </svg>
-  )
-}
-
-function LockIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ccc"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
-      <rect x="3" y="11" width="18" height="11" rx="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  )
-}
-
-function CheckIcon() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" style={{ display: 'block' }}>
-      <circle cx="13" cy="13" r="12" fill="#f0fdf4" stroke="#22c55e" strokeWidth="1.5" />
-      <polyline points="8,13 11.5,16.5 18,9.5" stroke="#22c55e" strokeWidth="2.2"
-        strokeLinecap="round" strokeLinejoin="round" fill="none" />
-    </svg>
-  )
-}
-
+// ── Stage strip ───────────────────────────────────────────────────────────────
 const STRIP_SEGS = [
   { key: 'l1', label: 'L1',   color: '#22c55e' },
   { key: 'l2', label: 'L2',   color: '#cd7f32' },
@@ -102,16 +42,110 @@ function MasteryStrip7({ l1, l2, l3, l4, t1, t2, t3, locked }) {
   )
 }
 
+// ── Card icons ────────────────────────────────────────────────────────────────
+function LockIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ccc"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" style={{ display: 'block' }}>
+      <circle cx="13" cy="13" r="12" fill="#f0fdf4" stroke="#22c55e" strokeWidth="1.5" />
+      <polyline points="8,13 11.5,16.5 18,9.5" stroke="#22c55e" strokeWidth="2.2"
+        strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </svg>
+  )
+}
+
+// ── Modal eye icons ───────────────────────────────────────────────────────────
+function EyeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
+function EyeSlashIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  )
+}
+
+// ── In-modal verb progress row ────────────────────────────────────────────────
+function VerbProgressRow({ verb, prog, onToggleHidden }) {
+  const stage   = prog?.stage    ?? 1
+  const l4Score = prog?.l4_score ?? 0
+  const hidden  = prog?.hidden   ?? false
+  const flags = {
+    l1: stage >= 2 || l4Score >= 5,
+    l2: stage >= 3 || l4Score >= 5,
+    l3: stage >= 4 || l4Score >= 5,
+    l4: l4Score >= 5,
+    t1: (prog?.t1_score ?? 0) >= 3,
+    t2: (prog?.t2_score ?? 0) >= 3,
+    t3: (prog?.t3_score ?? 0) >= 3,
+  }
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '0.75rem',
+      padding: '0.6rem 1rem', borderBottom: '1px solid #f5f5f5',
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: '0.875rem', fontWeight: 600, color: hidden ? '#bbb' : '#111' }}>
+          {verb.spanish_infinitive}
+        </div>
+        <div style={{ fontSize: '0.72rem', color: '#aaa' }}>{verb.english}</div>
+        <MasteryStrip7 {...flags} locked={false} />
+      </div>
+      <button
+        onClick={() => onToggleHidden(verb.id)}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', flexShrink: 0, color: hidden ? '#3b82f6' : '#ccc' }}
+      >
+        {hidden ? <EyeSlashIcon /> : <EyeIcon />}
+      </button>
+    </div>
+  )
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 export default function VerbTrainer() {
   const { user } = useAuth()
   const navigate = useNavigate()
+
+  // Category-level progress state
   const [categoryProgress, setCategoryProgress] = useState({})
   const [categoryStats, setCategoryStats]       = useState({})
   const [categoryTense, setCategoryTense]       = useState({})
 
+  // Modal state
+  const [modalCat, setModalCat]             = useState(null) // { id, title, locked, prevCatTitle }
+  const [modalView, setModalView]           = useState('menu')
+  const [modalVerbs, setModalVerbs]         = useState([])
+  const [modalVerbProgress, setModalVerbProgress] = useState({})
+  const [modalLoading, setModalLoading]     = useState(false)
+  const [resetting, setResetting]           = useState(false)
+
   useEffect(() => {
     if (user) loadProgress()
   }, [user?.id])
+
+  // Lock body scroll while modal is open
+  useEffect(() => {
+    document.body.style.overflow = modalCat ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [modalCat])
 
   async function loadProgress() {
     const [{ data: allVerbs }, { data: progressRows }] = await Promise.all([
@@ -139,7 +173,6 @@ export default function VerbTrainer() {
       }
     }
 
-    // Stage-weighted %: S2=1/4, S3=2/4, S4=3/4, mastered(l4≥5)=4/4
     const progress = {}
     const stats    = {}
     const tense    = {}
@@ -178,6 +211,97 @@ export default function VerbTrainer() {
     setCategoryTense(tense)
   }
 
+  // ── Modal helpers ──────────────────────────────────────────────────────────
+  function openModal(cat, locked, prevCatTitle) {
+    setModalCat({ ...cat, locked, prevCatTitle })
+    setModalView('menu')
+    setModalVerbs([])
+    setModalVerbProgress({})
+    loadModalData(cat)
+  }
+
+  function closeModal() {
+    setModalCat(null)
+    setModalView('menu')
+  }
+
+  async function loadModalData(cat) {
+    setModalLoading(true)
+    const { data: verbs } = await supabase
+      .from('verbs')
+      .select('id, spanish_infinitive, english')
+      .eq('category', cat.title)
+      .order('spanish_infinitive')
+
+    setModalVerbs(verbs ?? [])
+    if (!verbs?.length) { setModalLoading(false); return }
+
+    const verbIds = verbs.map(v => v.id)
+    const { data: progress } = await supabase
+      .from('user_verb_progress')
+      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, t1_score, t2_score, t3_score, hidden')
+      .eq('user_id', user.id)
+      .in('verb_id', verbIds)
+
+    const progMap = {}
+    for (const p of progress ?? []) {
+      progMap[p.verb_id] = {
+        dbId:          p.id,
+        stage:         p.current_stage   ?? 1,
+        stage2_mastery:p.stage2_mastery  ?? 0,
+        stage3_mastery:p.stage3_mastery  ?? 0,
+        l4_score:      p.l4_score        ?? 0,
+        drag_match_score: p.drag_match_score ?? 0,
+        t1_score:      p.t1_score        ?? 0,
+        t2_score:      p.t2_score        ?? 0,
+        t3_score:      p.t3_score        ?? 0,
+        hidden:        p.hidden          ?? false,
+      }
+    }
+    setModalVerbProgress(progMap)
+    setModalLoading(false)
+  }
+
+  async function handleReset() {
+    if (!modalCat || !user || resetting) return
+    setResetting(true)
+    const verbIds = modalVerbs.map(v => v.id)
+    if (verbIds.length > 0) {
+      await supabase
+        .from('user_verb_progress')
+        .update({
+          current_stage: 1, stage2_mastery: 0, stage3_mastery: 0,
+          l4_score: 0, drag_match_score: 0,
+          t1_score: 0, t2_score: 0, t3_score: 0,
+        })
+        .eq('user_id', user.id)
+        .in('verb_id', verbIds)
+    }
+    setResetting(false)
+    setModalView('menu')
+    await Promise.all([loadModalData(modalCat), loadProgress()])
+  }
+
+  async function toggleHiddenInModal(verbId) {
+    const prog = modalVerbProgress[verbId]
+    const willHide = !(prog?.hidden ?? false)
+    setModalVerbProgress(prev => ({
+      ...prev,
+      [verbId]: { ...(prev[verbId] ?? {}), hidden: willHide },
+    }))
+    if (prog?.dbId) {
+      await supabase.from('user_verb_progress').update({ hidden: willHide }).eq('id', prog.dbId)
+    } else {
+      const { data } = await supabase.from('user_verb_progress')
+        .upsert({ user_id: user.id, verb_id: verbId, hidden: willHide, current_stage: 1 }, { onConflict: 'user_id,verb_id' })
+        .select('id').single()
+      if (data) setModalVerbProgress(prev => ({ ...prev, [verbId]: { ...(prev[verbId] ?? {}), dbId: data.id } }))
+    }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  const hiddenModalVerbs = modalVerbs.filter(v => modalVerbProgress[v.id]?.hidden)
+
   return (
     <div style={styles.page}>
       <NavBar />
@@ -188,7 +312,8 @@ export default function VerbTrainer() {
         <section style={styles.section}>
           <div style={styles.themeGrid}>
             {VERB_CATEGORIES.map((cat, idx) => {
-              const prevT    = idx > 0 ? (categoryTense[VERB_CATEGORIES[idx - 1].title] ?? {}) : { t3Done: true }
+              const prevCat  = idx > 0 ? VERB_CATEGORIES[idx - 1] : null
+              const prevT    = prevCat ? (categoryTense[prevCat.title] ?? {}) : { t3Done: true }
               const locked   = !prevT.t3Done
               const t        = categoryTense[cat.title] ?? {}
               const stats    = categoryStats[cat.title]
@@ -198,15 +323,14 @@ export default function VerbTrainer() {
                 <button
                   key={cat.id}
                   style={locked ? styles.themeCardLocked : complete ? styles.themeCardComplete : styles.themeCard}
-                  onClick={locked ? undefined : () => navigate(`/verb-quiz/${cat.id}`)}
+                  onClick={() => openModal(cat, locked, prevCat?.title ?? null)}
                 >
                   <div style={styles.cardLeft}>
-                    {/* Title row with inline status icon */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
                       <span style={{ ...(locked ? styles.themeTitleLocked : styles.themeTitle), flex: 1 }}>
                         {cat.title}
                       </span>
-                      {locked   ? <LockIcon />  : complete ? <CheckIcon /> : null}
+                      {locked ? <LockIcon /> : complete ? <CheckIcon /> : null}
                     </div>
                     {stats && (
                       <span style={styles.themeSubtitle}>
@@ -234,10 +358,149 @@ export default function VerbTrainer() {
           </button>
         </section>
       </main>
+
+      {/* ── Category modal ──────────────────────────────────────────────────── */}
+      {modalCat && (
+        <div style={mStyles.backdrop} onClick={closeModal}>
+          <div style={mStyles.modalBox} onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div style={mStyles.modalHeader}>
+              {modalView !== 'menu' && (
+                <button style={mStyles.backBtn} onClick={() => setModalView('menu')}>←</button>
+              )}
+              <h2 style={mStyles.modalTitle}>{modalCat.title}</h2>
+              <button style={mStyles.closeBtn} onClick={closeModal}>✕</button>
+            </div>
+
+            {/* ── Menu view ─────────────────────────────────────────────── */}
+            {modalView === 'menu' && (
+              <div style={mStyles.menuList}>
+
+                {/* Start Quiz */}
+                {modalCat.locked ? (
+                  <div style={mStyles.menuOptionLocked}>
+                    <span style={mStyles.menuOptionLabelLocked}>🔒 Start Quiz</span>
+                    <span style={mStyles.menuOptionDesc}>
+                      Complete "{modalCat.prevCatTitle}" to unlock
+                    </span>
+                  </div>
+                ) : (
+                  <button
+                    style={mStyles.menuOption}
+                    onClick={() => { closeModal(); navigate(`/verb-quiz/${modalCat.id}`) }}
+                  >
+                    <span style={mStyles.menuOptionLabel}>Start Quiz</span>
+                    <span style={mStyles.menuOptionDesc}>Practice verbs in this category</span>
+                  </button>
+                )}
+
+                <button
+                  style={mStyles.menuOption}
+                  onClick={() => setModalView('progress')}
+                  disabled={modalLoading}
+                >
+                  <span style={mStyles.menuOptionLabel}>
+                    Progress {modalLoading && <span style={mStyles.loadingDot}>…</span>}
+                  </span>
+                  <span style={mStyles.menuOptionDesc}>All verbs and your current stage</span>
+                </button>
+
+                <button
+                  style={mStyles.menuOption}
+                  onClick={() => setModalView('hidden')}
+                  disabled={modalLoading}
+                >
+                  <span style={mStyles.menuOptionLabel}>
+                    Hidden Verbs {modalLoading && <span style={mStyles.loadingDot}>…</span>}
+                  </span>
+                  <span style={mStyles.menuOptionDesc}>Verbs you've excluded from quizzes</span>
+                </button>
+
+                <button
+                  style={mStyles.menuOptionDestructive}
+                  onClick={() => setModalView('confirm-reset')}
+                  disabled={modalLoading}
+                >
+                  <span style={mStyles.menuOptionLabelDestructive}>
+                    Reset to L1 {modalLoading && <span style={mStyles.loadingDot}>…</span>}
+                  </span>
+                  <span style={mStyles.menuOptionDesc}>Restart all verbs from Level 1</span>
+                </button>
+              </div>
+            )}
+
+            {/* ── Progress view ──────────────────────────────────────────── */}
+            {modalView === 'progress' && !modalLoading && (
+              <p style={mStyles.progressSummary}>
+                {modalVerbs.length} verbs · {modalVerbs.filter(v => (modalVerbProgress[v.id]?.l4_score ?? 0) >= 5).length} L4 mastered · {hiddenModalVerbs.length} hidden
+              </p>
+            )}
+            {modalView === 'progress' && (
+              <div style={mStyles.modalBody}>
+                {modalLoading
+                  ? <p style={mStyles.emptyMsg}>Loading…</p>
+                  : modalVerbs.length === 0
+                    ? <p style={mStyles.emptyMsg}>No verbs in this category.</p>
+                    : modalVerbs.map(v => (
+                        <VerbProgressRow
+                          key={v.id}
+                          verb={v}
+                          prog={modalVerbProgress[v.id]}
+                          onToggleHidden={toggleHiddenInModal}
+                        />
+                      ))
+                }
+              </div>
+            )}
+
+            {/* ── Hidden verbs view ──────────────────────────────────────── */}
+            {modalView === 'hidden' && (
+              <div style={mStyles.modalBody}>
+                {modalLoading
+                  ? <p style={mStyles.emptyMsg}>Loading…</p>
+                  : hiddenModalVerbs.length === 0
+                    ? <p style={mStyles.emptyMsg}>No hidden verbs for this category.</p>
+                    : hiddenModalVerbs.map(v => (
+                        <VerbProgressRow
+                          key={v.id}
+                          verb={v}
+                          prog={modalVerbProgress[v.id]}
+                          onToggleHidden={toggleHiddenInModal}
+                        />
+                      ))
+                }
+              </div>
+            )}
+
+            {/* ── Confirm reset view ─────────────────────────────────────── */}
+            {modalView === 'confirm-reset' && (
+              <div style={mStyles.confirmBody}>
+                <p style={mStyles.confirmText}>
+                  All progress for <strong>{modalCat.title}</strong> will be reset to Level 1 — including L1 through L4 and all tense stages.
+                </p>
+                <p style={mStyles.confirmSubText}>
+                  Hidden verb settings will be preserved.
+                </p>
+                <div style={mStyles.confirmBtns}>
+                  <button style={mStyles.cancelBtn} onClick={() => setModalView('menu')} disabled={resetting}>
+                    Cancel
+                  </button>
+                  <button style={mStyles.confirmResetBtn} onClick={handleReset} disabled={resetting}>
+                    {resetting ? 'Resetting…' : 'Reset'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
+// ── Card styles ───────────────────────────────────────────────────────────────
 const styles = {
   page: {
     minHeight: '100vh',
@@ -284,7 +547,7 @@ const styles = {
     background: '#f7f7f7',
     border: '1px solid #ebebeb',
     borderRadius: '10px',
-    cursor: 'default',
+    cursor: 'pointer',
     textAlign: 'left',
     overflow: 'hidden',
   },
@@ -311,19 +574,6 @@ const styles = {
     gap: '2px',
     padding: '0.45rem 0.875rem',
     minWidth: 0,
-  },
-  cardDivider: {
-    width: '1px',
-    flexShrink: 0,
-    backgroundColor: '#f0f0f0',
-  },
-  cardRight: {
-    width: '56px',
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '0 3px 0 0',
   },
   themeTitle: {
     fontSize: '0.875rem',
@@ -367,4 +617,93 @@ const styles = {
   dictBtnLabel:   { fontSize: '0.9rem', fontWeight: 600, color: '#111', flexShrink: 0 },
   dictBtnSub:     { fontSize: '0.75rem', color: '#aaa', flex: 1 },
   dictBtnChevron: { fontSize: '1.1rem', color: '#ccc', flexShrink: 0 },
+}
+
+// ── Modal styles (matching Dashboard modal exactly) ───────────────────────────
+const mStyles = {
+  backdrop: {
+    position: 'fixed',
+    inset: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100,
+    padding: '1rem',
+  },
+  modalBox: {
+    backgroundColor: '#fff',
+    borderRadius: '14px',
+    width: '100%',
+    maxWidth: '480px',
+    maxHeight: '80vh',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+  },
+  modalHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    padding: '1rem 1.25rem',
+    borderBottom: '1px solid #f0f0f0',
+    flexShrink: 0,
+  },
+  backBtn: {
+    background: 'none', border: 'none', fontSize: '1.1rem',
+    color: '#555', cursor: 'pointer', padding: '0 0.25rem', lineHeight: 1,
+  },
+  modalTitle: {
+    flex: 1, margin: 0, fontSize: '1rem', fontWeight: 600, color: '#111',
+  },
+  closeBtn: {
+    background: 'none', border: 'none', fontSize: '1rem',
+    color: '#888', cursor: 'pointer', padding: '0.25rem', lineHeight: 1, borderRadius: '4px',
+  },
+  menuList: {
+    display: 'flex', flexDirection: 'column', padding: '0.5rem', gap: '0.25rem',
+  },
+  menuOption: {
+    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.2rem',
+    padding: '0.875rem 1rem', background: 'none', border: 'none',
+    borderRadius: '8px', cursor: 'pointer', textAlign: 'left', transition: 'background-color 0.12s',
+  },
+  menuOptionLocked: {
+    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.2rem',
+    padding: '0.875rem 1rem', borderRadius: '8px', opacity: 0.45, cursor: 'default',
+  },
+  menuOptionLabel: { fontSize: '0.95rem', fontWeight: 600, color: '#111' },
+  menuOptionLabelLocked: { fontSize: '0.95rem', fontWeight: 600, color: '#555' },
+  menuOptionDestructive: {
+    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.2rem',
+    padding: '0.875rem 1rem', background: 'none', border: 'none',
+    borderRadius: '8px', cursor: 'pointer', textAlign: 'left', transition: 'background-color 0.12s',
+    borderTop: '1px solid #f0f0f0', marginTop: '0.15rem',
+  },
+  menuOptionLabelDestructive: { fontSize: '0.95rem', fontWeight: 600, color: '#dc2626' },
+  menuOptionDesc: { fontSize: '0.8rem', color: '#888' },
+  progressSummary: {
+    margin: 0, padding: '0.65rem 1rem', fontSize: '0.78rem',
+    color: '#888', borderBottom: '1px solid #f0f0f0',
+  },
+  modalBody: { overflowY: 'auto', flex: 1 },
+  emptyMsg: { margin: 0, padding: '1.5rem', color: '#888', fontSize: '0.9rem' },
+  confirmBody: {
+    padding: '1.25rem 1.5rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem',
+  },
+  confirmText: { margin: 0, fontSize: '0.95rem', color: '#111', lineHeight: 1.5 },
+  confirmSubText: { margin: 0, fontSize: '0.85rem', color: '#666' },
+  confirmBtns: { display: 'flex', gap: '0.75rem', marginTop: '0.5rem' },
+  cancelBtn: {
+    flex: 1, padding: '0.7rem 1rem', fontSize: '0.95rem', fontWeight: 600,
+    backgroundColor: '#f5f5f5', color: '#333', border: '1px solid #e5e5e5',
+    borderRadius: '8px', cursor: 'pointer',
+  },
+  confirmResetBtn: {
+    flex: 1, padding: '0.7rem 1rem', fontSize: '0.95rem', fontWeight: 600,
+    backgroundColor: '#dc2626', color: '#fff', border: 'none',
+    borderRadius: '8px', cursor: 'pointer',
+  },
+  loadingDot: { fontWeight: 400, color: '#aaa' },
 }
