@@ -5,6 +5,15 @@ import { useAuth } from '../hooks/useAuth'
 import { VERB_CATEGORIES } from '../utils/courseData'
 import NavBar from '../components/NavBar'
 
+const PATTERNED_SUB_CATS = [
+  { id: 3, title: 'Stem-Changing O→UE' },
+  { id: 4, title: 'Stem-Changing E→IE' },
+  { id: 5, title: 'Stem-Changing E→I'  },
+  { id: 6, title: 'Spelling Change'     },
+  { id: 7, title: '-Go Verbs'           },
+  { id: 8, title: 'Regular -ER/-IR'     },
+]
+
 // ── Stage strip ───────────────────────────────────────────────────────────────
 const STRIP_SEGS = [
   { key: 'l1', label: 'L1',   color: '#22c55e' },
@@ -124,24 +133,25 @@ export default function VerbTrainer() {
   const { user } = useAuth()
   const navigate = useNavigate()
 
-  // Category-level progress state
-  const [categoryProgress, setCategoryProgress] = useState({})
-  const [categoryStats, setCategoryStats]       = useState({})
-  const [categoryTense, setCategoryTense]       = useState({})
+  const [categoryStats, setCategoryStats] = useState({})
+  const [categoryTense, setCategoryTense] = useState({})
 
   // Modal state
-  const [modalCat, setModalCat]             = useState(null) // { id, title, locked, prevCatTitle }
-  const [modalView, setModalView]           = useState('menu')
-  const [modalVerbs, setModalVerbs]         = useState([])
+  const [modalCat, setModalCat]                   = useState(null)
+  // { id, title, locked, isPatterned, unlockMsg }
+  const [modalSubCat, setModalSubCat]             = useState(null)
+  // { id, title } — active sub-group in stage-select, null otherwise
+  const [modalView, setModalView]                 = useState('menu')
+  // 'menu' | 'subgroup-select' | 'stage-select' | 'progress' | 'hidden' | 'confirm-reset'
+  const [modalVerbs, setModalVerbs]               = useState([])
   const [modalVerbProgress, setModalVerbProgress] = useState({})
-  const [modalLoading, setModalLoading]     = useState(false)
-  const [resetting, setResetting]           = useState(false)
+  const [modalLoading, setModalLoading]           = useState(false)
+  const [resetting, setResetting]                 = useState(false)
 
   useEffect(() => {
     if (user) loadProgress()
   }, [user?.id])
 
-  // Lock body scroll while modal is open
   useEffect(() => {
     document.body.style.overflow = modalCat ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
@@ -173,16 +183,15 @@ export default function VerbTrainer() {
       }
     }
 
-    const progress = {}
-    const stats    = {}
-    const tense    = {}
+    const stats = {}
+    const tense = {}
 
     for (const cat of VERB_CATEGORIES) {
       const verbIds = verbsByCategory[cat.title] ?? []
       let pts = 0, maxPts = 0, masteredCt = 0
 
       for (const id of verbIds) {
-        const prog = progByVerb[id]
+        const prog    = progByVerb[id]
         const stage   = prog?.stage    ?? 1
         const l4Score = prog?.l4_score ?? 0
         maxPts += 4
@@ -192,8 +201,13 @@ export default function VerbTrainer() {
         else if (stage >= 2) pts += 1
       }
 
-      progress[cat.title] = maxPts > 0 ? Math.round((pts / maxPts) * 100) : 0
-      stats[cat.title]    = { total: verbIds.length, mastered: masteredCt }
+      stats[cat.title] = {
+        total:       verbIds.length,
+        mastered:    masteredCt,
+        t1Mastered:  verbIds.filter(id => (progByVerb[id]?.t1_score ?? 0) >= 3).length,
+        t2Mastered:  verbIds.filter(id => (progByVerb[id]?.t2_score ?? 0) >= 3).length,
+        t3Mastered:  verbIds.filter(id => (progByVerb[id]?.t3_score ?? 0) >= 3).length,
+      }
 
       const any       = verbIds.length > 0
       const allL1Done = any && verbIds.every(id => (progByVerb[id]?.stage    ?? 1) >= 2)
@@ -206,31 +220,65 @@ export default function VerbTrainer() {
       tense[cat.title] = { allL1Done, allL2Done, allL3Done, allL4Done, t1Done, t2Done, t3Done }
     }
 
-    setCategoryProgress(progress)
     setCategoryStats(stats)
     setCategoryTense(tense)
   }
 
+  // ── Patterned Irregulars aggregate helpers ────────────────────────────────
+  function getPatternedTense(t) {
+    return {
+      allL1Done: PATTERNED_SUB_CATS.every(sc => t[sc.title]?.allL1Done),
+      allL2Done: PATTERNED_SUB_CATS.every(sc => t[sc.title]?.allL2Done),
+      allL3Done: PATTERNED_SUB_CATS.every(sc => t[sc.title]?.allL3Done),
+      allL4Done: PATTERNED_SUB_CATS.every(sc => t[sc.title]?.allL4Done),
+      t1Done:    PATTERNED_SUB_CATS.every(sc => t[sc.title]?.t1Done),
+      t2Done:    PATTERNED_SUB_CATS.every(sc => t[sc.title]?.t2Done),
+      t3Done:    PATTERNED_SUB_CATS.every(sc => t[sc.title]?.t3Done),
+    }
+  }
+
+  function getPatternedStats(s) {
+    return {
+      total:   PATTERNED_SUB_CATS.reduce((n, sc) => n + (s[sc.title]?.total   ?? 0), 0),
+      mastered:PATTERNED_SUB_CATS.reduce((n, sc) => n + (s[sc.title]?.mastered ?? 0), 0),
+    }
+  }
+
   // ── Modal helpers ──────────────────────────────────────────────────────────
-  function openModal(cat, locked, prevCatTitle) {
-    setModalCat({ ...cat, locked, prevCatTitle })
+  function openModal(cardDesc) {
+    setModalCat(cardDesc)
+    setModalSubCat(null)
     setModalView('menu')
     setModalVerbs([])
     setModalVerbProgress({})
-    loadModalData(cat)
+    loadModalData(cardDesc)
   }
 
   function closeModal() {
     setModalCat(null)
+    setModalSubCat(null)
     setModalView('menu')
   }
 
-  async function loadModalData(cat) {
+  function handleModalBack() {
+    if (modalView === 'stage-select' && modalSubCat) {
+      setModalSubCat(null)
+      setModalView('subgroup-select')
+    } else {
+      setModalView('menu')
+    }
+  }
+
+  async function loadModalData(cardDesc) {
     setModalLoading(true)
+    const titles = cardDesc.isPatterned
+      ? PATTERNED_SUB_CATS.map(sc => sc.title)
+      : [cardDesc.title]
+
     const { data: verbs } = await supabase
       .from('verbs')
-      .select('id, spanish_infinitive, english')
-      .eq('category', cat.title)
+      .select('id, spanish_infinitive, english, category')
+      .in('category', titles)
       .order('spanish_infinitive')
 
     setModalVerbs(verbs ?? [])
@@ -246,16 +294,16 @@ export default function VerbTrainer() {
     const progMap = {}
     for (const p of progress ?? []) {
       progMap[p.verb_id] = {
-        dbId:          p.id,
-        stage:         p.current_stage   ?? 1,
-        stage2_mastery:p.stage2_mastery  ?? 0,
-        stage3_mastery:p.stage3_mastery  ?? 0,
-        l4_score:      p.l4_score        ?? 0,
+        dbId:             p.id,
+        stage:            p.current_stage    ?? 1,
+        stage2_mastery:   p.stage2_mastery   ?? 0,
+        stage3_mastery:   p.stage3_mastery   ?? 0,
+        l4_score:         p.l4_score         ?? 0,
         drag_match_score: p.drag_match_score ?? 0,
-        t1_score:      p.t1_score        ?? 0,
-        t2_score:      p.t2_score        ?? 0,
-        t3_score:      p.t3_score        ?? 0,
-        hidden:        p.hidden          ?? false,
+        t1_score:         p.t1_score         ?? 0,
+        t2_score:         p.t2_score         ?? 0,
+        t3_score:         p.t3_score         ?? 0,
+        hidden:           p.hidden           ?? false,
       }
     }
     setModalVerbProgress(progMap)
@@ -283,7 +331,7 @@ export default function VerbTrainer() {
   }
 
   async function toggleHiddenInModal(verbId) {
-    const prog = modalVerbProgress[verbId]
+    const prog     = modalVerbProgress[verbId]
     const willHide = !(prog?.hidden ?? false)
     setModalVerbProgress(prev => ({
       ...prev,
@@ -299,8 +347,53 @@ export default function VerbTrainer() {
     }
   }
 
+  // ── Build home cards ──────────────────────────────────────────────────────
+  const patternedTense = getPatternedTense(categoryTense)
+  const patternedStats = getPatternedStats(categoryStats)
+
+  const homeCards = [
+    {
+      id:          1,
+      title:       'Verbs -AR',
+      isPatterned: false,
+      locked:      false,
+      unlockMsg:   null,
+      t:           categoryTense['Verbs -AR'] ?? {},
+      stats:       categoryStats['Verbs -AR'],
+    },
+    {
+      id:          2,
+      title:       'Core Verbs',
+      isPatterned: false,
+      locked:      !categoryTense['Verbs -AR']?.t3Done,
+      unlockMsg:   'Complete "Verbs -AR" to unlock',
+      t:           categoryTense['Core Verbs'] ?? {},
+      stats:       categoryStats['Core Verbs'],
+    },
+    {
+      id:          'patterned-irregulars',
+      title:       'Patterned Irregulars',
+      isPatterned: true,
+      locked:      !categoryTense['Core Verbs']?.t3Done,
+      unlockMsg:   'Complete "Core Verbs" to unlock',
+      t:           patternedTense,
+      stats:       patternedStats,
+    },
+    {
+      id:          9,
+      title:       'True Irregulars',
+      isPatterned: false,
+      locked:      !patternedTense.t3Done,
+      unlockMsg:   'Complete all Patterned Irregulars to unlock',
+      t:           categoryTense['True Irregulars'] ?? {},
+      stats:       categoryStats['True Irregulars'],
+    },
+  ]
+
   // ── Render ─────────────────────────────────────────────────────────────────
-  const hiddenModalVerbs = modalVerbs.filter(v => modalVerbProgress[v.id]?.hidden)
+  const hiddenModalVerbs    = modalVerbs.filter(v => modalVerbProgress[v.id]?.hidden)
+  const modalDisplayTitle   = (modalView === 'stage-select' && modalSubCat) ? modalSubCat.title : modalCat?.title
+  const showBackBtn         = modalView !== 'menu'
 
   return (
     <div style={styles.page}>
@@ -311,38 +404,32 @@ export default function VerbTrainer() {
 
         <section style={styles.section}>
           <div style={styles.themeGrid}>
-            {VERB_CATEGORIES.map((cat, idx) => {
-              const prevCat  = idx > 0 ? VERB_CATEGORIES[idx - 1] : null
-              const prevT    = prevCat ? (categoryTense[prevCat.title] ?? {}) : { t3Done: true }
-              const locked   = !prevT.t3Done
-              const t        = categoryTense[cat.title] ?? {}
-              const stats    = categoryStats[cat.title]
-              const complete = !!t.t3Done
-
+            {homeCards.map(card => {
+              const complete = !!card.t.t3Done
               return (
                 <button
-                  key={cat.id}
-                  style={locked ? styles.themeCardLocked : complete ? styles.themeCardComplete : styles.themeCard}
-                  onClick={() => openModal(cat, locked, prevCat?.title ?? null)}
+                  key={card.id}
+                  style={card.locked ? styles.themeCardLocked : complete ? styles.themeCardComplete : styles.themeCard}
+                  onClick={() => openModal(card)}
                 >
                   <div style={styles.cardLeft}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-                      <span style={{ ...(locked ? styles.themeTitleLocked : styles.themeTitle), flex: 1 }}>
-                        {cat.title}
+                      <span style={{ ...(card.locked ? styles.themeTitleLocked : styles.themeTitle), flex: 1 }}>
+                        {card.title}
                       </span>
-                      {locked ? <LockIcon /> : complete ? <CheckIcon /> : null}
+                      {card.locked ? <LockIcon /> : complete ? <CheckIcon /> : null}
                     </div>
-                    {stats && (
+                    {card.stats && (
                       <span style={styles.themeSubtitle}>
-                        {locked
-                          ? `${stats.total} verbs`
-                          : `${stats.total} verbs · ${stats.mastered} mastered`}
+                        {card.locked
+                          ? `${card.stats.total} verbs`
+                          : `${card.stats.total} verbs · ${card.stats.mastered} mastered`}
                       </span>
                     )}
                     <MasteryStrip7
-                      l1={!!t.allL1Done} l2={!!t.allL2Done} l3={!!t.allL3Done} l4={!!t.allL4Done}
-                      t1={!!t.t1Done}    t2={!!t.t2Done}    t3={!!t.t3Done}
-                      locked={locked}
+                      l1={!!card.t.allL1Done} l2={!!card.t.allL2Done} l3={!!card.t.allL3Done} l4={!!card.t.allL4Done}
+                      t1={!!card.t.t1Done}    t2={!!card.t.t2Done}    t3={!!card.t.t3Done}
+                      locked={card.locked}
                     />
                   </div>
                 </button>
@@ -359,17 +446,17 @@ export default function VerbTrainer() {
         </section>
       </main>
 
-      {/* ── Category modal ──────────────────────────────────────────────────── */}
+      {/* ── Modal ─────────────────────────────────────────────────────────────── */}
       {modalCat && (
         <div style={mStyles.backdrop} onClick={closeModal}>
           <div style={mStyles.modalBox} onClick={e => e.stopPropagation()}>
 
             {/* Header */}
             <div style={mStyles.modalHeader}>
-              {modalView !== 'menu' && (
-                <button style={mStyles.backBtn} onClick={() => setModalView('menu')}>←</button>
+              {showBackBtn && (
+                <button style={mStyles.backBtn} onClick={handleModalBack}>←</button>
               )}
-              <h2 style={mStyles.modalTitle}>{modalCat.title}</h2>
+              <h2 style={mStyles.modalTitle}>{modalDisplayTitle}</h2>
               <button style={mStyles.closeBtn} onClick={closeModal}>✕</button>
             </div>
 
@@ -377,18 +464,15 @@ export default function VerbTrainer() {
             {modalView === 'menu' && (
               <div style={mStyles.menuList}>
 
-                {/* Start Quiz */}
                 {modalCat.locked ? (
                   <div style={mStyles.menuOptionLocked}>
                     <span style={mStyles.menuOptionLabelLocked}>🔒 Start Quiz</span>
-                    <span style={mStyles.menuOptionDesc}>
-                      Complete "{modalCat.prevCatTitle}" to unlock
-                    </span>
+                    <span style={mStyles.menuOptionDesc}>{modalCat.unlockMsg}</span>
                   </div>
                 ) : (
                   <button
                     style={mStyles.menuOption}
-                    onClick={() => setModalView('stage-select')}
+                    onClick={() => setModalView(modalCat.isPatterned ? 'subgroup-select' : 'stage-select')}
                   >
                     <span style={mStyles.menuOptionLabel}>Start Quiz</span>
                     <span style={mStyles.menuOptionDesc}>Practice verbs in this category</span>
@@ -427,6 +511,52 @@ export default function VerbTrainer() {
                   </span>
                   <span style={mStyles.menuOptionDesc}>Restart all verbs from Level 1</span>
                 </button>
+              </div>
+            )}
+
+            {/* ── Sub-group select (Patterned Irregulars → Start Quiz) ───── */}
+            {modalView === 'subgroup-select' && (
+              <div style={mStyles.menuList}>
+                {PATTERNED_SUB_CATS.map((sc, idx) => {
+                  const prevSc    = idx > 0 ? PATTERNED_SUB_CATS[idx - 1] : null
+                  const subLocked = prevSc ? !categoryTense[prevSc.title]?.t3Done : false
+                  const subT      = categoryTense[sc.title] ?? {}
+                  const subStats  = categoryStats[sc.title] ?? { total: 0, mastered: 0 }
+                  const subComplete = !!subT.t3Done
+
+                  return subLocked ? (
+                    <div key={sc.id} style={mStyles.stageOptionLocked}>
+                      <div style={mStyles.stageLeft}>
+                        <span style={mStyles.stageLabelLocked}>{sc.title}</span>
+                        <span style={mStyles.stageSub}>{subStats.total} verbs</span>
+                      </div>
+                      <div style={mStyles.stageRight}>
+                        <span style={mStyles.stageProgressText}>Locked</span>
+                        <span style={{ fontSize: '0.9rem', lineHeight: 1 }}>🔒</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      key={sc.id}
+                      style={mStyles.stageOption}
+                      onClick={() => { setModalSubCat(sc); setModalView('stage-select') }}
+                    >
+                      <div style={mStyles.stageLeft}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: subComplete ? '#22c55e' : '#e5e7eb', flexShrink: 0 }} />
+                          <span style={mStyles.stageLabel}>{sc.title}</span>
+                        </div>
+                        <span style={mStyles.stageSub}>{subStats.total} verbs · {subStats.mastered} mastered</span>
+                      </div>
+                      <div style={mStyles.stageRight}>
+                        <span style={{ ...mStyles.stageProgressText, color: subComplete ? '#16a34a' : '#888' }}>
+                          {subComplete ? 'Complete ✓' : `${subStats.mastered} / ${subStats.total}`}
+                        </span>
+                        <span style={mStyles.stageChevron}>›</span>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             )}
 
@@ -479,13 +609,9 @@ export default function VerbTrainer() {
                 <p style={mStyles.confirmText}>
                   All progress for <strong>{modalCat.title}</strong> will be reset to Level 1 — including L1 through L4 and all tense stages.
                 </p>
-                <p style={mStyles.confirmSubText}>
-                  Hidden verb settings will be preserved.
-                </p>
+                <p style={mStyles.confirmSubText}>Hidden verb settings will be preserved.</p>
                 <div style={mStyles.confirmBtns}>
-                  <button style={mStyles.cancelBtn} onClick={() => setModalView('menu')} disabled={resetting}>
-                    Cancel
-                  </button>
+                  <button style={mStyles.cancelBtn} onClick={() => setModalView('menu')} disabled={resetting}>Cancel</button>
                   <button style={mStyles.confirmResetBtn} onClick={handleReset} disabled={resetting}>
                     {resetting ? 'Resetting…' : 'Reset'}
                   </button>
@@ -495,14 +621,20 @@ export default function VerbTrainer() {
 
             {/* ── Stage selector ─────────────────────────────────────────── */}
             {modalView === 'stage-select' && (() => {
-              const t      = categoryTense[modalCat.title] ?? {}
-              const stats  = categoryStats[modalCat.title] ?? { total: 0, mastered: 0 }
-              const total  = stats.total
-              const loading = modalLoading
+              const activeCatTitle = modalSubCat ? modalSubCat.title : modalCat.title
+              const activeCatId    = modalSubCat ? modalSubCat.id    : modalCat.id
+              const t              = categoryTense[activeCatTitle] ?? {}
 
-              const tCount = key => loading
+              // Compute fresh counts from loaded verb progress (filtered to active category)
+              const activeVerbIds = modalSubCat
+                ? modalVerbs.filter(v => v.category === modalSubCat.title).map(v => v.id)
+                : modalVerbs.map(v => v.id)
+              const loading       = modalLoading
+              const total         = loading ? '…' : activeVerbIds.length
+              const masteredCt    = loading ? '…' : activeVerbIds.filter(id => (modalVerbProgress[id]?.l4_score ?? 0) >= 5).length
+              const tCount        = key => loading
                 ? '…'
-                : modalVerbs.filter(v => (modalVerbProgress[v.id]?.[`${key}_score`] ?? 0) >= 3).length
+                : activeVerbIds.filter(id => (modalVerbProgress[id]?.[`${key}_score`] ?? 0) >= 3).length
 
               const STAGES = [
                 {
@@ -511,7 +643,7 @@ export default function VerbTrainer() {
                   sub:      'L1 → L4',
                   locked:   false,
                   complete: !!t.allL4Done,
-                  progress: loading ? '…' : `${stats.mastered} / ${total} mastered`,
+                  progress: `${masteredCt} / ${total} mastered`,
                   color:    '#f5c518',
                 },
                 {
@@ -520,7 +652,7 @@ export default function VerbTrainer() {
                   sub:      'T1',
                   locked:   !t.allL4Done,
                   complete: !!t.t1Done,
-                  progress: loading ? '…' : `${tCount('t1')} / ${total} mastered`,
+                  progress: `${tCount('t1')} / ${total} mastered`,
                   color:    '#3b82f6',
                 },
                 {
@@ -529,7 +661,7 @@ export default function VerbTrainer() {
                   sub:      'T2',
                   locked:   !t.t1Done,
                   complete: !!t.t2Done,
-                  progress: loading ? '…' : `${tCount('t2')} / ${total} mastered`,
+                  progress: `${tCount('t2')} / ${total} mastered`,
                   color:    '#f97316',
                 },
                 {
@@ -538,7 +670,7 @@ export default function VerbTrainer() {
                   sub:      'T3',
                   locked:   !t.t2Done,
                   complete: !!t.t3Done,
-                  progress: loading ? '…' : `${tCount('t3')} / ${total} mastered`,
+                  progress: `${tCount('t3')} / ${total} mastered`,
                   color:    '#16a34a',
                 },
               ]
@@ -560,7 +692,7 @@ export default function VerbTrainer() {
                     <button
                       key={stage.key}
                       style={mStyles.stageOption}
-                      onClick={() => { closeModal(); navigate(`/verb-quiz/${modalCat.id}`) }}
+                      onClick={() => { closeModal(); navigate(`/verb-quiz/${activeCatId}`) }}
                     >
                       <div style={mStyles.stageLeft}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -707,7 +839,7 @@ const styles = {
   dictBtnChevron: { fontSize: '1.1rem', color: '#ccc', flexShrink: 0 },
 }
 
-// ── Modal styles (matching Dashboard modal exactly) ───────────────────────────
+// ── Modal styles ──────────────────────────────────────────────────────────────
 const mStyles = {
   backdrop: {
     position: 'fixed',
@@ -761,8 +893,8 @@ const mStyles = {
     display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.2rem',
     padding: '0.875rem 1rem', borderRadius: '8px', opacity: 0.45, cursor: 'default',
   },
-  menuOptionLabel: { fontSize: '0.95rem', fontWeight: 600, color: '#111' },
-  menuOptionLabelLocked: { fontSize: '0.95rem', fontWeight: 600, color: '#555' },
+  menuOptionLabel:         { fontSize: '0.95rem', fontWeight: 600, color: '#111' },
+  menuOptionLabelLocked:   { fontSize: '0.95rem', fontWeight: 600, color: '#555' },
   menuOptionDestructive: {
     display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.2rem',
     padding: '0.875rem 1rem', background: 'none', border: 'none',
@@ -775,14 +907,14 @@ const mStyles = {
     margin: 0, padding: '0.65rem 1rem', fontSize: '0.78rem',
     color: '#888', borderBottom: '1px solid #f0f0f0',
   },
-  modalBody: { overflowY: 'auto', flex: 1 },
-  emptyMsg: { margin: 0, padding: '1.5rem', color: '#888', fontSize: '0.9rem' },
+  modalBody:  { overflowY: 'auto', flex: 1 },
+  emptyMsg:   { margin: 0, padding: '1.5rem', color: '#888', fontSize: '0.9rem' },
   confirmBody: {
     padding: '1.25rem 1.5rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem',
   },
-  confirmText: { margin: 0, fontSize: '0.95rem', color: '#111', lineHeight: 1.5 },
+  confirmText:    { margin: 0, fontSize: '0.95rem', color: '#111', lineHeight: 1.5 },
   confirmSubText: { margin: 0, fontSize: '0.85rem', color: '#666' },
-  confirmBtns: { display: 'flex', gap: '0.75rem', marginTop: '0.5rem' },
+  confirmBtns:    { display: 'flex', gap: '0.75rem', marginTop: '0.5rem' },
   cancelBtn: {
     flex: 1, padding: '0.7rem 1rem', fontSize: '0.95rem', fontWeight: 600,
     backgroundColor: '#f5f5f5', color: '#333', border: '1px solid #e5e5e5',
@@ -795,7 +927,7 @@ const mStyles = {
   },
   loadingDot: { fontWeight: 400, color: '#aaa' },
 
-  // Stage selector rows
+  // Stage / sub-group selector rows
   stageOption: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '0.875rem 1rem', background: 'none', border: 'none',
@@ -806,8 +938,8 @@ const mStyles = {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '0.875rem 1rem', borderRadius: '8px', opacity: 0.4, cursor: 'default',
   },
-  stageLeft:  { display: 'flex', flexDirection: 'column', gap: '2px' },
-  stageRight: { display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 },
+  stageLeft:        { display: 'flex', flexDirection: 'column', gap: '2px' },
+  stageRight:       { display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 },
   stageLabel:       { fontSize: '0.95rem', fontWeight: 600, color: '#111' },
   stageLabelLocked: { fontSize: '0.95rem', fontWeight: 600, color: '#555' },
   stageSub:         { fontSize: '0.72rem', color: '#aaa', fontWeight: 500 },
