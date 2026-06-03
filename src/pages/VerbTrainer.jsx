@@ -90,23 +90,28 @@ function EyeSlashIcon() {
   )
 }
 
+// ── Medal icon (SVG, no emoji) ────────────────────────────────────────────────
+function MedalIcon({ color, earned }) {
+  const c = earned ? color : '#e5e7eb'
+  return (
+    <svg width="14" height="18" viewBox="0 0 14 18" style={{ display: 'block', flexShrink: 0 }}>
+      <rect x="4.5" y="0" width="5" height="6" rx="1" fill={c} />
+      <circle cx="7" cy="13" r="5" fill={c} />
+    </svg>
+  )
+}
+
 // ── In-modal verb progress row ────────────────────────────────────────────────
 function VerbProgressRow({ verb, prog, onToggleHidden }) {
   const stage   = prog?.stage    ?? 1
   const l4Score = prog?.l4_score ?? 0
   const hidden  = prog?.hidden   ?? false
-  const flags = {
-    l1: stage >= 2 || l4Score >= 5,
-    l2: stage >= 3 || l4Score >= 5,
-    l3: stage >= 4 || l4Score >= 5,
-    l4: l4Score >= 5,
-    t1: (prog?.t1_score ?? 0) >= 3,
-    t2: (prog?.t2_score ?? 0) >= 3,
-    t3: (prog?.t3_score ?? 0) >= 3,
-  }
+  const l2 = stage >= 3 || l4Score >= 5
+  const l3 = stage >= 4 || l4Score >= 5
+  const l4 = l4Score >= 5
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: '0.75rem',
+      display: 'flex', alignItems: 'center', gap: '0.5rem',
       padding: '0.6rem 1rem', borderBottom: '1px solid #f5f5f5',
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -114,11 +119,13 @@ function VerbProgressRow({ verb, prog, onToggleHidden }) {
           {verb.spanish_infinitive}
         </div>
         <div style={{ fontSize: '0.72rem', color: '#aaa' }}>{verb.english}</div>
-        <MasteryStrip7 {...flags} locked={false} />
       </div>
+      <MedalIcon color="#cd7f32" earned={l2} />
+      <MedalIcon color="#a8a9ad" earned={l3} />
+      <MedalIcon color="#f5c518" earned={l4} />
       <button
         onClick={() => onToggleHidden(verb.id)}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', flexShrink: 0, color: hidden ? '#3b82f6' : '#ccc' }}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', marginLeft: '2px', flexShrink: 0, color: hidden ? '#3b82f6' : '#ccc' }}
       >
         {hidden ? <EyeSlashIcon /> : <EyeIcon />}
       </button>
