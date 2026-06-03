@@ -212,6 +212,17 @@ function TenseHeader({ color }) {
   )
 }
 
+function MedalHeader({ color }) {
+  return (
+    <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>
+      <svg width="11" height="14" viewBox="0 0 14 18" style={{ display: 'block', margin: '0 auto' }}>
+        <rect x="4.5" y="0" width="5" height="6" rx="1" fill={color} />
+        <circle cx="7" cy="13" r="5" fill={color} />
+      </svg>
+    </th>
+  )
+}
+
 // ── L1: Drag & Match ──────────────────────────────────────────────────────────
 // Props: roundVerbs [{id, english, spanish_infinitive}], onComplete(verbIds[])
 function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
@@ -1141,13 +1152,9 @@ export default function VerbQuiz() {
                 <tr>
                   <th style={{ ...styles.thLeft, textAlign: 'center', position: 'sticky', top: 0 }}>Spanish</th>
                   <th style={{ ...styles.thLeft, textAlign: 'center', position: 'sticky', top: 0 }}>English</th>
-                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>✓</th>
-                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>🥉</th>
-                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>🥈</th>
-                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>🥇</th>
-                  <TenseHeader color="#3b82f6" />
-                  <TenseHeader color="#f97316" />
-                  <TenseHeader color="#16a34a" />
+                  <MedalHeader color="#cd7f32" />
+                  <MedalHeader color="#a8a9ad" />
+                  <MedalHeader color="#f5c518" />
                   <th style={{ ...styles.thRight, position: 'sticky', top: 0 }} />
                 </tr>
               </thead>
@@ -1157,13 +1164,9 @@ export default function VerbQuiz() {
                   const stage = prog?.stage ?? 1
                   const isMastered = prog?.mastered ?? false
                   const l4Score = prog?.l4_score ?? 0
-                  const l1done = stage >= 2 || isMastered
                   const l2done = stage >= 3 || isMastered
                   const l3done = stage >= 4 || isMastered
                   const l4done = isMastered || (stage === 4 && l4Score >= 5)
-                  const t1done = (prog?.t1_score ?? 0) >= 3
-                  const t2done = (prog?.t2_score ?? 0) >= 3
-                  const t3done = (prog?.t3_score ?? 0) >= 3
                   const verbResult = resultByVerbId[verb.id]
                   const textColor = verbResult === 'exact' ? '#16a34a' : verbResult === 'close' ? '#d97706' : verbResult === 'wrong' ? '#dc2626' : '#333'
                   const isHidden = hiddenVerbs.has(verb.id)
@@ -1171,13 +1174,9 @@ export default function VerbQuiz() {
                     <tr key={verb.id} style={styles.tableRow}>
                       <td style={{ ...styles.tdEn, color: textColor }}>{verb.spanish_infinitive}</td>
                       <td style={{ ...styles.tdEs, color: textColor }}>{verb.english}</td>
-                      <StageCell done={l1done} />
                       <StageCell done={l2done} />
                       <StageCell done={l3done} />
                       <StageCell done={l4done} />
-                      <TenseCell done={t1done} color="#3b82f6" />
-                      <TenseCell done={t2done} color="#f97316" />
-                      <TenseCell done={t3done} color="#16a34a" />
                       <td style={styles.tdHide}>
                         <button
                           style={{ ...styles.hideBtn, color: isHidden ? '#3b82f6' : '#bbb' }}
