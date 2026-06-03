@@ -9,7 +9,6 @@ const PERSONS = [
   { label: 'Tú',          key: 'tu'       },
   { label: 'Él/Ella',     key: 'el'       },
   { label: 'Nosotros',    key: 'nosotros' },
-  { label: 'Vosotros',    key: null       },
   { label: 'Ellos/Ellas', key: 'ellos'   },
 ]
 
