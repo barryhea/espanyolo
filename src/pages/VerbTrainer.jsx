@@ -751,7 +751,10 @@ export default function VerbTrainer() {
                   {STAGES.map(stage => stage.locked ? (
                     <div key={stage.key} style={mStyles.stageOptionLocked}>
                       <div style={mStyles.stageLeft}>
-                        <span style={mStyles.stageLabelLocked}>{stage.name}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: '#e5e7eb', flexShrink: 0 }} />
+                          <span style={mStyles.stageLabelLocked}>{stage.name}</span>
+                        </div>
                       </div>
                       <div style={mStyles.stageRight}>
                         <span style={mStyles.stageProgressText}>Locked</span>
@@ -766,7 +769,7 @@ export default function VerbTrainer() {
                     >
                       <div style={mStyles.stageLeft}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: stage.complete ? stage.color : '#e5e7eb', flexShrink: 0 }} />
+                          <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: stage.complete ? '#22c55e' : '#f59e0b', flexShrink: 0 }} />
                           <span style={mStyles.stageLabel}>{stage.name}</span>
                         </div>
                       </div>
