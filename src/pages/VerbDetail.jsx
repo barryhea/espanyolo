@@ -84,9 +84,9 @@ export default function VerbDetail() {
       const progressPromise = user
         ? supabase
             .from('user_verb_progress')
-            .select('times_seen, times_correct, times_incorrect, current_stage, l4_score, t1_score, t2_score, t3_score')
+            .select('current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, t1_score, t2_score, t3_score')
             .eq('user_id', user.id)
-            .eq('verb_id', verbId)
+            .eq('verb_id', Number(verbId))
             .maybeSingle()
         : Promise.resolve({ data: null })
 
@@ -116,12 +116,30 @@ export default function VerbDetail() {
     )
   }
 
-  const attempts  = progress?.times_seen      ?? 0
-  const correct   = progress?.times_correct   ?? 0
-  const incorrect = progress?.times_incorrect ?? 0
-
   const stage   = progress?.current_stage ?? 1
   const l4Score = progress?.l4_score     ?? 0
+
+  // Derive display stats from the columns that are actually stored
+  const levelLabel = (l4Score >= 5) ? 'Mastered'
+    : stage >= 4 ? 'L4'
+    : stage >= 3 ? 'L3'
+    : stage >= 2 ? 'L2'
+    : 'L1'
+
+  const stageScore = stage === 1
+    ? (progress?.drag_match_score ?? 0)
+    : stage === 2 ? (progress?.stage2_mastery ?? 0)
+    : stage === 3 ? (progress?.stage3_mastery ?? 0)
+    : l4Score
+
+  const stageScoreMax = stage === 1 ? 5 : stage === 2 ? 3 : stage === 3 ? 3 : 5
+
+  const tensesMastered = [
+    (progress?.t1_score ?? 0) >= 3,
+    (progress?.t2_score ?? 0) >= 3,
+    (progress?.t3_score ?? 0) >= 3,
+  ].filter(Boolean).length
+
   const stageFlags = {
     l1: stage >= 2 || l4Score >= 5,
     l2: stage >= 3 || l4Score >= 5,
@@ -161,9 +179,9 @@ export default function VerbDetail() {
 
         {/* Stat callouts */}
         <div style={styles.statsRow}>
-          <StatCallout label="Attempts"  value={attempts} />
-          <StatCallout label="Correct"   value={correct}   color="#16a34a" />
-          <StatCallout label="Incorrect" value={incorrect} color="#dc2626" />
+          <StatCallout label="Level"     value={levelLabel} color="#111" />
+          <StatCallout label="Score"     value={`${stageScore}/${stageScoreMax}`} color="#3b82f6" />
+          <StatCallout label="Tenses"    value={`${tensesMastered}/3`} color="#16a34a" />
         </div>
 
         {/* Stage progress */}
