@@ -141,7 +141,8 @@ export default function Dashboard() {
   const [modalProgress, setModalProgress] = useState({})
   const [modalLoading, setModalLoading] = useState(false)
 
-  const [resetting, setResetting] = useState(false)
+  const [resetting, setResetting]   = useState(false)
+  const [resetTarget, setResetTarget] = useState(1)
 
   // Custom Quiz selector state
   const [selectorOpen, setSelectorOpen] = useState(false)
@@ -310,11 +311,21 @@ export default function Dashboard() {
   async function handleResetTheme() {
     if (!modalTheme || !user || resetting) return
     setResetting(true)
-    const wordIds = modalWords.map(w => w.id)
+    const target = resetTarget
+    const wordIds = modalWords
+      .filter(w => {
+        const prog    = modalProgress[w.id]
+        const stage   = prog?.stage   ?? 1
+        const mastered = prog?.mastered ?? false
+        if (target === 1) return true
+        if (target === 2) return stage >= 2 || mastered
+        return stage >= 3 || mastered
+      })
+      .map(w => w.id)
     if (wordIds.length > 0) {
       await supabase
         .from('user_word_progress')
-        .update({ stage: 1, consecutive_correct: 0, mastered: false })
+        .update({ stage: target, consecutive_correct: 0, mastered: false })
         .eq('user_id', user.id)
         .in('word_id', wordIds)
     }
@@ -463,7 +474,10 @@ export default function Dashboard() {
 
             <div style={styles.modalHeader}>
               {modalView !== 'menu' && (
-                <button style={styles.modalBackBtn} onClick={() => setModalView('menu')}>←</button>
+                <button style={styles.modalBackBtn} onClick={() => {
+                  if (modalView === 'confirm-reset') setModalView('reset-level-select')
+                  else setModalView('menu')
+                }}>←</button>
               )}
               <h2 style={styles.modalTitle}>{modalTheme.title}</h2>
               <button style={styles.closeBtn} onClick={closeModal}>✕</button>
@@ -507,13 +521,13 @@ export default function Dashboard() {
                 </button>
                 <button
                   style={styles.menuOptionDestructive}
-                  onClick={() => setModalView('confirm-reset')}
+                  onClick={() => setModalView('reset-level-select')}
                   disabled={modalLoading}
                 >
                   <span style={styles.menuOptionLabelDestructive}>
-                    Reset to S1 {modalLoading && <span style={styles.loadingDot}>…</span>}
+                    Reset Level {modalLoading && <span style={styles.loadingDot}>…</span>}
                   </span>
-                  <span style={styles.menuOptionDesc}>Restart all words from Stage 1</span>
+                  <span style={styles.menuOptionDesc}>Roll back progress to a chosen stage</span>
                 </button>
               </div>
             )}
@@ -560,24 +574,46 @@ export default function Dashboard() {
               </div>
             )}
 
-            {modalView === 'confirm-reset' && (
-              <div style={styles.confirmBody}>
-                <p style={styles.confirmText}>
-                  All S2 and S3 progress for <strong>{modalTheme.title}</strong> will be reset to Stage 1.
-                </p>
-                <p style={styles.confirmSubText}>
-                  Hidden words will be preserved.
-                </p>
-                <div style={styles.confirmBtns}>
-                  <button style={styles.cancelBtn} onClick={() => setModalView('menu')} disabled={resetting}>
-                    Cancel
+            {modalView === 'reset-level-select' && (
+              <div style={styles.menuList}>
+                {[
+                  { label: 'Stage One',   value: 1, desc: 'Reset all words back to the start of Stage 1' },
+                  { label: 'Stage Two',   value: 2, desc: 'Reset words at S2 or above back to Stage 2'   },
+                  { label: 'Stage Three', value: 3, desc: 'Reset words at S3 back to Stage 3'            },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    style={styles.menuOption}
+                    onClick={() => { setResetTarget(opt.value); setModalView('confirm-reset') }}
+                  >
+                    <span style={styles.menuOptionLabel}>{opt.label}</span>
+                    <span style={styles.menuOptionDesc}>{opt.desc}</span>
                   </button>
-                  <button style={styles.confirmResetBtn} onClick={handleResetTheme} disabled={resetting}>
-                    {resetting ? 'Resetting…' : 'Reset'}
-                  </button>
-                </div>
+                ))}
               </div>
             )}
+
+            {modalView === 'confirm-reset' && (() => {
+              const STAGE_NAMES = ['Stage One', 'Stage Two', 'Stage Three']
+              const stageName = STAGE_NAMES[resetTarget - 1]
+              const msg = resetTarget === 1
+                ? `All word progress for ${modalTheme.title} will be reset to Stage One.`
+                : `Words at Stage ${resetTarget} or above in ${modalTheme.title} will be reset to ${stageName}.`
+              return (
+                <div style={styles.confirmBody}>
+                  <p style={styles.confirmText}>{msg}</p>
+                  <p style={styles.confirmSubText}>Hidden words will be preserved.</p>
+                  <div style={styles.confirmBtns}>
+                    <button style={styles.cancelBtn} onClick={() => setModalView('reset-level-select')} disabled={resetting}>
+                      Cancel
+                    </button>
+                    <button style={styles.confirmResetBtn} onClick={handleResetTheme} disabled={resetting}>
+                      {resetting ? 'Resetting…' : 'Reset'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
 
           </div>
         </div>

@@ -152,6 +152,7 @@ export default function VerbTrainer() {
   const [modalVerbProgress, setModalVerbProgress] = useState({})
   const [modalLoading, setModalLoading]           = useState(false)
   const [resetting, setResetting]                 = useState(false)
+  const [resetTarget, setResetTarget]             = useState(1)
 
   useEffect(() => {
     if (user) loadProgress()
@@ -269,6 +270,8 @@ export default function VerbTrainer() {
     if (modalView === 'stage-select' && modalSubCat) {
       setModalSubCat(null)
       setModalView('subgroup-select')
+    } else if (modalView === 'confirm-reset') {
+      setModalView('reset-level-select')
     } else {
       setModalView('menu')
     }
@@ -318,15 +321,27 @@ export default function VerbTrainer() {
   async function handleReset() {
     if (!modalCat || !user || resetting) return
     setResetting(true)
-    const verbIds = modalVerbs.map(v => v.id)
+    const target = resetTarget
+    const verbIds = modalVerbs
+      .filter(v => {
+        const prog = modalVerbProgress[v.id]
+        const stage   = prog?.stage    ?? 1
+        const l4Score = prog?.l4_score ?? 0
+        if (target === 1) return true
+        if (target === 2) return stage >= 2
+        if (target === 3) return stage >= 3
+        return stage >= 4 || l4Score > 0
+      })
+      .map(v => v.id)
+    const updates =
+      target === 2 ? { current_stage: 2, stage2_mastery: 0, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, t1_score: 0, t2_score: 0, t3_score: 0 }
+      : target === 3 ? { current_stage: 3, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, t1_score: 0, t2_score: 0, t3_score: 0 }
+      : target === 4 ? { current_stage: 4, l4_score: 0, drag_match_score: 0, t1_score: 0, t2_score: 0, t3_score: 0 }
+      : { current_stage: 1, stage2_mastery: 0, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, t1_score: 0, t2_score: 0, t3_score: 0 }
     if (verbIds.length > 0) {
       await supabase
         .from('user_verb_progress')
-        .update({
-          current_stage: 1, stage2_mastery: 0, stage3_mastery: 0,
-          l4_score: 0, drag_match_score: 0,
-          t1_score: 0, t2_score: 0, t3_score: 0,
-        })
+        .update(updates)
         .eq('user_id', user.id)
         .in('verb_id', verbIds)
     }
@@ -508,14 +523,35 @@ export default function VerbTrainer() {
 
                 <button
                   style={mStyles.menuOptionDestructive}
-                  onClick={() => setModalView('confirm-reset')}
+                  onClick={() => setModalView('reset-level-select')}
                   disabled={modalLoading}
                 >
                   <span style={mStyles.menuOptionLabelDestructive}>
-                    Reset to L1 {modalLoading && <span style={mStyles.loadingDot}>…</span>}
+                    Reset Level {modalLoading && <span style={mStyles.loadingDot}>…</span>}
                   </span>
-                  <span style={mStyles.menuOptionDesc}>Restart all verbs from Level 1</span>
+                  <span style={mStyles.menuOptionDesc}>Roll back progress to a chosen level</span>
                 </button>
+              </div>
+            )}
+
+            {/* ── Reset level select ────────────────────────────────────── */}
+            {modalView === 'reset-level-select' && (
+              <div style={mStyles.menuList}>
+                {[
+                  { label: 'Level One',   value: 1, desc: 'Reset all verbs back to the start of Level 1' },
+                  { label: 'Level Two',   value: 2, desc: 'Reset verbs at L2 or above back to Level 2'   },
+                  { label: 'Level Three', value: 3, desc: 'Reset verbs at L3 or above back to Level 3'   },
+                  { label: 'Level Four',  value: 4, desc: 'Reset verbs at L4 back to Level 4'            },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    style={mStyles.menuOption}
+                    onClick={() => { setResetTarget(opt.value); setModalView('confirm-reset') }}
+                  >
+                    <span style={mStyles.menuOptionLabel}>{opt.label}</span>
+                    <span style={mStyles.menuOptionDesc}>{opt.desc}</span>
+                  </button>
+                ))}
               </div>
             )}
 
@@ -609,20 +645,25 @@ export default function VerbTrainer() {
             )}
 
             {/* ── Confirm reset view ─────────────────────────────────────── */}
-            {modalView === 'confirm-reset' && (
-              <div style={mStyles.confirmBody}>
-                <p style={mStyles.confirmText}>
-                  All progress for <strong>{modalCat.title}</strong> will be reset to Level 1 — including L1 through L4 and all tense stages.
-                </p>
-                <p style={mStyles.confirmSubText}>Hidden verb settings will be preserved.</p>
-                <div style={mStyles.confirmBtns}>
-                  <button style={mStyles.cancelBtn} onClick={() => setModalView('menu')} disabled={resetting}>Cancel</button>
-                  <button style={mStyles.confirmResetBtn} onClick={handleReset} disabled={resetting}>
-                    {resetting ? 'Resetting…' : 'Reset'}
-                  </button>
+            {modalView === 'confirm-reset' && (() => {
+              const LEVEL_NAMES = ['Level One', 'Level Two', 'Level Three', 'Level Four']
+              const levelName = LEVEL_NAMES[resetTarget - 1]
+              const msg = resetTarget === 1
+                ? `All progress for ${modalCat.title} will be reset to Level One.`
+                : `Verbs at Level ${resetTarget} or above in ${modalCat.title} will be reset to ${levelName}.`
+              return (
+                <div style={mStyles.confirmBody}>
+                  <p style={mStyles.confirmText}>{msg}</p>
+                  <p style={mStyles.confirmSubText}>Hidden verb settings will be preserved.</p>
+                  <div style={mStyles.confirmBtns}>
+                    <button style={mStyles.cancelBtn} onClick={() => setModalView('reset-level-select')} disabled={resetting}>Cancel</button>
+                    <button style={mStyles.confirmResetBtn} onClick={handleReset} disabled={resetting}>
+                      {resetting ? 'Resetting…' : 'Reset'}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* ── Stage selector ─────────────────────────────────────────── */}
             {modalView === 'stage-select' && (() => {
