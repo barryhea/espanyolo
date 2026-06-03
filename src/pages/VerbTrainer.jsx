@@ -388,7 +388,7 @@ export default function VerbTrainer() {
                 ) : (
                   <button
                     style={mStyles.menuOption}
-                    onClick={() => { closeModal(); navigate(`/verb-quiz/${modalCat.id}`) }}
+                    onClick={() => setModalView('stage-select')}
                   >
                     <span style={mStyles.menuOptionLabel}>Start Quiz</span>
                     <span style={mStyles.menuOptionDesc}>Practice verbs in this category</span>
@@ -492,6 +492,94 @@ export default function VerbTrainer() {
                 </div>
               </div>
             )}
+
+            {/* ── Stage selector ─────────────────────────────────────────── */}
+            {modalView === 'stage-select' && (() => {
+              const t      = categoryTense[modalCat.title] ?? {}
+              const stats  = categoryStats[modalCat.title] ?? { total: 0, mastered: 0 }
+              const total  = stats.total
+              const loading = modalLoading
+
+              const tCount = key => loading
+                ? '…'
+                : modalVerbs.filter(v => (modalVerbProgress[v.id]?.[`${key}_score`] ?? 0) >= 3).length
+
+              const STAGES = [
+                {
+                  key:      'infinitive',
+                  name:     'Infinitive',
+                  sub:      'L1 → L4',
+                  locked:   false,
+                  complete: !!t.allL4Done,
+                  progress: loading ? '…' : `${stats.mastered} / ${total} mastered`,
+                  color:    '#f5c518',
+                },
+                {
+                  key:      't1',
+                  name:     'Present Tense',
+                  sub:      'T1',
+                  locked:   !t.allL4Done,
+                  complete: !!t.t1Done,
+                  progress: loading ? '…' : `${tCount('t1')} / ${total} mastered`,
+                  color:    '#3b82f6',
+                },
+                {
+                  key:      't2',
+                  name:     'Past Tense',
+                  sub:      'T2',
+                  locked:   !t.t1Done,
+                  complete: !!t.t2Done,
+                  progress: loading ? '…' : `${tCount('t2')} / ${total} mastered`,
+                  color:    '#f97316',
+                },
+                {
+                  key:      't3',
+                  name:     'Future Tense',
+                  sub:      'T3',
+                  locked:   !t.t2Done,
+                  complete: !!t.t3Done,
+                  progress: loading ? '…' : `${tCount('t3')} / ${total} mastered`,
+                  color:    '#16a34a',
+                },
+              ]
+
+              return (
+                <div style={mStyles.menuList}>
+                  {STAGES.map(stage => stage.locked ? (
+                    <div key={stage.key} style={mStyles.stageOptionLocked}>
+                      <div style={mStyles.stageLeft}>
+                        <span style={mStyles.stageLabelLocked}>{stage.name}</span>
+                        <span style={mStyles.stageSub}>{stage.sub}</span>
+                      </div>
+                      <div style={mStyles.stageRight}>
+                        <span style={mStyles.stageProgressText}>Locked</span>
+                        <span style={{ fontSize: '0.9rem', lineHeight: 1 }}>🔒</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      key={stage.key}
+                      style={mStyles.stageOption}
+                      onClick={() => { closeModal(); navigate(`/verb-quiz/${modalCat.id}`) }}
+                    >
+                      <div style={mStyles.stageLeft}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: stage.complete ? stage.color : '#e5e7eb', flexShrink: 0 }} />
+                          <span style={mStyles.stageLabel}>{stage.name}</span>
+                        </div>
+                        <span style={mStyles.stageSub}>{stage.sub}</span>
+                      </div>
+                      <div style={mStyles.stageRight}>
+                        <span style={{ ...mStyles.stageProgressText, color: stage.complete ? '#16a34a' : '#888' }}>
+                          {stage.complete ? 'Complete ✓' : stage.progress}
+                        </span>
+                        <span style={mStyles.stageChevron}>›</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )
+            })()}
 
           </div>
         </div>
@@ -706,4 +794,23 @@ const mStyles = {
     borderRadius: '8px', cursor: 'pointer',
   },
   loadingDot: { fontWeight: 400, color: '#aaa' },
+
+  // Stage selector rows
+  stageOption: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '0.875rem 1rem', background: 'none', border: 'none',
+    borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left',
+    transition: 'background-color 0.12s',
+  },
+  stageOptionLocked: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '0.875rem 1rem', borderRadius: '8px', opacity: 0.4, cursor: 'default',
+  },
+  stageLeft:  { display: 'flex', flexDirection: 'column', gap: '2px' },
+  stageRight: { display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 },
+  stageLabel:       { fontSize: '0.95rem', fontWeight: 600, color: '#111' },
+  stageLabelLocked: { fontSize: '0.95rem', fontWeight: 600, color: '#555' },
+  stageSub:         { fontSize: '0.72rem', color: '#aaa', fontWeight: 500 },
+  stageProgressText:{ fontSize: '0.78rem', color: '#888' },
+  stageChevron:     { fontSize: '1.1rem', color: '#ccc' },
 }
