@@ -15,38 +15,36 @@ const PATTERNED_SUB_CATS = [
 ]
 
 // ── Stage strip ───────────────────────────────────────────────────────────────
-const STRIP_SEGS = [
-  { key: 'l1', label: 'L1',   color: '#22c55e' },
-  { key: 'l2', label: 'L2',   color: '#cd7f32' },
-  { key: 'l3', label: 'L3',   color: '#a8a9ad' },
-  { key: 'l4', label: 'L4',   color: '#f5c518' },
-  { key: 't1', label: 'Pres', color: '#3b82f6' },
-  { key: 't2', label: 'Past', color: '#f97316' },
-  { key: 't3', label: 'Fut',  color: '#16a34a' },
-]
+function segColors(complete, active) {
+  if (complete) return { bar: '#22c55e', text: '#22c55e' }
+  if (active)   return { bar: '#f59e0b', text: '#f59e0b' }
+  return          { bar: '#e5e7eb', text: '#d1d5db' }
+}
 
 function MasteryStrip7({ l1, l2, l3, l4, t1, t2, t3, locked }) {
-  const done = { l1, l2, l3, l4, t1, t2, t3 }
+  const tenseSegs = [
+    { label: 'Inf.',  ...segColors(!!l4,       !locked && !l4)                },
+    { label: 'Pres.', ...segColors(!!t1,       !locked && !!l4 && !t1)        },
+    { label: 'Past',  ...segColors(!!t2,       !locked && !!t1 && !t2)        },
+    { label: 'Fut.',  ...segColors(!!t3,       !locked && !!t2 && !t3)        },
+  ]
+  const lSegs = [
+    { label: 'L1', ...segColors(!!l1, !locked && !l1)                         },
+    { label: 'L2', ...segColors(!!l2, !locked && !!l1 && !l2)                 },
+    { label: 'L3', ...segColors(!!l3, !locked && !!l2 && !l3)                 },
+    { label: 'L4', ...segColors(!!l4, !locked && !!l3 && !l4)                 },
+  ]
+  const seg = ({ label, bar, text }) => (
+    <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+      <div style={{ width: '14px', height: '5px', borderRadius: '2px', backgroundColor: bar }} />
+      <span style={{ fontSize: '0.46rem', fontWeight: 700, lineHeight: 1, color: text }}>{label}</span>
+    </div>
+  )
   return (
     <div style={{ display: 'flex', gap: '3px', marginTop: '5px', alignItems: 'flex-end' }}>
-      {STRIP_SEGS.map(({ key, label, color }, i) => {
-        const isDone = done[key]
-        return (
-          <div key={key} style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px',
-            marginLeft: i === 4 ? '4px' : 0,
-          }}>
-            <div style={{
-              width: '14px', height: '5px', borderRadius: '2px',
-              backgroundColor: locked ? '#e5e7eb' : isDone ? color : '#f0f0f0',
-            }} />
-            <span style={{
-              fontSize: '0.46rem', fontWeight: 700, lineHeight: 1,
-              color: locked ? '#d1d5db' : isDone ? color : '#ccc',
-            }}>{label}</span>
-          </div>
-        )
-      })}
+      {tenseSegs.map(seg)}
+      <div style={{ width: '1px', height: '14px', backgroundColor: '#e5e7eb', margin: '0 1px', flexShrink: 0 }} />
+      {lSegs.map(seg)}
     </div>
   )
 }
