@@ -499,6 +499,31 @@ export default function VerbTrainer() {
                   </button>
                 )}
 
+                {!modalCat.locked && (
+                  <button
+                    style={mStyles.menuOption}
+                    onClick={() => {
+                      const categoryTitles = modalCat.isPatterned
+                        ? PATTERNED_SUB_CATS.map(sc => sc.title)
+                        : [modalCat.title]
+                      closeModal()
+                      navigate('/verb-custom-quiz-select', {
+                        state: {
+                          verbs: modalVerbs,
+                          categoryTitle: modalCat.title,
+                          categoryTitles,
+                        },
+                      })
+                    }}
+                    disabled={modalLoading}
+                  >
+                    <span style={mStyles.menuOptionLabel}>
+                      Custom Quiz {modalLoading && <span style={mStyles.loadingDot}>…</span>}
+                    </span>
+                    <span style={mStyles.menuOptionDesc}>Choose which verbs and levels to practise</span>
+                  </button>
+                )}
+
                 <button
                   style={mStyles.menuOption}
                   onClick={() => setModalView('progress')}
