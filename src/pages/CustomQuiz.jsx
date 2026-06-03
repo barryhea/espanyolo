@@ -50,8 +50,8 @@ function pickDistractors(word, allWords, count = 3) {
   return pool.slice(0, count).map(w => w.spanish)
 }
 
-function buildQuestion(word, allWords, progressMap) {
-  const stage = progressMap[word.id]?.stage ?? 1
+function buildQuestion(word, allWords, progressMap, forcedStage = null) {
+  const stage = forcedStage ?? (progressMap[word.id]?.stage ?? 1)
   if (stage === 1 && allWords.length >= 4) {
     const options = shuffle([word.spanish, ...pickDistractors(word, allWords)])
     return { type: 'mc', word, options, prompt: word.english, promptLabel: 'What is the Spanish for:', correct: word.spanish, stage }
@@ -108,12 +108,23 @@ function buildCustomSession(words, progressMap) {
   return session
 }
 
+function buildSelectionsSession(selections) {
+  const pairs = []
+  for (const sel of selections) {
+    for (const stage of sel.stages) {
+      pairs.push({ word: sel.word, forcedStage: stage })
+    }
+  }
+  return shuffle(pairs)
+}
+
 export default function CustomQuiz() {
   const location = useLocation()
   const navigate = useNavigate()
   const { user } = useAuth()
 
   const words = location.state?.words ?? []
+  const selections = location.state?.selections ?? null
   const progressRef = useRef({})
   const inputRef = useRef(null)
 
@@ -127,8 +138,8 @@ export default function CustomQuiz() {
   const [results, setResults] = useState([])
 
   useEffect(() => {
-    if (user && words.length) loadCustomQuiz()
-    else if (user && !words.length) setPhase('error')
+    if (user && (words.length || selections?.length)) loadCustomQuiz()
+    else if (user) setPhase('error')
   }, [user?.id])
 
   useEffect(() => {
@@ -138,7 +149,8 @@ export default function CustomQuiz() {
   async function loadCustomQuiz() {
     setPhase('loading')
 
-    const wordIds = words.map(w => w.id)
+    const wordObjs = selections ? selections.map(sel => sel.word) : words
+    const wordIds = wordObjs.map(w => w.id)
     const { data: progress } = await supabase
       .from('user_word_progress')
       .select('id, word_id, stage, consecutive_correct, hidden, mastered')
@@ -162,7 +174,9 @@ export default function CustomQuiz() {
     }
 
     progressRef.current = progMap
-    const sess = buildCustomSession(words, progMap)
+    const sess = selections
+      ? buildSelectionsSession(selections)
+      : buildCustomSession(words, progMap)
 
     setSession(sess)
     setCurrentIdx(0)
@@ -176,7 +190,10 @@ export default function CustomQuiz() {
       return
     }
 
-    setQuestion(buildQuestion(sess[0], words, progMap))
+    const first = sess[0]
+    const firstWord = selections ? first.word : first
+    const forcedStage = selections ? first.forcedStage : null
+    setQuestion(buildQuestion(firstWord, wordObjs, progMap, forcedStage))
     setPhase('question')
   }
 
@@ -230,7 +247,7 @@ export default function CustomQuiz() {
     }
 
     progressRef.current[wordId] = newProg
-    saveProgress(wordId)
+    if (!selections) saveProgress(wordId)
     setMatchResult(result)
     setSelectedOption(answer)
     setResults(r => [...r, { word: question.word, correct: isCorrect, result, stage: question.stage }])
@@ -244,7 +261,11 @@ export default function CustomQuiz() {
       return
     }
     setCurrentIdx(nextIdx)
-    setQuestion(buildQuestion(session[nextIdx], words, progressRef.current))
+    const nextItem = session[nextIdx]
+    const wordObjs = selections ? selections.map(s => s.word) : words
+    const nextWord = selections ? nextItem.word : nextItem
+    const forcedStage = selections ? nextItem.forcedStage : null
+    setQuestion(buildQuestion(nextWord, wordObjs, progressRef.current, forcedStage))
     setSelectedOption(null)
     setTypedAnswer('')
     setMatchResult(null)
@@ -255,7 +276,7 @@ export default function CustomQuiz() {
     return <div style={styles.page}><NavBar /><p style={styles.loadingMsg}>Loading…</p></div>
   }
 
-  if (phase === 'error' || (phase !== 'loading' && !words.length)) {
+  if (phase === 'error' || (phase !== 'loading' && !words.length && !selections?.length)) {
     return (
       <div style={styles.page}>
         <NavBar />
@@ -271,14 +292,19 @@ export default function CustomQuiz() {
 
   if (phase === 'summary') {
     const correctCount = results.filter(r => r.correct).length
-    const uniqueResults = []
-    const seen = new Set()
-    for (let i = results.length - 1; i >= 0; i--) {
-      if (!seen.has(results[i].word.id)) {
-        uniqueResults.unshift(results[i])
-        seen.add(results[i].word.id)
-      }
-    }
+    const displayResults = selections
+      ? results
+      : (() => {
+          const uniqueResults = []
+          const seen = new Set()
+          for (let i = results.length - 1; i >= 0; i--) {
+            if (!seen.has(results[i].word.id)) {
+              uniqueResults.unshift(results[i])
+              seen.add(results[i].word.id)
+            }
+          }
+          return uniqueResults
+        })()
     return (
       <div style={styles.page}>
         <NavBar rightContent={<span style={styles.headerLabel}>Custom Quiz</span>} />
@@ -294,16 +320,22 @@ export default function CustomQuiz() {
                 <tr>
                   <th style={styles.thLeft}>English</th>
                   <th style={styles.thLeft}>Spanish</th>
+                  {selections && <th style={{ ...styles.thResult, width: '36px', fontSize: '0.68rem', color: '#aaa', fontWeight: 700 }}>Stage</th>}
                   <th style={styles.thResult}></th>
                 </tr>
               </thead>
               <tbody>
-                {uniqueResults.map(({ word, result }) => {
+                {displayResults.map(({ word, result, stage }, i) => {
                   const textColor = result === 'exact' ? '#16a34a' : result === 'close' ? '#d97706' : result === 'wrong' ? '#dc2626' : '#333'
                   return (
-                    <tr key={word.id} style={styles.tableRow}>
+                    <tr key={`${word.id}-${stage}-${i}`} style={styles.tableRow}>
                       <td style={{ ...styles.tdEn, color: textColor }}>{word.english}</td>
                       <td style={{ ...styles.tdEs, color: textColor }}>{word.spanish}</td>
+                      {selections && (
+                        <td style={{ ...styles.tdResult, fontSize: '0.7rem', color: '#888', fontWeight: 600 }}>
+                          S{stage}
+                        </td>
+                      )}
                       <td style={styles.tdResult}>
                         {result === 'exact' && <span style={{ color: '#16a34a', fontWeight: 700 }}>✓</span>}
                         {result === 'close' && <span style={{ color: '#d97706', fontWeight: 700 }}>~</span>}

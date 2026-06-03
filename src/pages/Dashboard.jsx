@@ -150,8 +150,8 @@ export default function Dashboard() {
   const [selectorThemeId, setSelectorThemeId] = useState(null)
   const [selectorWords, setSelectorWords] = useState([])
   const [selectorLoading, setSelectorLoading] = useState(false)
-  const [selectedWordIds, setSelectedWordIds] = useState(new Set())
-  const [selectedWordMap, setSelectedWordMap] = useState({})
+  const [wordStages, setWordStages] = useState({})   // { [wordId]: Set<1|2|3> }
+  const [globalStage, setGlobalStage] = useState('all')
   const [selectorProgress, setSelectorProgress] = useState({})
 
   useEffect(() => {
@@ -302,8 +302,8 @@ export default function Dashboard() {
   async function openSelector(theme) {
     setSelectorSourceTheme(theme)
     closeModal()
-    setSelectedWordIds(new Set())
-    setSelectedWordMap({})
+    setWordStages({})
+    setGlobalStage('all')
     setSelectorOpen(true)
     await loadSelectorTheme(theme.id)
   }
@@ -369,11 +369,12 @@ export default function Dashboard() {
 
     setSelectorWords(wordList)
     setSelectorProgress(progMap)
-    setSelectedWordMap(prev => {
-      const next = { ...prev }
-      for (const w of wordList) if (!next[w.id]) next[w.id] = w
-      return next
+    setWordStages(() => {
+      const stages = {}
+      for (const w of wordList) stages[w.id] = new Set([1, 2, 3])
+      return stages
     })
+    setGlobalStage('all')
     setSelectorLoading(false)
   }
 
@@ -381,9 +382,6 @@ export default function Dashboard() {
     const prog = selectorProgress[wordId] ?? { stage: 1, consecutive_correct: 0, hidden: false, mastered: false, db_id: null }
     const willBeHidden = !prog.hidden
     setSelectorProgress(prev => ({ ...prev, [wordId]: { ...prog, hidden: willBeHidden } }))
-    if (willBeHidden) {
-      setSelectedWordIds(prev => { const next = new Set(prev); next.delete(wordId); return next })
-    }
     if (prog.db_id) {
       await supabase.from('user_word_progress').update({ hidden: willBeHidden }).eq('id', prog.db_id)
     } else {
@@ -395,20 +393,40 @@ export default function Dashboard() {
     }
   }
 
-  function toggleWordSelection(wordId) {
-    setSelectedWordIds(prev => {
-      const next = new Set(prev)
-      next.has(wordId) ? next.delete(wordId) : next.add(wordId)
+  function applyGlobalStage(key) {
+    setGlobalStage(key)
+    setWordStages(() => {
+      const next = {}
+      for (const w of selectorWords) {
+        next[w.id] = selectorProgress[w.id]?.hidden
+          ? new Set()
+          : key === 'all' ? new Set([1, 2, 3]) : new Set([key])
+      }
       return next
     })
   }
 
+  function toggleWordStage(wordId, stage) {
+    setGlobalStage(null)
+    setWordStages(prev => {
+      const cur = new Set(prev[wordId] ?? [])
+      if (cur.has(stage)) {
+        if (cur.size === 1) return prev
+        cur.delete(stage)
+      } else {
+        cur.add(stage)
+      }
+      return { ...prev, [wordId]: cur }
+    })
+  }
+
   function startCustomQuiz() {
-    const words = [...selectedWordIds].map(id => selectedWordMap[id]).filter(Boolean)
+    const selections = selectorWords
+      .filter(w => !selectorProgress[w.id]?.hidden && (wordStages[w.id]?.size ?? 0) > 0)
+      .map(w => ({ word: w, stages: [...(wordStages[w.id] ?? new Set())].sort() }))
     setSelectorOpen(false)
-    setSelectedWordIds(new Set())
-    setSelectedWordMap({})
-    navigate('/custom-quiz', { state: { words } })
+    setWordStages({})
+    navigate('/custom-quiz', { state: { selections } })
   }
 
   const hiddenWords = modalWords.filter(w => modalProgress[w.id]?.hidden)
@@ -620,115 +638,122 @@ export default function Dashboard() {
       )}
 
       {/* Custom Quiz word selector */}
-      {selectorOpen && (
-        <div style={styles.selectorOverlay}>
-          <div style={styles.selectorHeader}>
-            <button
-              style={styles.selectorBackBtn}
-              onClick={() => { setSelectorOpen(false); if (selectorSourceTheme) openModal(selectorSourceTheme) }}
-            >
-              ←
-            </button>
-            <div style={styles.selectorThemeWrap}>
-              <div style={styles.selectorThemePill}>
-                <select
-                  style={styles.selectorThemeSelect}
-                  value={selectorThemeId ?? ''}
-                  onChange={e => loadSelectorTheme(Number(e.target.value))}
-                >
-                  {VOCAB_THEMES.map(t => (
-                    <option key={t.id} value={t.id}>{t.title}</option>
-                  ))}
-                </select>
-                <span style={styles.selectorThemeChevron}>▾</span>
+      {selectorOpen && (() => {
+        const totalQuestions = selectorWords
+          .filter(w => !selectorProgress[w.id]?.hidden)
+          .reduce((n, w) => n + (wordStages[w.id]?.size ?? 0), 0)
+        return (
+          <div style={styles.selectorOverlay}>
+            <div style={styles.selectorHeader}>
+              <button
+                style={styles.selectorBackBtn}
+                onClick={() => { setSelectorOpen(false); if (selectorSourceTheme) openModal(selectorSourceTheme) }}
+              >
+                ←
+              </button>
+              <div style={styles.selectorThemeWrap}>
+                <div style={styles.selectorThemePill}>
+                  <select
+                    style={styles.selectorThemeSelect}
+                    value={selectorThemeId ?? ''}
+                    onChange={e => loadSelectorTheme(Number(e.target.value))}
+                  >
+                    {VOCAB_THEMES.map(t => (
+                      <option key={t.id} value={t.id}>{t.title}</option>
+                    ))}
+                  </select>
+                  <span style={styles.selectorThemeChevron}>▾</span>
+                </div>
               </div>
+              <button
+                style={totalQuestions > 0 ? styles.startQuizBtn : styles.startQuizBtnDisabled}
+                disabled={totalQuestions === 0}
+                onClick={startCustomQuiz}
+              >
+                {totalQuestions > 0 ? `Start (${totalQuestions})` : 'Start'}
+              </button>
             </div>
-            <button
-              style={selectedWordIds.size > 0 ? styles.startQuizBtn : styles.startQuizBtnDisabled}
-              disabled={selectedWordIds.size === 0}
-              onClick={startCustomQuiz}
-            >
-              {selectedWordIds.size > 0 ? `Start (${selectedWordIds.size})` : 'Start'}
-            </button>
+
+            {/* Global stage selector */}
+            <div style={styles.globalStageRow}>
+              {[
+                { key: 'all', label: 'All Stages' },
+                { key: 1,     label: 'Stage One'  },
+                { key: 2,     label: 'Stage Two'  },
+                { key: 3,     label: 'Stage Three'},
+              ].map(opt => (
+                <button
+                  key={opt.key}
+                  style={{ ...styles.globalStageBtn, ...(globalStage === opt.key ? styles.globalStageBtnActive : {}) }}
+                  onClick={() => applyGlobalStage(opt.key)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            <div style={styles.selectorBody}>
+              {selectorLoading ? (
+                <p style={styles.selectorEmptyMsg}>Loading…</p>
+              ) : selectorWords.length === 0 ? (
+                <p style={styles.selectorEmptyMsg}>No words found.</p>
+              ) : (
+                <table style={styles.selectorTable}>
+                  <thead>
+                    <tr>
+                      <th style={styles.selectorThLeft}>English</th>
+                      <th style={styles.selectorThLeft}>Spanish</th>
+                      <th style={styles.selectorThStage}>S1</th>
+                      <th style={styles.selectorThStage}>S2</th>
+                      <th style={styles.selectorThStage}>S3</th>
+                      <th style={styles.selectorThHide}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectorWords.map(word => {
+                      const isHidden = selectorProgress[word.id]?.hidden ?? false
+                      const stages = wordStages[word.id] ?? new Set()
+                      return (
+                        <tr
+                          key={word.id}
+                          style={{ ...styles.selectorTableRow, cursor: 'default', backgroundColor: isHidden ? '#f9f9f9' : '#fff' }}
+                        >
+                          <td style={{ ...styles.selectorTdEn, color: isHidden ? '#bbb' : '#333' }}>{word.english}</td>
+                          <td style={{ ...styles.selectorTdEs, color: isHidden ? '#bbb' : '#111' }}>{word.spanish}</td>
+                          {[1, 2, 3].map(s => (
+                            <td key={s} style={styles.selectorStageCell}>
+                              <button
+                                style={{
+                                  ...styles.stageToggleBtn,
+                                  ...(stages.has(s) && !isHidden ? styles.stageToggleBtnActive : {}),
+                                  ...(isHidden ? { opacity: 0.25, cursor: 'default' } : {}),
+                                }}
+                                onClick={() => !isHidden && toggleWordStage(word.id, s)}
+                                disabled={isHidden}
+                              >
+                                S{s}
+                              </button>
+                            </td>
+                          ))}
+                          <td style={styles.selectorHideCell}>
+                            <button
+                              style={{ ...styles.selectorHideBtn, color: isHidden ? '#3b82f6' : '#bbb' }}
+                              onClick={e => { e.stopPropagation(); toggleHiddenInSelector(word.id) }}
+                              title={isHidden ? 'Unhide' : 'Hide'}
+                            >
+                              {isHidden ? <EyeIcon /> : <EyeSlashIcon />}
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
-          <div style={styles.selectorBody}>
-            {selectorLoading ? (
-              <p style={styles.selectorEmptyMsg}>Loading…</p>
-            ) : selectorWords.length === 0 ? (
-              <p style={styles.selectorEmptyMsg}>No words found.</p>
-            ) : (
-              <table style={styles.selectorTable}>
-                <thead>
-                  <tr>
-                    <th style={styles.selectorThLeft}>English</th>
-                    <th style={styles.selectorThLeft}>Spanish</th>
-                    <th style={styles.selectorThCenter}>🥉</th>
-                    <th style={styles.selectorThCenter}>🥈</th>
-                    <th style={styles.selectorThCenter}>🥇</th>
-                    <th style={styles.selectorThCheck}></th>
-                    <th style={styles.selectorThHide}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectorWords.map(word => {
-                    const prog = selectorProgress[word.id]
-                    const stage = prog?.stage ?? 1
-                    const consec = prog?.consecutive_correct ?? 0
-                    const mastered = prog?.mastered ?? false
-                    const isHidden = prog?.hidden ?? false
-                    const s1done = stage >= 2 || mastered
-                    const s2done = stage >= 3 || mastered
-                    const s3done = mastered || (stage === 3 && consec >= 5)
-                    const selected = selectedWordIds.has(word.id)
-                    const rowBg = isHidden ? '#f9f9f9' : selected ? '#dcfce7' : '#fff'
-                    return (
-                      <tr
-                        key={word.id}
-                        style={{ ...styles.selectorTableRow, backgroundColor: rowBg }}
-                        onClick={() => !isHidden && toggleWordSelection(word.id)}
-                      >
-                        <td style={{ ...styles.selectorTdEn, color: isHidden ? '#bbb' : '#333' }}>{word.english}</td>
-                        <td style={{ ...styles.selectorTdEs, color: isHidden ? '#bbb' : '#111' }}>{word.spanish}</td>
-                        {isHidden ? (
-                          <>
-                            <td style={styles.selectorStageCell}><span style={{ color: '#d1d5db' }}>—</span></td>
-                            <td style={styles.selectorStageCell}><span style={{ color: '#d1d5db' }}>—</span></td>
-                            <td style={styles.selectorStageCell}><span style={{ color: '#d1d5db' }}>—</span></td>
-                          </>
-                        ) : (
-                          <>
-                            <td style={styles.selectorStageCell}>
-                              <span style={{ color: s1done ? '#16a34a' : '#d1d5db', fontWeight: 700 }}>{s1done ? '✓' : '✗'}</span>
-                            </td>
-                            <td style={styles.selectorStageCell}>
-                              <span style={{ color: s2done ? '#16a34a' : '#d1d5db', fontWeight: 700 }}>{s2done ? '✓' : '✗'}</span>
-                            </td>
-                            <td style={styles.selectorStageCell}>
-                              <span style={{ color: s3done ? '#16a34a' : '#d1d5db', fontWeight: 700 }}>{s3done ? '✓' : '✗'}</span>
-                            </td>
-                          </>
-                        )}
-                        <td style={styles.selectorCheckCell}>
-                          {selected && <span style={{ color: '#16a34a', fontWeight: 700 }}>✓</span>}
-                        </td>
-                        <td style={styles.selectorHideCell}>
-                          <button
-                            style={{ ...styles.selectorHideBtn, color: isHidden ? '#3b82f6' : '#bbb' }}
-                            onClick={e => { e.stopPropagation(); toggleHiddenInSelector(word.id) }}
-                            title={isHidden ? 'Unhide' : 'Hide'}
-                          >
-                            {isHidden ? <EyeIcon /> : <EyeSlashIcon />}
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
@@ -1344,4 +1369,34 @@ const styles = {
     lineHeight: 0,
     borderRadius: '4px',
   },
+
+  // Global stage selector row
+  globalStageRow: {
+    display: 'flex', flexWrap: 'wrap', gap: '0.4rem',
+    padding: '0.5rem 1rem',
+    borderBottom: '1px solid #e5e5e5',
+    backgroundColor: '#fff',
+    flexShrink: 0,
+  },
+  globalStageBtn: {
+    padding: '0.28rem 0.65rem', fontSize: '0.78rem', fontWeight: 600,
+    border: '1.5px solid #e5e5e5', borderRadius: '20px',
+    backgroundColor: '#fafafa', color: '#555', cursor: 'pointer', lineHeight: 1.4,
+  },
+  globalStageBtnActive: { backgroundColor: '#111', color: '#fff', borderColor: '#111' },
+
+  // Per-word stage toggle columns
+  selectorThStage: {
+    padding: '0.5rem 0.1rem', textAlign: 'center', fontSize: '0.68rem', fontWeight: 700,
+    color: '#aaa', borderBottom: '1px solid #f0f0f0', backgroundColor: '#fafafa',
+    width: '38px', position: 'sticky', top: 0,
+  },
+  stageToggleBtn: {
+    width: '30px', height: '22px', fontSize: '0.65rem', fontWeight: 700,
+    border: '1.5px solid #e5e5e5', borderRadius: '4px',
+    backgroundColor: '#fafafa', color: '#bbb', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    margin: '0 auto', padding: 0,
+  },
+  stageToggleBtnActive: { backgroundColor: '#3b82f6', borderColor: '#3b82f6', color: '#fff' },
 }
