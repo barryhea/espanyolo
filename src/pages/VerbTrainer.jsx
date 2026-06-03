@@ -28,12 +28,23 @@ function MasteryStrip7({ l1, l2, l3, l4, t1, t2, t3, locked }) {
     { label: 'Past',  ...segColors(!!t2,       !locked && !!t1 && !t2)        },
     { label: 'Fut.',  ...segColors(!!t3,       !locked && !!t2 && !t3)        },
   ]
-  const lSegs = [
-    { label: 'L1', ...segColors(!!l1, !locked && !l1)                         },
-    { label: 'L2', ...segColors(!!l2, !locked && !!l1 && !l2)                 },
-    { label: 'L3', ...segColors(!!l3, !locked && !!l2 && !l3)                 },
-    { label: 'L4', ...segColors(!!l4, !locked && !!l3 && !l4)                 },
-  ]
+  // Once all verbs have reached L4 mastery the tense phase begins.
+  // Re-map the L-bars to show tense stage progress so they reset rather
+  // than carrying over all-green from the infinitive phase.
+  const inTensePhase = !!l4
+  const lSegs = inTensePhase
+    ? [
+        { label: 'L1', ...segColors(!!t1,                !locked && !t1)         },
+        { label: 'L2', ...segColors(!!t2,                !locked && !!t1 && !t2) },
+        { label: 'L3', ...segColors(!!t3,                !locked && !!t2 && !t3) },
+        { label: 'L4', ...segColors(!!(t1 && t2 && t3),  false)                  },
+      ]
+    : [
+        { label: 'L1', ...segColors(!!l1, !locked && !l1)              },
+        { label: 'L2', ...segColors(!!l2, !locked && !!l1 && !l2)      },
+        { label: 'L3', ...segColors(!!l3, !locked && !!l2 && !l3)      },
+        { label: 'L4', ...segColors(!!l4, !locked && !!l3 && !l4)      },
+      ]
   const seg = ({ label, bar, text }) => (
     <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
       <div style={{ width: '14px', height: '5px', borderRadius: '2px', backgroundColor: bar }} />
