@@ -175,13 +175,16 @@ export default function VerbTrainer() {
   }, [modalCat])
 
   async function loadProgress() {
-    const [{ data: allVerbs }, { data: progressRows }] = await Promise.all([
+    const [{ data: allVerbs, error: verbsErr }, { data: progressRows, error: progressErr }] = await Promise.all([
       supabase.from('verbs').select('id, category'),
       supabase
         .from('user_verb_progress')
-        .select('verb_id, current_stage, l4_score, t1_score, t2_score, t3_score, t1_cj_stage, t2_cj_stage, t3_cj_stage')
+        .select('verb_id, current_stage, l4_score, t1_score, t2_score, t3_score')
         .eq('user_id', user.id),
     ])
+
+    if (verbsErr)    console.error('[VerbTrainer] loadProgress verbs error:', verbsErr)
+    if (progressErr) console.error('[VerbTrainer] loadProgress progress error:', progressErr)
 
     const verbsByCategory = {}
     for (const v of allVerbs ?? []) {
@@ -192,14 +195,11 @@ export default function VerbTrainer() {
     const progByVerb = {}
     for (const p of progressRows ?? []) {
       progByVerb[p.verb_id] = {
-        stage:       p.current_stage  ?? 1,
-        l4_score:    p.l4_score       ?? 0,
-        t1_score:    p.t1_score       ?? 0,
-        t2_score:    p.t2_score       ?? 0,
-        t3_score:    p.t3_score       ?? 0,
-        t1_cj_stage: p.t1_cj_stage   ?? 0,
-        t2_cj_stage: p.t2_cj_stage   ?? 0,
-        t3_cj_stage: p.t3_cj_stage   ?? 0,
+        stage:    p.current_stage ?? 1,
+        l4_score: p.l4_score     ?? 0,
+        t1_score: p.t1_score     ?? 0,
+        t2_score: p.t2_score     ?? 0,
+        t3_score: p.t3_score     ?? 0,
       }
     }
 
@@ -234,13 +234,9 @@ export default function VerbTrainer() {
       const allL2Done = any && verbIds.every(id => (progByVerb[id]?.stage    ?? 1) >= 3)
       const allL3Done = any && verbIds.every(id => (progByVerb[id]?.stage    ?? 1) >= 4)
       const allL4Done = any && verbIds.every(id => (progByVerb[id]?.l4_score ?? 0) >= 5)
-      const isAr   = cat.title === 'Verbs -AR'
-      const t1Done = allL4Done && verbIds.every(id =>
-        isAr ? (progByVerb[id]?.t1_cj_stage ?? 0) >= 4 : (progByVerb[id]?.t1_score ?? 0) >= 3)
-      const t2Done = t1Done && verbIds.every(id =>
-        isAr ? (progByVerb[id]?.t2_cj_stage ?? 0) >= 4 : (progByVerb[id]?.t2_score ?? 0) >= 3)
-      const t3Done = t2Done && verbIds.every(id =>
-        isAr ? (progByVerb[id]?.t3_cj_stage ?? 0) >= 4 : (progByVerb[id]?.t3_score ?? 0) >= 3)
+      const t1Done = allL4Done && verbIds.every(id => (progByVerb[id]?.t1_score ?? 0) >= 3)
+      const t2Done = t1Done    && verbIds.every(id => (progByVerb[id]?.t2_score ?? 0) >= 3)
+      const t3Done = t2Done    && verbIds.every(id => (progByVerb[id]?.t3_score ?? 0) >= 3)
       tense[cat.title] = { allL1Done, allL2Done, allL3Done, allL4Done, t1Done, t2Done, t3Done }
     }
 
@@ -311,11 +307,13 @@ export default function VerbTrainer() {
     if (!verbs?.length) { setModalLoading(false); return }
 
     const verbIds = verbs.map(v => v.id)
-    const { data: progress } = await supabase
+    const { data: progress, error: progressErr } = await supabase
       .from('user_verb_progress')
-      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, t1_score, t2_score, t3_score, t1_cj_stage, t2_cj_stage, t3_cj_stage, hidden')
+      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, t1_score, t2_score, t3_score, hidden')
       .eq('user_id', user.id)
       .in('verb_id', verbIds)
+
+    if (progressErr) console.error('[VerbTrainer] loadModalData progress error:', progressErr)
 
     const progMap = {}
     for (const p of progress ?? []) {
@@ -329,9 +327,6 @@ export default function VerbTrainer() {
         t1_score:         p.t1_score         ?? 0,
         t2_score:         p.t2_score         ?? 0,
         t3_score:         p.t3_score         ?? 0,
-        t1_cj_stage:      p.t1_cj_stage      ?? 0,
-        t2_cj_stage:      p.t2_cj_stage      ?? 0,
-        t3_cj_stage:      p.t3_cj_stage      ?? 0,
         hidden:           p.hidden           ?? false,
       }
     }
@@ -730,21 +725,14 @@ export default function VerbTrainer() {
 
               // Compute completion state from freshly loaded modal data so it reflects
               // the current DB state rather than the potentially stale categoryTense snapshot.
-              const isArCat = activeCatTitle === 'Verbs -AR'
               const localAllL4Done = !loading && activeVerbIds.length > 0
                 && activeVerbIds.every(id => (modalVerbProgress[id]?.l4_score ?? 0) >= 5)
-              const localT1Done = localAllL4Done && activeVerbIds.every(id =>
-                isArCat
-                  ? (modalVerbProgress[id]?.t1_cj_stage ?? 0) >= 4
-                  : (modalVerbProgress[id]?.t1_score    ?? 0) >= 3)
-              const localT2Done = localT1Done && activeVerbIds.every(id =>
-                isArCat
-                  ? (modalVerbProgress[id]?.t2_cj_stage ?? 0) >= 4
-                  : (modalVerbProgress[id]?.t2_score    ?? 0) >= 3)
-              const localT3Done = localT2Done && activeVerbIds.every(id =>
-                isArCat
-                  ? (modalVerbProgress[id]?.t3_cj_stage ?? 0) >= 4
-                  : (modalVerbProgress[id]?.t3_score    ?? 0) >= 3)
+              const localT1Done = localAllL4Done
+                && activeVerbIds.every(id => (modalVerbProgress[id]?.t1_score ?? 0) >= 3)
+              const localT2Done = localT1Done
+                && activeVerbIds.every(id => (modalVerbProgress[id]?.t2_score ?? 0) >= 3)
+              const localT3Done = localT2Done
+                && activeVerbIds.every(id => (modalVerbProgress[id]?.t3_score ?? 0) >= 3)
 
               const STAGES = [
                 {
