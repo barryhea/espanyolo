@@ -413,7 +413,7 @@ export default function VerbArTenseQuiz() {
     const correct = option === question.correct
     recordAnswer(question.verb.id, question.tenseKey, correct)
     setSelectedOpt(option)
-    setResults(r => [...r, { verb: question.verb, correct }])
+    setResults(r => [...r, { verb: question.verb, pronoun: question.pronoun, correct }])
     setPhase('feedback')
   }
 
@@ -427,7 +427,7 @@ export default function VerbArTenseQuiz() {
     const correct = result !== 'wrong'
     recordAnswer(question.verb.id, question.tenseKey, correct)
     setMatchResult(result)
-    setResults(r => [...r, { verb: question.verb, correct, matchResult: result }])
+    setResults(r => [...r, { verb: question.verb, pronoun: question.pronoun, correct, matchResult: result }])
     setPhase('feedback')
     if (!correct) setTypedAnswer('')
   }
@@ -553,15 +553,42 @@ export default function VerbArTenseQuiz() {
 
   if (phase === 'session-summary') {
     const correct = results.filter(r => r.correct).length
+    const pronounRows = PRONOUNS.map(p => {
+      const pr = results.filter(r => r.pronoun?.key === p.key)
+      return { label: p.label, correct: pr.filter(r => r.correct).length, total: pr.length }
+    })
     return (
       <div style={s.page}><NavBar />
         <main style={{ ...s.main, maxWidth: '560px' }}>
           <div style={s.card}>
-            <span style={s.tenseTag}>{tenseLabel}</span>
-            <p style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0.25rem 0 0', color: '#111' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+              <span style={s.tenseTag}>{tenseLabel}</span>
+              <span style={s.subTagSm}>Stage {activeSub + 1} · {subLabel}</span>
+            </div>
+            <p style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0.5rem 0 0.75rem', color: '#111' }}>
               {correct} / {results.length} correct
             </p>
-            <p style={{ margin: 0, fontSize: '0.82rem', color: '#888' }}>Stage {activeSub + 1} · {subLabel}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {pronounRows.map(row => (
+                <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{ width: '90px', fontSize: '0.85rem', color: '#555', flexShrink: 0 }}>
+                    {row.label}
+                  </span>
+                  <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} style={{
+                        width: '10px', height: '10px', borderRadius: '50%', boxSizing: 'border-box', flexShrink: 0,
+                        backgroundColor: i < Math.min(row.correct, 5) ? '#16a34a' : 'transparent',
+                        border: `2px solid ${i < Math.min(row.correct, 5) ? '#16a34a' : '#d1d5db'}`,
+                      }} />
+                    ))}
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: '#aaa', flexShrink: 0 }}>
+                    {row.correct} / {row.total}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
           <button style={{ ...s.primaryBtn, width: '100%' }} onClick={loadQuiz}>Continue</button>
           <button style={s.blueBtn} onClick={() => navigate('/verbs')}>← Back to Verb Trainer</button>
