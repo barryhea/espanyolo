@@ -112,6 +112,48 @@ function MedalIcon({ color, earned }) {
   )
 }
 
+// ── Pronouns ──────────────────────────────────────────────────────────────────
+const PRONOUNS = [
+  { key: 'yo',       label: 'Yo',            english: 'I'        },
+  { key: 'tu',       label: 'Tú',            english: 'You'      },
+  { key: 'el',       label: 'Él / Ella',     english: 'He / She' },
+  { key: 'nosotros', label: 'Nosotros',      english: 'We'       },
+  { key: 'ellos',    label: 'Ellos / Ellas', english: 'They'     },
+]
+
+// ── Pronoun progress view (Levels 2–4) ───────────────────────────────────────
+function PronounProgressView({ level, verbs, progMap }) {
+  const scoreKey   = level === 2 ? 't1_score' : level === 3 ? 't2_score' : 't3_score'
+  const tenseLabel = level === 2 ? 'Present Tense' : level === 3 ? 'Past Tense' : 'Future Tense'
+  const THRESHOLD  = 3
+  const visible    = verbs.filter(v => !progMap[v.id]?.hidden)
+  const total      = visible.length
+  const mastered   = visible.filter(v => (progMap[v.id]?.[scoreKey] ?? 0) >= THRESHOLD).length
+  const pct        = total > 0 ? mastered / total : 0
+  const barColor   = pct === 1 ? '#22c55e' : pct > 0 ? '#f59e0b' : '#d1d5db'
+
+  return (
+    <div>
+      <div style={{ padding: '0.6rem 1rem 0.35rem', fontSize: '0.72rem', color: '#aaa', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid #f5f5f5' }}>
+        {tenseLabel} · {mastered} / {total} verbs mastered
+      </div>
+      {PRONOUNS.map(p => (
+        <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderBottom: '1px solid #f5f5f5' }}>
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: barColor, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111' }}>{p.label}</div>
+            <div style={{ fontSize: '0.72rem', color: '#aaa' }}>{p.english}</div>
+          </div>
+          <span style={{ fontSize: '0.78rem', color: '#888', flexShrink: 0 }}>{mastered} / {total}</span>
+          <div style={{ width: '56px', height: '4px', backgroundColor: '#f0f0f0', borderRadius: '2px', overflow: 'hidden', flexShrink: 0 }}>
+            <div style={{ height: '100%', width: `${pct * 100}%`, backgroundColor: barColor, borderRadius: '2px' }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── In-modal verb progress row ────────────────────────────────────────────────
 function VerbProgressRow({ verb, prog, onToggleHidden }) {
   const stage   = prog?.stage    ?? 1
@@ -164,6 +206,7 @@ export default function VerbTrainer() {
   const [modalLoading, setModalLoading]           = useState(false)
   const [resetting, setResetting]                 = useState(false)
   const [resetTarget, setResetTarget]             = useState(1)
+  const [progressTab, setProgressTab]             = useState(null)
 
   useEffect(() => {
     if (user) loadProgress()
@@ -271,6 +314,7 @@ export default function VerbTrainer() {
     setModalView('menu')
     setModalVerbs([])
     setModalVerbProgress({})
+    setProgressTab(null)
     loadModalData(cardDesc)
   }
 
@@ -430,6 +474,13 @@ export default function VerbTrainer() {
   const hiddenModalVerbs    = modalVerbs.filter(v => modalVerbProgress[v.id]?.hidden)
   const modalDisplayTitle   = (modalView === 'stage-select' && modalSubCat) ? modalSubCat.title : modalCat?.title
   const showBackBtn         = modalView !== 'menu'
+
+  const visibleModalVerbs   = modalVerbs.filter(v => !modalVerbProgress[v.id]?.hidden)
+  const _allL4Done  = !modalLoading && visibleModalVerbs.length > 0 && visibleModalVerbs.every(v => (modalVerbProgress[v.id]?.l4_score ?? 0) >= 5)
+  const _allT1Done  = _allL4Done  && visibleModalVerbs.every(v => (modalVerbProgress[v.id]?.t1_score ?? 0) >= 3)
+  const _allT2Done  = _allT1Done  && visibleModalVerbs.every(v => (modalVerbProgress[v.id]?.t2_score ?? 0) >= 3)
+  const defaultProgressTab  = !_allL4Done ? 1 : !_allT1Done ? 2 : !_allT2Done ? 3 : 4
+  const activeProgressTab   = progressTab ?? defaultProgressTab
 
   return (
     <div style={styles.page}>
@@ -648,20 +699,39 @@ export default function VerbTrainer() {
                 {modalVerbs.length} verbs · {modalVerbs.filter(v => (modalVerbProgress[v.id]?.l4_score ?? 0) >= 5).length} L4 mastered · {hiddenModalVerbs.length} hidden
               </p>
             )}
+            {modalView === 'progress' && !modalLoading && (
+              <div style={mStyles.progressTabRow}>
+                {[1, 2, 3, 4].map(level => (
+                  <button
+                    key={level}
+                    style={activeProgressTab === level ? mStyles.progressTabActive : mStyles.progressTabBtn}
+                    onClick={() => setProgressTab(level)}
+                  >
+                    Level {level}
+                  </button>
+                ))}
+              </div>
+            )}
             {modalView === 'progress' && (
               <div style={mStyles.modalBody}>
                 {modalLoading
                   ? <p style={mStyles.emptyMsg}>Loading…</p>
                   : modalVerbs.length === 0
                     ? <p style={mStyles.emptyMsg}>No verbs in this category.</p>
-                    : modalVerbs.map(v => (
-                        <VerbProgressRow
-                          key={v.id}
-                          verb={v}
-                          prog={modalVerbProgress[v.id]}
-                          onToggleHidden={toggleHiddenInModal}
+                    : activeProgressTab === 1
+                      ? modalVerbs.map(v => (
+                          <VerbProgressRow
+                            key={v.id}
+                            verb={v}
+                            prog={modalVerbProgress[v.id]}
+                            onToggleHidden={toggleHiddenInModal}
+                          />
+                        ))
+                      : <PronounProgressView
+                          level={activeProgressTab}
+                          verbs={modalVerbs}
+                          progMap={modalVerbProgress}
                         />
-                      ))
                 }
               </div>
             )}
@@ -1005,6 +1075,20 @@ const mStyles = {
   progressSummary: {
     margin: 0, padding: '0.65rem 1rem', fontSize: '0.78rem',
     color: '#888', borderBottom: '1px solid #f0f0f0',
+  },
+  progressTabRow: {
+    display: 'flex', gap: '0.375rem', padding: '0.5rem 1rem',
+    borderBottom: '1px solid #f0f0f0', flexShrink: 0,
+  },
+  progressTabBtn: {
+    flex: 1, padding: '0.4rem 0.25rem', fontSize: '0.75rem', fontWeight: 500,
+    color: '#888', backgroundColor: '#f5f5f5', border: '1px solid #e5e5e5',
+    borderRadius: '6px', cursor: 'pointer',
+  },
+  progressTabActive: {
+    flex: 1, padding: '0.4rem 0.25rem', fontSize: '0.75rem', fontWeight: 700,
+    color: '#111', backgroundColor: '#fff', border: '1px solid #111',
+    borderRadius: '6px', cursor: 'pointer',
   },
   modalBody:  { overflowY: 'auto', flex: 1 },
   emptyMsg:   { margin: 0, padding: '1.5rem', color: '#888', fontSize: '0.9rem' },
