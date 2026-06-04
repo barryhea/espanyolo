@@ -602,6 +602,12 @@ export default function VerbQuiz() {
       return p?.mastered || ((p?.stage ?? 1) === 4 && (p?.l4_score ?? 0) >= 5)
     })
 
+    // Verbs -AR uses its own 4-stage conjugation flow
+    if (allL4Mastered && category.title === 'Verbs -AR') {
+      navigate('/verb-ar-tense-quiz', { replace: true })
+      return
+    }
+
     if (allL4Mastered) {
       const t1Done = verbs.every(v => (progMap[v.id]?.t1_score ?? 0) >= 3)
       const t2Done = t1Done && verbs.every(v => (progMap[v.id]?.t2_score ?? 0) >= 3)

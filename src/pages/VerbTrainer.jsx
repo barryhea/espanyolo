@@ -179,7 +179,7 @@ export default function VerbTrainer() {
       supabase.from('verbs').select('id, category'),
       supabase
         .from('user_verb_progress')
-        .select('verb_id, current_stage, l4_score, t1_score, t2_score, t3_score')
+        .select('verb_id, current_stage, l4_score, t1_score, t2_score, t3_score, t1_cj_stage, t2_cj_stage, t3_cj_stage')
         .eq('user_id', user.id),
     ])
 
@@ -192,11 +192,14 @@ export default function VerbTrainer() {
     const progByVerb = {}
     for (const p of progressRows ?? []) {
       progByVerb[p.verb_id] = {
-        stage:    p.current_stage ?? 1,
-        l4_score: p.l4_score     ?? 0,
-        t1_score: p.t1_score     ?? 0,
-        t2_score: p.t2_score     ?? 0,
-        t3_score: p.t3_score     ?? 0,
+        stage:       p.current_stage  ?? 1,
+        l4_score:    p.l4_score       ?? 0,
+        t1_score:    p.t1_score       ?? 0,
+        t2_score:    p.t2_score       ?? 0,
+        t3_score:    p.t3_score       ?? 0,
+        t1_cj_stage: p.t1_cj_stage   ?? 0,
+        t2_cj_stage: p.t2_cj_stage   ?? 0,
+        t3_cj_stage: p.t3_cj_stage   ?? 0,
       }
     }
 
@@ -231,9 +234,13 @@ export default function VerbTrainer() {
       const allL2Done = any && verbIds.every(id => (progByVerb[id]?.stage    ?? 1) >= 3)
       const allL3Done = any && verbIds.every(id => (progByVerb[id]?.stage    ?? 1) >= 4)
       const allL4Done = any && verbIds.every(id => (progByVerb[id]?.l4_score ?? 0) >= 5)
-      const t1Done    = allL4Done && verbIds.every(id => (progByVerb[id]?.t1_score ?? 0) >= 3)
-      const t2Done    = t1Done    && verbIds.every(id => (progByVerb[id]?.t2_score ?? 0) >= 3)
-      const t3Done    = t2Done    && verbIds.every(id => (progByVerb[id]?.t3_score ?? 0) >= 3)
+      const isAr   = cat.title === 'Verbs -AR'
+      const t1Done = allL4Done && verbIds.every(id =>
+        isAr ? (progByVerb[id]?.t1_cj_stage ?? 0) >= 4 : (progByVerb[id]?.t1_score ?? 0) >= 3)
+      const t2Done = t1Done && verbIds.every(id =>
+        isAr ? (progByVerb[id]?.t2_cj_stage ?? 0) >= 4 : (progByVerb[id]?.t2_score ?? 0) >= 3)
+      const t3Done = t2Done && verbIds.every(id =>
+        isAr ? (progByVerb[id]?.t3_cj_stage ?? 0) >= 4 : (progByVerb[id]?.t3_score ?? 0) >= 3)
       tense[cat.title] = { allL1Done, allL2Done, allL3Done, allL4Done, t1Done, t2Done, t3Done }
     }
 

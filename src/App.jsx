@@ -6,6 +6,7 @@ import VerbTrainer from './pages/VerbTrainer'
 import VerbQuiz from './pages/VerbQuiz'
 import VerbCustomQuizSelect from './pages/VerbCustomQuizSelect'
 import VerbCustomQuiz from './pages/VerbCustomQuiz'
+import VerbArTenseQuiz from './pages/VerbArTenseQuiz'
 import VerbDictionary from './pages/VerbDictionary'
 import VerbDetail from './pages/VerbDetail'
 import Quiz from './pages/Quiz'
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/verb-quiz/:categoryId" element={<Protected><VerbQuiz /></Protected>} />
         <Route path="/verb-custom-quiz-select" element={<Protected><VerbCustomQuizSelect /></Protected>} />
         <Route path="/verb-custom-quiz" element={<Protected><VerbCustomQuiz /></Protected>} />
+        <Route path="/verb-ar-tense-quiz" element={<Protected><VerbArTenseQuiz /></Protected>} />
         <Route path="/verb-dictionary" element={<Protected><VerbDictionary /></Protected>} />
         <Route path="/verb-dictionary/:verbId" element={<Protected><VerbDetail /></Protected>} />
         <Route path="/quiz/:themeId" element={<Protected><Quiz /></Protected>} />
