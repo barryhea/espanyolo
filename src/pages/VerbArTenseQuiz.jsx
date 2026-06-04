@@ -196,6 +196,7 @@ export default function VerbArTenseQuiz() {
   const [activeSub,     setActiveSub]     = useState(0)      // 0-3
   const [roundVerb,     setRoundVerb]     = useState(null)
   const [dragCount,     setDragCount]     = useState(0)
+  const [dragBlockResults, setDragBlockResults] = useState([])  // correct/wrong per round in current 5-round block
   const [session,       setSession]       = useState([])
   const [currentIdx,    setCurrentIdx]    = useState(0)
   const [question,      setQuestion]      = useState(null)
@@ -214,6 +215,8 @@ export default function VerbArTenseQuiz() {
       inputRef.current?.focus({ preventScroll: true })
     }
   }, [question, phase])
+
+  useEffect(() => { setDragBlockResults([]) }, [activeTense])
 
   async function loadQuiz() {
     setPhase('loading')
@@ -389,14 +392,16 @@ export default function VerbArTenseQuiz() {
   async function handleDragComplete(correct) {
     if (!roundVerb || !activeTense) return
     if (correct) recordAnswer(roundVerb.id, activeTense, true)
-    // Don't record wrong drag rounds (no penalty, just don't advance)
 
+    const newBlockResults = [...dragBlockResults, correct]
     const newCount = dragCount + 1
     setDragCount(newCount)
 
     if (newCount % 5 === 0) {
+      setDragBlockResults([])
       setPhase('drag-summary')
     } else {
+      setDragBlockResults(newBlockResults)
       loadQuiz()
     }
   }
@@ -473,6 +478,18 @@ export default function VerbArTenseQuiz() {
     return (
       <div style={s.scrollPage}><NavBar />
         <main style={s.scrollMain}>
+          <div style={s.progressRow}>
+            <div style={s.progressBar}>
+              <div style={{ display: 'flex', height: '100%' }}>
+                {Array.from({ length: 5 }).map((_, i) => {
+                  const r = dragBlockResults[i]
+                  const bg = r === undefined ? '#e5e5e5' : r ? '#16a34a' : '#dc2626'
+                  return <div key={i} style={{ flex: 1, backgroundColor: bg }} />
+                })}
+              </div>
+            </div>
+            <span style={s.progressLabel}>{dragBlockResults.length + 1} / 5</span>
+          </div>
           <div style={s.phaseRow}>
             <span style={s.tenseTag}>{tenseLabel}</span>
             <span style={s.subTag}>Stage 1 · {subLabel}</span>
