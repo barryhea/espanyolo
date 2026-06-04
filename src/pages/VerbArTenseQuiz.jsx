@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import NavBar from '../components/NavBar'
+import { ConjDragRound } from './VerbDragMatch'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -63,131 +64,6 @@ function fuzzyMatch(typed, correct) {
   const maxLen = Math.max(a.length, b.length)
   if (maxLen === 0) return 'exact'
   return (1 - levenshtein(a, b) / maxLen) >= 0.8 ? 'close' : 'wrong'
-}
-
-// ── Conjugation Drag & Match ──────────────────────────────────────────────────
-
-function ConjDragRound({ verb, conjKey, onComplete }) {
-  const forms = PRONOUNS.map(p => ({ pronounKey: p.key, label: p.label, form: verb[conjKey]?.[p.key] ?? '' }))
-
-  const [bank, setBank]         = useState(() => shuffle(forms.map(f => ({ id: f.pronounKey, label: f.form }))))
-  const [slots, setSlots]       = useState(() => forms.map(f => ({ pronounKey: f.pronounKey, label: f.label, chip: null })))
-  const [checkResult, setCheckResult] = useState(null)
-
-  const dragChipRef    = useRef(null)
-  const ghostElRef     = useRef(null)
-  const ghostOffsetRef = useRef({ x: 0, y: 0 })
-  const slotRefs       = useRef([])
-  const slotsStateRef  = useRef(slots)
-  const autoAdvRef     = useRef(null)
-  useEffect(() => { slotsStateRef.current = slots }, [slots])
-
-  useEffect(() => {
-    if (!checkResult) return
-    const correct = checkResult.every(Boolean)
-    const tid = setTimeout(() => onComplete(correct, checkResult), 2500)
-    autoAdvRef.current = tid
-    return () => clearTimeout(tid)
-  }, [checkResult])
-
-  useEffect(() => {
-    const onMove = (e) => {
-      if (!dragChipRef.current || !ghostElRef.current) return
-      ghostElRef.current.style.left = (e.clientX - ghostOffsetRef.current.x) + 'px'
-      ghostElRef.current.style.top  = (e.clientY - ghostOffsetRef.current.y) + 'px'
-    }
-    const onUp = (e) => {
-      const chip = dragChipRef.current
-      if (!chip) return
-      dragChipRef.current = null
-      if (ghostElRef.current) ghostElRef.current.style.display = 'none'
-      let targetIdx = -1
-      for (let i = 0; i < slotRefs.current.length; i++) {
-        const el = slotRefs.current[i]
-        if (!el) continue
-        const r = el.getBoundingClientRect()
-        if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) { targetIdx = i; break }
-      }
-      if (targetIdx >= 0) {
-        const existing = slotsStateRef.current[targetIdx]?.chip ?? null
-        setSlots(prev => { const next = [...prev]; next[targetIdx] = { ...next[targetIdx], chip }; return next })
-        if (existing) setBank(prev => [...prev, existing])
-      } else {
-        setBank(prev => [...prev, chip])
-      }
-    }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
-    return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp) }
-  }, [])
-
-  function startDrag(chip, source, e) {
-    e.preventDefault()
-    if (dragChipRef.current) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    ghostOffsetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
-    if (source === 'bank') setBank(prev => prev.filter(c => c.id !== chip.id))
-    else setSlots(prev => prev.map((s, i) => i === source ? { ...s, chip: null } : s))
-    dragChipRef.current = chip
-    setCheckResult(null)
-    if (ghostElRef.current) {
-      ghostElRef.current.textContent = chip.label
-      ghostElRef.current.style.left = (e.clientX - ghostOffsetRef.current.x) + 'px'
-      ghostElRef.current.style.top  = (e.clientY - ghostOffsetRef.current.y) + 'px'
-      ghostElRef.current.style.display = 'block'
-    }
-  }
-
-  const allFilled = slots.every(s => s.chip !== null)
-
-  return (
-    <div style={s.dragCard}>
-      <div style={s.dragHeader}>
-        <span style={s.dragSpanish}>{verb.spanish_infinitive}</span>
-        <span style={s.dragEnglish}>{verb.english}</span>
-      </div>
-
-      <div style={s.dragBank}>
-        {bank.map(chip => (
-          <div key={chip.id} style={s.dragChip} onPointerDown={e => startDrag(chip, 'bank', e)}>{chip.label}</div>
-        ))}
-        {bank.length === 0 && <span style={{ color: '#aaa', fontSize: '0.85rem' }}>All placed ✓</span>}
-      </div>
-
-      <div style={s.dragPairs}>
-        {slots.map((slot, i) => (
-          <div key={slot.pronounKey} style={s.dragPairRow}>
-            <div style={s.dragPronoun}>{slot.label}</div>
-            <div ref={el => slotRefs.current[i] = el} style={{ ...s.dragSlot, ...(checkResult ? (checkResult[i] ? s.slotCorrect : s.slotWrong) : {}) }}>
-              {slot.chip && (
-                <div
-                  style={{ ...s.chipInSlot, ...(checkResult ? (checkResult[i] ? s.chipCorrect : s.chipWrong) : {}) }}
-                  onPointerDown={!checkResult ? e => startDrag(slot.chip, i, e) : undefined}
-                >
-                  {slot.chip.label}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {allFilled && !checkResult && (
-        <button style={s.checkBtn} onClick={() => setCheckResult(slots.map(sl => sl.chip?.id === sl.pronounKey))}>Check ✓</button>
-      )}
-      {checkResult && (
-        <>
-          <style>{`@keyframes cjFill{from{transform:scaleX(0)}to{transform:scaleX(1)}}`}</style>
-          <div role="button" style={s.progressBtnWrap} onClick={() => { clearTimeout(autoAdvRef.current); onComplete(checkResult.every(Boolean), checkResult) }}>
-            <div style={s.progressFill} />
-            <span style={s.progressLabel}>{checkResult.every(Boolean) ? 'Correct! Next →' : 'Some wrong — Next →'}</span>
-          </div>
-        </>
-      )}
-
-      <div ref={ghostElRef} style={{ ...s.dragChipGhost, display: 'none' }} />
-    </div>
-  )
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
