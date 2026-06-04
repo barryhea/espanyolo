@@ -79,7 +79,7 @@ function ConjDragRound({ verb, conjKey, onComplete }) {
   useEffect(() => {
     if (!checkResult) return
     const correct = checkResult.every(Boolean)
-    const tid = setTimeout(() => onComplete(correct), 2500)
+    const tid = setTimeout(() => onComplete(correct, checkResult), 2500)
     autoAdvRef.current = tid
     return () => clearTimeout(tid)
   }, [checkResult])
@@ -172,7 +172,7 @@ function ConjDragRound({ verb, conjKey, onComplete }) {
       {checkResult && (
         <>
           <style>{`@keyframes cjFill{from{transform:scaleX(0)}to{transform:scaleX(1)}}`}</style>
-          <div role="button" style={s.progressBtnWrap} onClick={() => { clearTimeout(autoAdvRef.current); onComplete(checkResult.every(Boolean)) }}>
+          <div role="button" style={s.progressBtnWrap} onClick={() => { clearTimeout(autoAdvRef.current); onComplete(checkResult.every(Boolean), checkResult) }}>
             <div style={s.progressFill} />
             <span style={s.progressLabel}>{checkResult.every(Boolean) ? 'Correct! Next →' : 'Some wrong — Next →'}</span>
           </div>
@@ -196,7 +196,9 @@ export default function VerbArTenseQuiz() {
   const [activeSub,     setActiveSub]     = useState(0)      // 0-3
   const [roundVerb,     setRoundVerb]     = useState(null)
   const [dragCount,     setDragCount]     = useState(0)
-  const [dragBlockResults, setDragBlockResults] = useState([])  // correct/wrong per round in current 5-round block
+  const [dragBlockResults,    setDragBlockResults]    = useState([])       // correct/wrong per round in current 5-round block
+  const [dragPronounCounts,   setDragPronounCounts]   = useState([0,0,0,0,0]) // cumulative correct per pronoun (indexed by PRONOUNS)
+  const [dragRoundsThisTense, setDragRoundsThisTense] = useState(0)         // total drag rounds for current tense
   const [session,       setSession]       = useState([])
   const [currentIdx,    setCurrentIdx]    = useState(0)
   const [question,      setQuestion]      = useState(null)
@@ -216,7 +218,11 @@ export default function VerbArTenseQuiz() {
     }
   }, [question, phase])
 
-  useEffect(() => { setDragBlockResults([]) }, [activeTense])
+  useEffect(() => {
+    setDragBlockResults([])
+    setDragPronounCounts([0, 0, 0, 0, 0])
+    setDragRoundsThisTense(0)
+  }, [activeTense])
 
   async function loadQuiz() {
     setPhase('loading')
@@ -389,9 +395,14 @@ export default function VerbArTenseQuiz() {
 
   // ── Drag round ────────────────────────────────────────────────────────────
 
-  async function handleDragComplete(correct) {
+  async function handleDragComplete(correct, perPronounResults) {
     if (!roundVerb || !activeTense) return
     if (correct) recordAnswer(roundVerb.id, activeTense, true)
+
+    if (Array.isArray(perPronounResults)) {
+      setDragPronounCounts(prev => prev.map((cnt, i) => cnt + (perPronounResults[i] ? 1 : 0)))
+    }
+    setDragRoundsThisTense(prev => prev + 1)
 
     const newBlockResults = [...dragBlockResults, correct]
     const newCount = dragCount + 1
@@ -510,7 +521,6 @@ export default function VerbArTenseQuiz() {
   // ── Drag summary ──────────────────────────────────────────────────────────
 
   if (phase === 'drag-summary') {
-    const cfg = TENSE_CFG[activeTense]
     return (
       <div style={s.scrollPage}><NavBar />
         <main style={s.scrollMain}>
@@ -519,25 +529,25 @@ export default function VerbArTenseQuiz() {
               <span style={s.summaryTitle}>{tenseLabel} · Drag & Match</span>
               <span style={s.summarySub}>Match conjugations to their pronoun</span>
             </div>
-            {allVerbs.filter(v => !progressRef.current[v.id]?.hidden).map(v => {
-              const prog  = progressRef.current[v.id]
-              const stage = prog?.[cfg.cjCol]    ?? 0
-              const score = stage === 0 ? Math.min(prog?.[cfg.scoreCol] ?? 0, 5) : 5
+            {PRONOUNS.map((p, i) => {
+              const count = dragPronounCounts[i]
               return (
-                <div key={v.id} style={s.summaryRow}>
+                <div key={p.key} style={s.summaryRow}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={s.summarySpanish}>{v.spanish_infinitive}</div>
-                    <div style={s.summaryEnglish}>{v.english}</div>
+                    <div style={s.summarySpanish}>{p.label}</div>
                   </div>
                   <div style={s.dots}>
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <div key={i} style={{
+                    {Array.from({ length: 5 }).map((_, j) => (
+                      <div key={j} style={{
                         width: '11px', height: '11px', borderRadius: '50%', boxSizing: 'border-box', flexShrink: 0,
-                        backgroundColor: i < score ? '#16a34a' : 'transparent',
-                        border: `2px solid ${i < score ? '#16a34a' : '#d1d5db'}`,
+                        backgroundColor: j < Math.min(count, 5) ? '#16a34a' : 'transparent',
+                        border: `2px solid ${j < Math.min(count, 5) ? '#16a34a' : '#d1d5db'}`,
                       }} />
                     ))}
                   </div>
+                  <span style={{ fontSize: '0.72rem', color: '#aaa', minWidth: '36px', textAlign: 'right', flexShrink: 0 }}>
+                    {count} / {dragRoundsThisTense}
+                  </span>
                 </div>
               )
             })}
