@@ -313,7 +313,7 @@ export default function VerbTrainer() {
     const verbIds = verbs.map(v => v.id)
     const { data: progress } = await supabase
       .from('user_verb_progress')
-      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, t1_score, t2_score, t3_score, hidden')
+      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, t1_score, t2_score, t3_score, t1_cj_stage, t2_cj_stage, t3_cj_stage, hidden')
       .eq('user_id', user.id)
       .in('verb_id', verbIds)
 
@@ -329,6 +329,9 @@ export default function VerbTrainer() {
         t1_score:         p.t1_score         ?? 0,
         t2_score:         p.t2_score         ?? 0,
         t3_score:         p.t3_score         ?? 0,
+        t1_cj_stage:      p.t1_cj_stage      ?? 0,
+        t2_cj_stage:      p.t2_cj_stage      ?? 0,
+        t3_cj_stage:      p.t3_cj_stage      ?? 0,
         hidden:           p.hidden           ?? false,
       }
     }
@@ -725,13 +728,31 @@ export default function VerbTrainer() {
                 ? '…'
                 : activeVerbIds.filter(id => (modalVerbProgress[id]?.[`${key}_score`] ?? 0) >= 3).length
 
+              // Compute completion state from freshly loaded modal data so it reflects
+              // the current DB state rather than the potentially stale categoryTense snapshot.
+              const isArCat = activeCatTitle === 'Verbs -AR'
+              const localAllL4Done = !loading && activeVerbIds.length > 0
+                && activeVerbIds.every(id => (modalVerbProgress[id]?.l4_score ?? 0) >= 5)
+              const localT1Done = localAllL4Done && activeVerbIds.every(id =>
+                isArCat
+                  ? (modalVerbProgress[id]?.t1_cj_stage ?? 0) >= 4
+                  : (modalVerbProgress[id]?.t1_score    ?? 0) >= 3)
+              const localT2Done = localT1Done && activeVerbIds.every(id =>
+                isArCat
+                  ? (modalVerbProgress[id]?.t2_cj_stage ?? 0) >= 4
+                  : (modalVerbProgress[id]?.t2_score    ?? 0) >= 3)
+              const localT3Done = localT2Done && activeVerbIds.every(id =>
+                isArCat
+                  ? (modalVerbProgress[id]?.t3_cj_stage ?? 0) >= 4
+                  : (modalVerbProgress[id]?.t3_score    ?? 0) >= 3)
+
               const STAGES = [
                 {
                   key:      'infinitive',
                   name:     'Infinitive',
                   sub:      'L1 → L4',
                   locked:   false,
-                  complete: !!t.allL4Done,
+                  complete: localAllL4Done,
                   progress: `${masteredCt} / ${total} mastered`,
                   color:    '#f5c518',
                 },
@@ -739,8 +760,8 @@ export default function VerbTrainer() {
                   key:      't1',
                   name:     'Present Tense',
                   sub:      'T1',
-                  locked:   !t.allL4Done,
-                  complete: !!t.t1Done,
+                  locked:   !localAllL4Done,
+                  complete: localT1Done,
                   progress: `${tCount('t1')} / ${total} mastered`,
                   color:    '#3b82f6',
                 },
@@ -748,8 +769,8 @@ export default function VerbTrainer() {
                   key:      't2',
                   name:     'Past Tense',
                   sub:      'T2',
-                  locked:   !t.t1Done,
-                  complete: !!t.t2Done,
+                  locked:   !localT1Done,
+                  complete: localT2Done,
                   progress: `${tCount('t2')} / ${total} mastered`,
                   color:    '#f97316',
                 },
@@ -757,8 +778,8 @@ export default function VerbTrainer() {
                   key:      't3',
                   name:     'Future Tense',
                   sub:      'T3',
-                  locked:   !t.t2Done,
-                  complete: !!t.t3Done,
+                  locked:   !localT2Done,
+                  complete: localT3Done,
                   progress: `${tCount('t3')} / ${total} mastered`,
                   color:    '#16a34a',
                 },
