@@ -79,7 +79,7 @@ export default function VerbArTenseQuiz() {
   const [roundVerb,     setRoundVerb]     = useState(null)
   const [dragCount,     setDragCount]     = useState(0)
   const [dragBlockResults,    setDragBlockResults]    = useState([])          // correct/wrong per round in current 5-round block
-  const [dragPronounCounts,   setDragPronounCounts]   = useState([0,0,0,0,0]) // cumulative correct per pronoun (indexed by PRONOUNS)
+  const [blockPronounCounts,  setBlockPronounCounts]  = useState([0,0,0,0,0]) // correct per pronoun in the current 5-round block
   const [dragRoundsThisTense, setDragRoundsThisTense] = useState(0)           // total drag rounds for current tense
   const [session,       setSession]       = useState([])
   const [currentIdx,    setCurrentIdx]    = useState(0)
@@ -107,7 +107,7 @@ export default function VerbArTenseQuiz() {
 
   useEffect(() => {
     setDragBlockResults([])
-    setDragPronounCounts([0, 0, 0, 0, 0])
+    setBlockPronounCounts([0, 0, 0, 0, 0])
     setDragRoundsThisTense(0)
     setStage2PronounCounts({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
   }, [activeTense])
@@ -364,13 +364,22 @@ export default function VerbArTenseQuiz() {
 
   // ── Drag round ────────────────────────────────────────────────────────────
 
+  function pickNextDragVerb() {
+    if (!activeTense) return
+    const cfg = TENSE_CFG[activeTense]
+    const visible = allVerbs.filter(v => !progressRef.current[v.id]?.hidden)
+    const needsWork = visible.filter(v => (progressRef.current[v.id]?.[cfg.cjCol] ?? 0) === 0)
+    if (!needsWork.length) { loadQuiz(); return }
+    setRoundVerb(shuffle(needsWork)[0])
+    setPhase('drag')
+  }
+
   async function handleDragComplete(correct, perPronounResults) {
     if (!roundVerb || !activeTense) return
     if (correct) recordAnswer(roundVerb.id, activeTense, true)
 
-    if (Array.isArray(perPronounResults)) {
-      setDragPronounCounts(prev => prev.map((cnt, i) => cnt + (perPronounResults[i] ? 1 : 0)))
-    }
+    const newBlockCounts = blockPronounCounts.map((cnt, i) => cnt + (Array.isArray(perPronounResults) && perPronounResults[i] ? 1 : 0))
+    setBlockPronounCounts(newBlockCounts)
     setDragRoundsThisTense(prev => prev + 1)
 
     const newBlockResults = [...dragBlockResults, correct]
@@ -382,7 +391,7 @@ export default function VerbArTenseQuiz() {
       setPhase('drag-summary')
     } else {
       setDragBlockResults(newBlockResults)
-      loadQuiz()
+      pickNextDragVerb()
     }
   }
 
@@ -549,7 +558,7 @@ export default function VerbArTenseQuiz() {
               <span style={s.summarySub}>Match conjugations to their pronoun</span>
             </div>
             {PRONOUNS.map((p, i) => {
-              const count = dragPronounCounts[i]
+              const count = blockPronounCounts[i]
               return (
                 <div key={p.key} style={s.summaryRow}>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -559,19 +568,19 @@ export default function VerbArTenseQuiz() {
                     {Array.from({ length: 5 }).map((_, j) => (
                       <div key={j} style={{
                         width: '11px', height: '11px', borderRadius: '50%', boxSizing: 'border-box', flexShrink: 0,
-                        backgroundColor: j < Math.min(count, 5) ? '#16a34a' : 'transparent',
-                        border: `2px solid ${j < Math.min(count, 5) ? '#16a34a' : '#d1d5db'}`,
+                        backgroundColor: j < count ? '#16a34a' : 'transparent',
+                        border: `2px solid ${j < count ? '#16a34a' : '#d1d5db'}`,
                       }} />
                     ))}
                   </div>
                   <span style={{ fontSize: '0.72rem', color: '#aaa', minWidth: '32px', textAlign: 'right', flexShrink: 0 }}>
-                    {Math.min(count, 5)} / 5
+                    {count} / 5
                   </span>
                 </div>
               )
             })}
           </div>
-          <button style={{ ...s.primaryBtn, width: '100%' }} onClick={loadQuiz}>Continue</button>
+          <button style={{ ...s.primaryBtn, width: '100%' }} onClick={() => { setBlockPronounCounts([0,0,0,0,0]); loadQuiz() }}>Continue</button>
           <button style={s.blueBtn} onClick={() => navigate('/verbs')}>← Back to Verb Trainer</button>
         </main>
       </div>
