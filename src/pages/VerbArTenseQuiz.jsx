@@ -7,11 +7,11 @@ import NavBar from '../components/NavBar'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PRONOUNS = [
-  { key: 'yo',       label: 'Yo'            },
-  { key: 'tu',       label: 'Tú'            },
-  { key: 'el',       label: 'Él / Ella'     },
-  { key: 'nosotros', label: 'Nosotros'      },
-  { key: 'ellos',    label: 'Ellos / Ellas' },
+  { key: 'yo',       label: 'Yo',            english: 'I'        },
+  { key: 'tu',       label: 'Tú',            english: 'You'      },
+  { key: 'el',       label: 'Él / Ella',     english: 'He / She' },
+  { key: 'nosotros', label: 'Nosotros',      english: 'We'       },
+  { key: 'ellos',    label: 'Ellos / Ellas', english: 'They'     },
 ]
 
 const TENSE_CFG = {
@@ -20,9 +20,9 @@ const TENSE_CFG = {
   t3: { conjKey: 'future_conjugations',  label: 'Future Tense',   cjCol: 't3_cj_stage', scoreCol: 't3_score' },
 }
 
-// Mirror L1/L2/L3/L4 pass thresholds
+// Pass thresholds per sub-stage (0-indexed)
 const SUB_THRESHOLD = { 0: 5, 1: 3, 2: 3, 3: 5 }
-const SUB_LABEL     = ['Drag & Match', 'Multiple Choice', 'Recognition', 'Conjugation']
+const SUB_LABEL     = ['Drag & Match', 'Multiple Choice', 'Pronoun', 'Full Conjugation']
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -196,24 +196,27 @@ export default function VerbArTenseQuiz() {
   const [activeSub,     setActiveSub]     = useState(0)      // 0-3
   const [roundVerb,     setRoundVerb]     = useState(null)
   const [dragCount,     setDragCount]     = useState(0)
-  const [dragBlockResults,    setDragBlockResults]    = useState([])       // correct/wrong per round in current 5-round block
+  const [dragBlockResults,    setDragBlockResults]    = useState([])          // correct/wrong per round in current 5-round block
   const [dragPronounCounts,   setDragPronounCounts]   = useState([0,0,0,0,0]) // cumulative correct per pronoun (indexed by PRONOUNS)
-  const [dragRoundsThisTense, setDragRoundsThisTense] = useState(0)         // total drag rounds for current tense
+  const [dragRoundsThisTense, setDragRoundsThisTense] = useState(0)           // total drag rounds for current tense
   const [session,       setSession]       = useState([])
   const [currentIdx,    setCurrentIdx]    = useState(0)
   const [question,      setQuestion]      = useState(null)
   const [selectedOpt,   setSelectedOpt]   = useState(null)
   const [typedAnswer,   setTypedAnswer]   = useState('')
+  const [typedAnswer2,  setTypedAnswer2]  = useState('')  // second input for Stage 4 (conjugation)
   const [matchResult,   setMatchResult]   = useState(null)
   const [results,       setResults]       = useState([])
 
   const progressRef = useRef({})
   const inputRef    = useRef(null)
+  const inputRef2   = useRef(null)
 
   useEffect(() => { if (user) loadQuiz() }, [user?.id])
 
   useEffect(() => {
-    if ((question?.type === 'conj-typed-rev' || question?.type === 'conj-typed') && phase === 'question') {
+    const isTyped = question?.type === 'conj-typed-pron' || question?.type === 'conj-typed-dual'
+    if (isTyped && phase === 'question') {
       inputRef.current?.focus({ preventScroll: true })
     }
   }, [question, phase])
@@ -255,6 +258,20 @@ export default function VerbArTenseQuiz() {
         hidden:      p.hidden      ?? false,
       }
     }
+
+    // Merge in-memory progression so in-session advancement survives DB re-fetches
+    // (handles the case where cj_stage columns don't exist in DB yet)
+    for (const verbId in progressRef.current) {
+      if (progMap[verbId]) {
+        const prev = progressRef.current[verbId]
+        progMap[verbId].t1_cj_stage = Math.max(progMap[verbId].t1_cj_stage ?? 0, prev.t1_cj_stage ?? 0)
+        progMap[verbId].t2_cj_stage = Math.max(progMap[verbId].t2_cj_stage ?? 0, prev.t2_cj_stage ?? 0)
+        progMap[verbId].t3_cj_stage = Math.max(progMap[verbId].t3_cj_stage ?? 0, prev.t3_cj_stage ?? 0)
+        progMap[verbId].t1_score    = Math.max(progMap[verbId].t1_score    ?? 0, prev.t1_score    ?? 0)
+        progMap[verbId].t2_score    = Math.max(progMap[verbId].t2_score    ?? 0, prev.t2_score    ?? 0)
+        progMap[verbId].t3_score    = Math.max(progMap[verbId].t3_score    ?? 0, prev.t3_score    ?? 0)
+      }
+    }
     progressRef.current = progMap
 
     const visible = verbData.filter(v => !progMap[v.id]?.hidden)
@@ -276,7 +293,7 @@ export default function VerbArTenseQuiz() {
     const needsWork = visible.filter(v => (progMap[v.id]?.[cfg.cjCol] ?? 0) === minSub)
 
     if (minSub === 0) {
-      // Sub-stage 1: drag & match — pick one verb
+      // Stage 1: drag & match — pick one verb
       const verb = shuffle(needsWork)[0]
       setRoundVerb(verb)
       setPhase('drag')
@@ -290,51 +307,56 @@ export default function VerbArTenseQuiz() {
     let sess   = []
 
     if (subStage === 1) {
-      // MC: pronoun shown, pick correct conjugation
+      // Stage 2 MC: show conjugated form → pick correct subject pronoun from 4 options
       for (let rep = 0; sess.length < Math.max(15, needsWork.length); rep++) {
         for (const verb of shuffle(needsWork)) {
           if (sess.length >= Math.max(15, needsWork.length * 3)) break
-          const pronoun    = PRONOUNS[Math.floor(Math.random() * PRONOUNS.length)]
-          const correct    = verb[cfg.conjKey]?.[pronoun.key] ?? ''
-          const distractors = shuffle(
-            allVerbData.filter(v => v.id !== verb.id).map(v => v[cfg.conjKey]?.[pronoun.key]).filter(Boolean)
-          ).slice(0, 3)
-          sess.push({ type: 'conj-mc', verb, pronoun, correct, options: shuffle([correct, ...distractors]), tenseKey })
+          const pronoun = PRONOUNS[Math.floor(Math.random() * PRONOUNS.length)]
+          const form    = verb[cfg.conjKey]?.[pronoun.key] ?? ''
+          const distractors = shuffle(PRONOUNS.filter(p => p.key !== pronoun.key)).slice(0, 3)
+          sess.push({
+            type: 'conj-mc',
+            verb, pronoun,
+            prompt: `${form}  ·  ${verb.spanish_infinitive}`,
+            correct: pronoun.label,
+            options: shuffle([pronoun.label, ...distractors.map(p => p.label)]),
+            tenseKey,
+          })
         }
       }
     } else if (subStage === 2) {
-      // Typed conj → English: show conjugated form, type English meaning
+      // Stage 3 Typed: show conjugated form → type the subject pronoun in Spanish
       for (let rep = 0; sess.length < Math.max(15, needsWork.length); rep++) {
         for (const verb of shuffle(needsWork)) {
           if (sess.length >= Math.max(15, needsWork.length * 3)) break
-          const pronoun  = PRONOUNS[Math.floor(Math.random() * PRONOUNS.length)]
-          const form     = verb[cfg.conjKey]?.[pronoun.key] ?? ''
-          const cands    = verb.english.split(' / ').map(s => s.replace(/\s*\(.*?\)/g, '').trim()).filter(Boolean)
-          if (cands[0] && !cands[0].startsWith('to ')) cands.push(`to ${cands[0]}`)
+          const pronoun = PRONOUNS[Math.floor(Math.random() * PRONOUNS.length)]
+          const form    = verb[cfg.conjKey]?.[pronoun.key] ?? ''
           sess.push({
-            type: 'conj-typed-rev', verb, pronoun,
-            prompt: `${pronoun.label}  ·  ${form}`,
-            correct: cands[0],
-            correctCandidates: cands,
-            placeholder: 'Type the English meaning…',
+            type: 'conj-typed-pron',
+            verb, pronoun,
+            prompt: `${form}  ·  ${verb.spanish_infinitive}`,
+            correct: pronoun.key,
+            correctCandidates: [pronoun.key],
+            placeholder: 'Type the subject pronoun…',
             tenseKey,
           })
         }
       }
     } else if (subStage === 3) {
-      // Typed English → conjugation
+      // Stage 4 Dual typed: show English phrase (e.g. "I drink") → type pronoun + conjugated form
       for (let rep = 0; sess.length < Math.max(15, needsWork.length); rep++) {
         for (const verb of shuffle(needsWork)) {
           if (sess.length >= Math.max(15, needsWork.length * 3)) break
-          const pronoun = PRONOUNS[Math.floor(Math.random() * PRONOUNS.length)]
-          const correct = verb[cfg.conjKey]?.[pronoun.key] ?? ''
-          const tLabel  = cfg.label.replace(' Tense', '')
+          const pronoun     = PRONOUNS[Math.floor(Math.random() * PRONOUNS.length)]
+          const form        = verb[cfg.conjKey]?.[pronoun.key] ?? ''
+          const verbEnglish = verb.english.split('/')[0].replace(/\s*\(.*?\)\s*/g, '').trim()
+          const tLabel      = cfg.label.replace(' Tense', '')
           sess.push({
-            type: 'conj-typed', verb, pronoun,
-            prompt: `${pronoun.label}  ·  ${verb.english}  (${tLabel})`,
-            correct,
-            correctCandidates: [correct],
-            placeholder: 'Type the Spanish conjugation…',
+            type: 'conj-typed-dual',
+            verb, pronoun,
+            prompt: `${pronoun.english} ${verbEnglish}  (${tLabel})`,
+            correctPronoun:      pronoun.key,
+            correctConjugation:  form,
             tenseKey,
           })
         }
@@ -349,6 +371,7 @@ export default function VerbArTenseQuiz() {
     setResults([])
     setSelectedOpt(null)
     setTypedAnswer('')
+    setTypedAnswer2('')
     setMatchResult(null)
     setQuestion(sess[0])
     setPhase('question')
@@ -359,24 +382,44 @@ export default function VerbArTenseQuiz() {
   async function saveProgress(verbId) {
     const prog = progressRef.current[verbId]
     if (!prog) return
-    const payload = {
-      t1_score: prog.t1_score ?? 0, t2_score: prog.t2_score ?? 0, t3_score: prog.t3_score ?? 0,
-      t1_cj_stage: prog.t1_cj_stage ?? 0, t2_cj_stage: prog.t2_cj_stage ?? 0, t3_cj_stage: prog.t3_cj_stage ?? 0,
+
+    const scorePayload = {
+      t1_score: prog.t1_score ?? 0,
+      t2_score: prog.t2_score ?? 0,
+      t3_score: prog.t3_score ?? 0,
     }
+    const fullPayload = {
+      ...scorePayload,
+      t1_cj_stage: prog.t1_cj_stage ?? 0,
+      t2_cj_stage: prog.t2_cj_stage ?? 0,
+      t3_cj_stage: prog.t3_cj_stage ?? 0,
+    }
+
     if (prog.db_id) {
-      await supabase.from('user_verb_progress').update(payload).eq('id', prog.db_id)
+      const { error } = await supabase.from('user_verb_progress').update(fullPayload).eq('id', prog.db_id)
+      if (error) {
+        // cj_stage columns may not exist yet — save scores at minimum
+        await supabase.from('user_verb_progress').update(scorePayload).eq('id', prog.db_id)
+      }
     } else {
-      const { data } = await supabase.from('user_verb_progress')
-        .upsert({ user_id: user.id, verb_id: verbId, current_stage: 4, l4_score: 5, ...payload }, { onConflict: 'user_id,verb_id' })
+      const { data, error } = await supabase.from('user_verb_progress')
+        .upsert({ user_id: user.id, verb_id: verbId, current_stage: 4, l4_score: 5, ...fullPayload }, { onConflict: 'user_id,verb_id' })
         .select('id').single()
-      if (data) progressRef.current[verbId] = { ...progressRef.current[verbId], db_id: data.id }
+      if (error) {
+        const { data: d2 } = await supabase.from('user_verb_progress')
+          .upsert({ user_id: user.id, verb_id: verbId, current_stage: 4, l4_score: 5, ...scorePayload }, { onConflict: 'user_id,verb_id' })
+          .select('id').single()
+        if (d2) progressRef.current[verbId] = { ...progressRef.current[verbId], db_id: d2.id }
+      } else {
+        if (data) progressRef.current[verbId] = { ...progressRef.current[verbId], db_id: data.id }
+      }
     }
   }
 
   function recordAnswer(verbId, tenseKey, correct) {
     const prog      = progressRef.current[verbId] ?? {}
     const cfg       = TENSE_CFG[tenseKey]
-    const curStage  = prog[cfg.cjCol]   ?? 0
+    const curStage  = prog[cfg.cjCol]    ?? 0
     const curScore  = prog[cfg.scoreCol] ?? 0
     const threshold = SUB_THRESHOLD[curStage] ?? 5
 
@@ -431,16 +474,39 @@ export default function VerbArTenseQuiz() {
   // ── Typed answer ──────────────────────────────────────────────────────────
 
   function handleTyped() {
-    const cands  = question.correctCandidates ?? [question.correct]
-    const result = cands
-      .map(c => fuzzyMatch(typedAnswer, c))
-      .reduce((best, r) => r === 'exact' ? 'exact' : best === 'exact' ? 'exact' : r === 'close' ? 'close' : best, 'wrong')
-    const correct = result !== 'wrong'
-    recordAnswer(question.verb.id, question.tenseKey, correct)
-    setMatchResult(result)
-    setResults(r => [...r, { verb: question.verb, pronoun: question.pronoun, correct, matchResult: result }])
-    setPhase('feedback')
-    if (!correct) setTypedAnswer('')
+    const verbId = question.verb.id
+
+    if (question.type === 'conj-typed-pron') {
+      // Stage 3: type the subject pronoun
+      const cands  = question.correctCandidates ?? [question.correct]
+      const result = cands
+        .map(c => fuzzyMatch(typedAnswer, c))
+        .reduce((best, r) => r === 'exact' ? 'exact' : best === 'exact' ? 'exact' : r === 'close' ? 'close' : best, 'wrong')
+      const correct = result !== 'wrong'
+      recordAnswer(verbId, question.tenseKey, correct)
+      setMatchResult(result)
+      setResults(r => [...r, { verb: question.verb, pronoun: question.pronoun, correct, matchResult: result }])
+      setPhase('feedback')
+      if (!correct) setTypedAnswer('')
+      return
+    }
+
+    if (question.type === 'conj-typed-dual') {
+      // Stage 4: type both the subject pronoun and the conjugated form
+      const pronResult = fuzzyMatch(typedAnswer,  question.correctPronoun)
+      const conjResult = fuzzyMatch(typedAnswer2, question.correctConjugation)
+      const pronOk = pronResult !== 'wrong'
+      const conjOk = conjResult !== 'wrong'
+      const correct = pronOk && conjOk
+      const result  = correct
+        ? (pronResult === 'exact' && conjResult === 'exact' ? 'exact' : 'close')
+        : 'wrong'
+      recordAnswer(verbId, question.tenseKey, correct)
+      setMatchResult(result)
+      setResults(r => [...r, { verb: question.verb, pronoun: question.pronoun, correct, matchResult: result }])
+      setPhase('feedback')
+      return
+    }
   }
 
   function handleNext() {
@@ -450,6 +516,7 @@ export default function VerbArTenseQuiz() {
     setQuestion(session[nextIdx])
     setSelectedOpt(null)
     setTypedAnswer('')
+    setTypedAnswer2('')
     setMatchResult(null)
     setPhase('question')
   }
@@ -480,8 +547,8 @@ export default function VerbArTenseQuiz() {
     )
   }
 
-  const tenseLabel   = activeTense ? TENSE_CFG[activeTense].label : ''
-  const subLabel     = activeSub < SUB_LABEL.length ? SUB_LABEL[activeSub] : ''
+  const tenseLabel = activeTense ? TENSE_CFG[activeTense].label : ''
+  const subLabel   = activeSub < SUB_LABEL.length ? SUB_LABEL[activeSub] : ''
 
   // ── Drag phase ────────────────────────────────────────────────────────────
 
@@ -545,8 +612,8 @@ export default function VerbArTenseQuiz() {
                       }} />
                     ))}
                   </div>
-                  <span style={{ fontSize: '0.72rem', color: '#aaa', minWidth: '36px', textAlign: 'right', flexShrink: 0 }}>
-                    {count} / {dragRoundsThisTense}
+                  <span style={{ fontSize: '0.72rem', color: '#aaa', minWidth: '32px', textAlign: 'right', flexShrink: 0 }}>
+                    {Math.min(count, 5)} / 5
                   </span>
                 </div>
               )
@@ -612,6 +679,10 @@ export default function VerbArTenseQuiz() {
   const confirmOk = (() => {
     if (phase !== 'feedback' || !matchResult) return true
     if (matchResult !== 'wrong') return true
+    if (question?.type === 'conj-typed-dual') {
+      return fuzzyMatch(typedAnswer,  question.correctPronoun)      !== 'wrong'
+          && fuzzyMatch(typedAnswer2, question.correctConjugation)  !== 'wrong'
+    }
     const cands = question.correctCandidates ?? [question.correct]
     return cands.some(c => fuzzyMatch(typedAnswer, c) !== 'wrong')
   })()
@@ -640,6 +711,7 @@ export default function VerbArTenseQuiz() {
 
           <p style={s.word}>{question.prompt}</p>
 
+          {/* Stage 2: MC — show conjugated form, pick subject pronoun */}
           {question.type === 'conj-mc' && (
             <div style={s.optionGrid}>
               {question.options.map(opt => {
@@ -662,7 +734,8 @@ export default function VerbArTenseQuiz() {
             </div>
           )}
 
-          {(question.type === 'conj-typed-rev' || question.type === 'conj-typed') && (
+          {/* Stage 3: typed pronoun — show form, type subject pronoun */}
+          {question.type === 'conj-typed-pron' && (
             <div style={s.typedArea}>
               <input
                 ref={inputRef}
@@ -677,7 +750,7 @@ export default function VerbArTenseQuiz() {
                   }
                 }}
                 disabled={phase === 'feedback' && matchResult !== 'wrong'}
-                placeholder={phase === 'feedback' && matchResult === 'wrong' ? 'Type the correct answer to continue…' : question.placeholder}
+                placeholder={phase === 'feedback' && matchResult === 'wrong' ? 'Type the correct pronoun to continue…' : question.placeholder}
                 autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-form-type="other"
               />
               {phase === 'question' && (
@@ -691,18 +764,77 @@ export default function VerbArTenseQuiz() {
             </div>
           )}
 
+          {/* Stage 4: dual typed — show English phrase, type pronoun + conjugation */}
+          {question.type === 'conj-typed-dual' && (
+            <div style={s.typedArea}>
+              <input
+                ref={inputRef}
+                style={{ ...s.typedInput, ...(phase === 'feedback' && matchResult === 'wrong' ? { borderColor: '#3b82f6', borderWidth: 2 } : {}) }}
+                type="text"
+                value={typedAnswer}
+                onChange={e => setTypedAnswer(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    if (phase === 'question') inputRef2.current?.focus({ preventScroll: true })
+                    else if (phase === 'feedback' && matchResult === 'wrong' && confirmOk) handleNext()
+                  }
+                }}
+                disabled={phase === 'feedback' && matchResult !== 'wrong'}
+                placeholder={phase === 'feedback' && matchResult === 'wrong' ? `Pronoun — ${question.correctPronoun}` : 'Subject pronoun (e.g. yo)'}
+                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-form-type="other"
+              />
+              <input
+                ref={inputRef2}
+                style={{ ...s.typedInput, ...(phase === 'feedback' && matchResult === 'wrong' ? { borderColor: '#3b82f6', borderWidth: 2 } : {}) }}
+                type="text"
+                value={typedAnswer2}
+                onChange={e => setTypedAnswer2(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    if (phase === 'question') handleTyped()
+                    else if (phase === 'feedback' && matchResult === 'wrong' && confirmOk) handleNext()
+                  }
+                }}
+                disabled={phase === 'feedback' && matchResult !== 'wrong'}
+                placeholder={phase === 'feedback' && matchResult === 'wrong' ? `Conjugation — ${question.correctConjugation}` : 'Conjugated verb (e.g. hablo)'}
+                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-form-type="other"
+              />
+              {phase === 'question' && (
+                <button
+                  style={{ ...s.typedBtn, backgroundColor: (typedAnswer.trim() || typedAnswer2.trim()) ? '#16a34a' : '#f59e0b', color: '#fff' }}
+                  onClick={handleTyped}
+                >
+                  {(typedAnswer.trim() || typedAnswer2.trim()) ? 'Check' : 'Pass'}
+                </button>
+              )}
+            </div>
+          )}
+
           {phase === 'feedback' && (() => {
-            const isMC       = question.type === 'conj-mc'
-            const isCorrect  = isMC ? selectedOpt === question.correct : matchResult !== 'wrong'
-            const bannerBg   = isMC
+            const isMC      = question.type === 'conj-mc'
+            const isDual    = question.type === 'conj-typed-dual'
+            const isCorrect = isMC ? selectedOpt === question.correct : matchResult !== 'wrong'
+            const bannerBg  = isMC
               ? (isCorrect ? '#dcfce7' : '#fee2e2')
               : (matchResult === 'exact' ? '#dcfce7' : matchResult === 'close' ? '#fef3c7' : '#fee2e2')
             const bannerColor = isMC
               ? (isCorrect ? '#16a34a' : '#dc2626')
               : (matchResult === 'exact' ? '#16a34a' : matchResult === 'close' ? '#d97706' : '#dc2626')
-            const label = isMC
-              ? (isCorrect ? 'Correct!' : `Incorrect — ${question.correct}`)
-              : (matchResult === 'exact' ? 'Correct!' : matchResult === 'close' ? `Close — ${question.correct}` : `Incorrect — ${question.correct}`)
+
+            let label
+            if (isMC) {
+              label = isCorrect ? 'Correct!' : `Incorrect — ${question.correct}`
+            } else if (isDual) {
+              if (matchResult === 'exact') label = 'Correct!'
+              else if (matchResult === 'close') label = `Close — ${question.correctPronoun}  ·  ${question.correctConjugation}`
+              else label = `Incorrect — ${question.correctPronoun}  ·  ${question.correctConjugation}`
+            } else {
+              const ans = question.correct ?? question.correctCandidates?.[0] ?? ''
+              if (matchResult === 'exact') label = 'Correct!'
+              else if (matchResult === 'close') label = `Close — ${ans}`
+              else label = `Incorrect — ${ans}`
+            }
+
             return (
               <div style={{ ...s.feedbackBanner, backgroundColor: bannerBg }}>
                 <span style={{ fontWeight: 600, color: bannerColor, fontSize: '0.95rem' }}>{label}</span>
