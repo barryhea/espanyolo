@@ -24,6 +24,12 @@ const TENSE_CFG = {
 const SUB_THRESHOLD = { 0: 5, 1: 3, 2: 3, 3: 5 }
 const SUB_LABEL     = ['Drag & Match', 'Multiple Choice', 'Pronoun', 'Full Conjugation']
 
+// Stage 2 MC requires each subject pronoun to be answered correctly this many times
+const STAGE2_PER_PRONOUN_THRESHOLD = 5
+
+// localStorage key for the one-time Stage 2 data reset
+const STAGE2_RESET_KEY = 'ar-t1-stage2-reset-v2'
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function shuffle(arr) {
@@ -207,6 +213,8 @@ export default function VerbArTenseQuiz() {
   const [typedAnswer2,  setTypedAnswer2]  = useState('')  // second input for Stage 4 (conjugation)
   const [matchResult,   setMatchResult]   = useState(null)
   const [results,       setResults]       = useState([])
+  // Per-pronoun correct counts for Stage 2 MC — tracked in-memory, advances all verbs together
+  const [stage2PronounCounts, setStage2PronounCounts] = useState({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
 
   const progressRef = useRef({})
   const inputRef    = useRef(null)
@@ -225,7 +233,49 @@ export default function VerbArTenseQuiz() {
     setDragBlockResults([])
     setDragPronounCounts([0, 0, 0, 0, 0])
     setDragRoundsThisTense(0)
+    setStage2PronounCounts({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
   }, [activeTense])
+
+  // Reset per-pronoun MC counts whenever we (re-)enter Stage 2 from Stage 1
+  useEffect(() => {
+    if (activeSub === 1) setStage2PronounCounts({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
+  }, [activeSub])
+
+  // One-time reset: clears any Stage 2 (MC) progress recorded under the old per-verb scoring
+  // so the correct per-pronoun threshold takes effect from a clean slate.
+  useEffect(() => {
+    if (!user?.id) return
+    const key = `${STAGE2_RESET_KEY}-${user.id}`
+    if (localStorage.getItem(key)) return
+    resetStage2Present()
+  }, [user?.id])
+
+  async function resetStage2Present() {
+    const { data: verbData } = await supabase.from('verbs').select('id').eq('category', 'Verbs -AR')
+    if (!verbData?.length) {
+      localStorage.setItem(`${STAGE2_RESET_KEY}-${user.id}`, '1')
+      return
+    }
+    const verbIds = verbData.map(v => v.id)
+    // Reset t1_cj_stage back to 1 (start of Stage 2) and clear t1_score for verbs that
+    // had entered or passed Stage 2 under the old scoring.
+    const { error } = await supabase
+      .from('user_verb_progress')
+      .update({ t1_cj_stage: 1, t1_score: 0 })
+      .eq('user_id', user.id)
+      .in('verb_id', verbIds)
+      .gte('t1_cj_stage', 1)
+    if (error) {
+      // Column may not exist yet — fall back to resetting only t1_score
+      console.warn('[VerbArTenseQuiz] Stage 2 reset (full) failed, falling back to score-only:', error.message)
+      await supabase
+        .from('user_verb_progress')
+        .update({ t1_score: 0 })
+        .eq('user_id', user.id)
+        .in('verb_id', verbIds)
+    }
+    localStorage.setItem(`${STAGE2_RESET_KEY}-${user.id}`, '1')
+  }
 
   async function loadQuiz() {
     setPhase('loading')
@@ -465,7 +515,33 @@ export default function VerbArTenseQuiz() {
   function handleMC(option) {
     if (phase !== 'question') return
     const correct = option === question.correct
-    recordAnswer(question.verb.id, question.tenseKey, correct)
+
+    if (activeSub === 1) {
+      // Stage 2: track correct answers per subject pronoun.
+      // Stage advances only when every pronoun has been answered correctly
+      // STAGE2_PER_PRONOUN_THRESHOLD times — not per-verb.
+      if (correct) {
+        const key = question.pronoun.key
+        const newCounts = { ...stage2PronounCounts, [key]: (stage2PronounCounts[key] ?? 0) + 1 }
+        setStage2PronounCounts(newCounts)
+
+        const stage2Done = PRONOUNS.every(p => (newCounts[p.key] ?? 0) >= STAGE2_PER_PRONOUN_THRESHOLD)
+        if (stage2Done) {
+          // Advance every Stage-2 verb in-memory (and save) so loadQuiz() lands on Stage 3
+          const cfg = TENSE_CFG[question.tenseKey]
+          for (const verb of allVerbs.filter(v => !progressRef.current[v.id]?.hidden)) {
+            const prog = progressRef.current[verb.id] ?? {}
+            if ((prog[cfg.cjCol] ?? 0) === 1) {
+              progressRef.current[verb.id] = { ...prog, [cfg.cjCol]: 2, [cfg.scoreCol]: 0 }
+              saveProgress(verb.id)
+            }
+          }
+        }
+      }
+    } else {
+      recordAnswer(question.verb.id, question.tenseKey, correct)
+    }
+
     setSelectedOpt(option)
     setResults(r => [...r, { verb: question.verb, pronoun: question.pronoun, correct }])
     setPhase('feedback')
