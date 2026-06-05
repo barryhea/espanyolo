@@ -15,6 +15,12 @@ const PRONOUNS = [
   { key: 'ellos',    label: 'Ellos / Ellas', english: 'They'     },
 ]
 
+// Accepted typed forms for pronouns that cover two people (either half is correct)
+const PRONOUN_ALTERNATIVES = {
+  el:    ['el', 'ella'],
+  ellos: ['ellos', 'ellas'],
+}
+
 const TENSE_CFG = {
   t1: { conjKey: 'present_conjugations', label: 'Present Tense',  cjCol: 't1_cj_stage', scoreCol: 't1_score' },
   t2: { conjKey: 'past_conjugations',    label: 'Past Tense',     cjCol: 't2_cj_stage', scoreCol: 't2_score' },
@@ -285,7 +291,7 @@ export default function VerbArTenseQuiz() {
             verb, pronoun,
             prompt: `${form}  ·  ${verb.spanish_infinitive}`,
             correct: pronoun.key,
-            correctCandidates: [pronoun.key],
+            correctCandidates: PRONOUN_ALTERNATIVES[pronoun.key] ?? [pronoun.key],
             placeholder: 'Type the subject pronoun…',
             tenseKey,
           })
@@ -304,8 +310,9 @@ export default function VerbArTenseQuiz() {
             type: 'conj-typed-dual',
             verb, pronoun,
             prompt: `${pronoun.english} ${verbEnglish}  (${tLabel})`,
-            correctPronoun:      pronoun.key,
-            correctConjugation:  form,
+            correctPronoun:           pronoun.key,
+            correctPronounCandidates: PRONOUN_ALTERNATIVES[pronoun.key] ?? [pronoun.key],
+            correctConjugation:       form,
             tenseKey,
           })
         }
@@ -476,7 +483,10 @@ export default function VerbArTenseQuiz() {
     }
 
     if (question.type === 'conj-typed-dual') {
-      const pronResult = fuzzyMatch(typedAnswer,  question.correctPronoun)
+      const pronCands  = question.correctPronounCandidates ?? [question.correctPronoun]
+      const pronResult = pronCands
+        .map(c => fuzzyMatch(typedAnswer, c))
+        .reduce((best, r) => r === 'exact' ? 'exact' : best === 'exact' ? 'exact' : r === 'close' ? 'close' : best, 'wrong')
       const conjResult = fuzzyMatch(typedAnswer2, question.correctConjugation)
       const pronOk = pronResult !== 'wrong'
       const conjOk = conjResult !== 'wrong'
@@ -673,8 +683,9 @@ export default function VerbArTenseQuiz() {
     if (phase !== 'feedback' || !matchResult) return true
     if (matchResult !== 'wrong') return true
     if (question?.type === 'conj-typed-dual') {
-      return fuzzyMatch(typedAnswer,  question.correctPronoun)      !== 'wrong'
-          && fuzzyMatch(typedAnswer2, question.correctConjugation)  !== 'wrong'
+      const pronCands = question.correctPronounCandidates ?? [question.correctPronoun]
+      return pronCands.some(c => fuzzyMatch(typedAnswer, c) !== 'wrong')
+          && fuzzyMatch(typedAnswer2, question.correctConjugation) !== 'wrong'
     }
     const cands = question.correctCandidates ?? [question.correct]
     return cands.some(c => fuzzyMatch(typedAnswer, c) !== 'wrong')
