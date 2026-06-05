@@ -292,6 +292,7 @@ export default function VerbArTenseQuiz() {
             prompt: `${form}  ·  ${verb.spanish_infinitive}`,
             correct: pronoun.key,
             correctCandidates: PRONOUN_ALTERNATIVES[pronoun.key] ?? [pronoun.key],
+            multiInput: !!PRONOUN_ALTERNATIVES[pronoun.key],
             placeholder: 'Type the subject pronoun…',
             tenseKey,
           })
@@ -459,10 +460,24 @@ export default function VerbArTenseQuiz() {
     const verbId = question.verb.id
 
     if (question.type === 'conj-typed-pron') {
-      const cands  = question.correctCandidates ?? [question.correct]
-      const result = cands
-        .map(c => fuzzyMatch(typedAnswer, c))
-        .reduce((best, r) => r === 'exact' ? 'exact' : best === 'exact' ? 'exact' : r === 'close' ? 'close' : best, 'wrong')
+      const cands = question.correctCandidates ?? [question.correct]
+      let result
+      if (question.multiInput) {
+        // Order-independent: each input must match a different candidate
+        const r00 = fuzzyMatch(typedAnswer,  cands[0])
+        const r01 = fuzzyMatch(typedAnswer,  cands[1])
+        const r10 = fuzzyMatch(typedAnswer2, cands[0])
+        const r11 = fuzzyMatch(typedAnswer2, cands[1])
+        const aOk = r00 !== 'wrong' && r11 !== 'wrong'
+        const bOk = r01 !== 'wrong' && r10 !== 'wrong'
+        const ok  = aOk || bOk
+        const allExact = (aOk && r00 === 'exact' && r11 === 'exact') || (bOk && r01 === 'exact' && r10 === 'exact')
+        result = !ok ? 'wrong' : allExact ? 'exact' : 'close'
+      } else {
+        result = cands
+          .map(c => fuzzyMatch(typedAnswer, c))
+          .reduce((best, r) => r === 'exact' ? 'exact' : best === 'exact' ? 'exact' : r === 'close' ? 'close' : best, 'wrong')
+      }
       const correct = result !== 'wrong'
       recordAnswer(verbId, question.tenseKey, correct)
       // Per-pronoun tracking — 5 correct per pronoun to pass, independent of verb count
@@ -478,7 +493,7 @@ export default function VerbArTenseQuiz() {
       setMatchResult(result)
       setResults(r => [...r, { verb: question.verb, pronoun: question.pronoun, correct, matchResult: result }])
       setPhase('feedback')
-      if (!correct) setTypedAnswer('')
+      if (!correct) { setTypedAnswer(''); if (question.multiInput) setTypedAnswer2('') }
       return
     }
 
@@ -682,6 +697,12 @@ export default function VerbArTenseQuiz() {
   const confirmOk = (() => {
     if (phase !== 'feedback' || !matchResult) return true
     if (matchResult !== 'wrong') return true
+    if (question?.type === 'conj-typed-pron' && question?.multiInput) {
+      const cands = question.correctCandidates
+      const r00 = fuzzyMatch(typedAnswer,  cands[0]), r01 = fuzzyMatch(typedAnswer,  cands[1])
+      const r10 = fuzzyMatch(typedAnswer2, cands[0]), r11 = fuzzyMatch(typedAnswer2, cands[1])
+      return (r00 !== 'wrong' && r11 !== 'wrong') || (r01 !== 'wrong' && r10 !== 'wrong')
+    }
     if (question?.type === 'conj-typed-dual') {
       const pronCands = question.correctPronounCandidates ?? [question.correctPronoun]
       return pronCands.some(c => fuzzyMatch(typedAnswer, c) !== 'wrong')
@@ -749,20 +770,44 @@ export default function VerbArTenseQuiz() {
                 onChange={e => setTypedAnswer(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
-                    if (phase === 'question') handleTyped()
-                    else if (phase === 'feedback' && matchResult === 'wrong' && confirmOk) handleNext()
+                    if (phase === 'question') {
+                      if (question.multiInput) inputRef2.current?.focus({ preventScroll: true })
+                      else handleTyped()
+                    } else if (phase === 'feedback' && matchResult === 'wrong' && confirmOk) handleNext()
                   }
                 }}
                 disabled={phase === 'feedback' && matchResult !== 'wrong'}
-                placeholder={phase === 'feedback' && matchResult === 'wrong' ? 'Type the correct pronoun to continue…' : question.placeholder}
+                placeholder={phase === 'feedback' && matchResult === 'wrong'
+                  ? (question.multiInput ? `${question.correctCandidates[0]}…` : 'Type the correct pronoun to continue…')
+                  : question.placeholder}
                 autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-form-type="other"
               />
+              {question.multiInput && (
+                <input
+                  ref={inputRef2}
+                  style={{ ...s.typedInput, ...(phase === 'feedback' && matchResult === 'wrong' ? { borderColor: '#3b82f6', borderWidth: 2 } : {}) }}
+                  type="text"
+                  value={typedAnswer2}
+                  onChange={e => setTypedAnswer2(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      if (phase === 'question') handleTyped()
+                      else if (phase === 'feedback' && matchResult === 'wrong' && confirmOk) handleNext()
+                    }
+                  }}
+                  disabled={phase === 'feedback' && matchResult !== 'wrong'}
+                  placeholder={phase === 'feedback' && matchResult === 'wrong'
+                    ? `${question.correctCandidates[1]}…`
+                    : question.placeholder}
+                  autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-form-type="other"
+                />
+              )}
               {phase === 'question' && (
                 <button
-                  style={{ ...s.typedBtn, backgroundColor: typedAnswer.trim() ? '#16a34a' : '#f59e0b', color: '#fff' }}
+                  style={{ ...s.typedBtn, backgroundColor: (typedAnswer.trim() || typedAnswer2.trim()) ? '#16a34a' : '#f59e0b', color: '#fff' }}
                   onClick={handleTyped}
                 >
-                  {typedAnswer.trim() ? 'Check' : 'Pass'}
+                  {(typedAnswer.trim() || typedAnswer2.trim()) ? 'Check' : 'Pass'}
                 </button>
               )}
             </div>
@@ -833,7 +878,9 @@ export default function VerbArTenseQuiz() {
               else if (matchResult === 'close') label = `Close — ${question.correctPronoun}  ·  ${question.correctConjugation}`
               else label = `Incorrect — ${question.correctPronoun}  ·  ${question.correctConjugation}`
             } else {
-              const ans = question.correct ?? question.correctCandidates?.[0] ?? ''
+              const ans = question.multiInput
+                ? question.correctCandidates.join(' · ')
+                : (question.correct ?? question.correctCandidates?.[0] ?? '')
               if (matchResult === 'exact') label = 'Correct!'
               else if (matchResult === 'close') label = `Close — ${ans}`
               else label = `Incorrect — ${ans}`
