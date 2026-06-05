@@ -454,6 +454,7 @@ export default function VerbArTenseQuiz() {
         .map(c => fuzzyMatch(typedAnswer, c))
         .reduce((best, r) => r === 'exact' ? 'exact' : best === 'exact' ? 'exact' : r === 'close' ? 'close' : best, 'wrong')
       const correct = result !== 'wrong'
+      recordAnswer(verbId, question.tenseKey, correct)
       // Per-pronoun tracking — 5 correct per pronoun to pass, independent of verb count
       if (correct) {
         const key = question.pronoun.key
@@ -480,6 +481,7 @@ export default function VerbArTenseQuiz() {
       const result  = correct
         ? (pronResult === 'exact' && conjResult === 'exact' ? 'exact' : 'close')
         : 'wrong'
+      recordAnswer(verbId, question.tenseKey, correct)
       // Per-pronoun tracking — 5 correct per pronoun to pass, independent of verb count
       if (correct) {
         const key = question.pronoun.key
