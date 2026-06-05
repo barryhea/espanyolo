@@ -410,6 +410,9 @@ export default function VerbArTenseQuiz() {
     setDragCount(newCount)
 
     if (newCount % 5 === 0) {
+      if (newBlockCounts.every(c => c >= STAGE2_PER_PRONOUN_THRESHOLD)) {
+        advanceAllVerbsFromSub(activeTense, 0)
+      }
       setDragBlockResults([])
       setPhase('drag-summary')
     } else {
