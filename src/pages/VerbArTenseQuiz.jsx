@@ -930,6 +930,7 @@ export default function VerbArTenseQuiz() {
                 type="text"
                 value={typedAnswer}
                 onChange={e => setTypedAnswer(e.target.value)}
+                onFocus={() => { if (phase === 'feedback' && matchResult === 'wrong') setTypedAnswer('') }}
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
                     if (phase === 'question') inputRef2.current?.focus({ preventScroll: true })
@@ -949,6 +950,7 @@ export default function VerbArTenseQuiz() {
                 type="text"
                 value={typedAnswer2}
                 onChange={e => setTypedAnswer2(e.target.value)}
+                onFocus={() => { if (phase === 'feedback' && matchResult === 'wrong') setTypedAnswer2('') }}
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
                     if (phase === 'question') {
@@ -971,6 +973,7 @@ export default function VerbArTenseQuiz() {
                   type="text"
                   value={typedAnswer3}
                   onChange={e => setTypedAnswer3(e.target.value)}
+                  onFocus={() => { if (phase === 'feedback' && matchResult === 'wrong') setTypedAnswer3('') }}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
                       if (phase === 'question') handleTyped()
