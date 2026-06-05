@@ -39,34 +39,36 @@ export const PRONOUNS = [
 ]
 
 // ── Pronoun progress view (Levels 2–4) ───────────────────────────────────────
-export function PronounProgressView({ level, verbs, progMap }) {
-  const scoreKey   = level === 2 ? 't1_score' : level === 3 ? 't2_score' : 't3_score'
+export function PronounProgressView({ level, verbs, progMap, pronounCounts }) {
+  const cjCol      = level === 2 ? 't1_cj_stage' : level === 3 ? 't2_cj_stage' : 't3_cj_stage'
   const tenseLabel = level === 2 ? 'Present Tense' : level === 3 ? 'Past Tense' : 'Future Tense'
-  const THRESHOLD  = 3
+  const THRESHOLD  = 5
   const visible    = verbs.filter(v => !progMap[v.id]?.hidden)
-  const total      = visible.length
-  const mastered   = visible.filter(v => (progMap[v.id]?.[scoreKey] ?? 0) >= THRESHOLD).length
-  const pct        = total > 0 ? mastered / total : 0
-  const barColor   = pct === 1 ? '#22c55e' : pct > 0 ? '#f59e0b' : '#d1d5db'
+  const done       = visible.length > 0 && visible.every(v => (progMap[v.id]?.[cjCol] ?? 0) >= 4)
 
   return (
     <div>
       <div style={{ padding: '0.6rem 1rem 0.35rem', fontSize: '0.72rem', color: '#aaa', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid #f5f5f5' }}>
-        {tenseLabel} · {mastered} / {total} verbs mastered
+        {tenseLabel}{done ? ' · Complete ✓' : ''}
       </div>
-      {PRONOUNS.map(p => (
-        <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderBottom: '1px solid #f5f5f5' }}>
-          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: barColor, flexShrink: 0 }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111' }}>{p.label}</div>
-            <div style={{ fontSize: '0.72rem', color: '#aaa' }}>{p.english}</div>
+      {PRONOUNS.map(p => {
+        const count    = done ? 5 : Math.min(pronounCounts?.[p.key] ?? 0, 5)
+        const pct      = count / THRESHOLD
+        const barColor = pct >= 1 ? '#22c55e' : pct > 0 ? '#f59e0b' : '#d1d5db'
+        return (
+          <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderBottom: '1px solid #f5f5f5' }}>
+            <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: barColor, flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111' }}>{p.label}</div>
+              <div style={{ fontSize: '0.72rem', color: '#aaa' }}>{p.english}</div>
+            </div>
+            <span style={{ fontSize: '0.78rem', color: '#888', flexShrink: 0 }}>{count} / {THRESHOLD}</span>
+            <div style={{ width: '56px', height: '4px', backgroundColor: '#f0f0f0', borderRadius: '2px', overflow: 'hidden', flexShrink: 0 }}>
+              <div style={{ height: '100%', width: `${pct * 100}%`, backgroundColor: barColor, borderRadius: '2px' }} />
+            </div>
           </div>
-          <span style={{ fontSize: '0.78rem', color: '#888', flexShrink: 0 }}>{mastered} / {total}</span>
-          <div style={{ width: '56px', height: '4px', backgroundColor: '#f0f0f0', borderRadius: '2px', overflow: 'hidden', flexShrink: 0 }}>
-            <div style={{ height: '100%', width: `${pct * 100}%`, backgroundColor: barColor, borderRadius: '2px' }} />
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

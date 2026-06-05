@@ -58,7 +58,7 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
     const verbIds = verbs.map(v => v.id)
     const { data: progress, error: progressErr } = await supabase
       .from('user_verb_progress')
-      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, t1_score, t2_score, t3_score, hidden')
+      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, t1_score, t2_score, t3_score, t1_cj_stage, t2_cj_stage, t3_cj_stage, hidden')
       .eq('user_id', user.id)
       .in('verb_id', verbIds)
 
@@ -76,6 +76,9 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
         t1_score:         p.t1_score         ?? 0,
         t2_score:         p.t2_score         ?? 0,
         t3_score:         p.t3_score         ?? 0,
+        t1_cj_stage:      p.t1_cj_stage      ?? 0,
+        t2_cj_stage:      p.t2_cj_stage      ?? 0,
+        t3_cj_stage:      p.t3_cj_stage      ?? 0,
         hidden:           p.hidden           ?? false,
       }
     }
@@ -152,8 +155,8 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
 
   const visibleModalVerbs = modalVerbs.filter(v => !modalVerbProgress[v.id]?.hidden)
   const _allL4Done = !modalLoading && visibleModalVerbs.length > 0 && visibleModalVerbs.every(v => (modalVerbProgress[v.id]?.l4_score ?? 0) >= 5)
-  const _allT1Done = _allL4Done && visibleModalVerbs.every(v => (modalVerbProgress[v.id]?.t1_score ?? 0) >= 3)
-  const _allT2Done = _allT1Done && visibleModalVerbs.every(v => (modalVerbProgress[v.id]?.t2_score ?? 0) >= 3)
+  const _allT1Done = _allL4Done && visibleModalVerbs.every(v => (modalVerbProgress[v.id]?.t1_cj_stage ?? 0) >= 4)
+  const _allT2Done = _allT1Done && visibleModalVerbs.every(v => (modalVerbProgress[v.id]?.t2_cj_stage ?? 0) >= 4)
   const defaultProgressTab = !_allL4Done ? 1 : !_allT1Done ? 2 : !_allT2Done ? 3 : 4
   const activeProgressTab  = progressTab ?? defaultProgressTab
 
@@ -350,11 +353,23 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
                         onToggleHidden={toggleHiddenInModal}
                       />
                     ))
-                  : <PronounProgressView
-                      level={activeProgressTab}
-                      verbs={modalVerbs}
-                      progMap={modalVerbProgress}
-                    />
+                  : (() => {
+                      const tKey = activeProgressTab === 2 ? 't1' : activeProgressTab === 3 ? 't2' : 't3'
+                      const cjKey = `${tKey}_cj_stage`
+                      const vis = modalVerbs.filter(v => !modalVerbProgress[v.id]?.hidden)
+                      const minCj = vis.length > 0 ? Math.min(...vis.map(v => modalVerbProgress[v.id]?.[cjKey] ?? 0)) : 0
+                      const sub = Math.min(Math.max(minCj, 1), 3)
+                      let pCounts = null
+                      try { pCounts = JSON.parse(localStorage.getItem(`verb-ar-cj-${user.id}-${tKey}-${sub}`) ?? 'null') } catch {}
+                      return (
+                        <PronounProgressView
+                          level={activeProgressTab}
+                          verbs={modalVerbs}
+                          progMap={modalVerbProgress}
+                          pronounCounts={pCounts}
+                        />
+                      )
+                    })()
             }
           </div>
         )}
@@ -410,20 +425,23 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
           const loading    = modalLoading
           const total      = loading ? '…' : activeVerbIds.length
           const masteredCt = loading ? '…' : activeVerbIds.filter(id => (modalVerbProgress[id]?.l4_score ?? 0) >= 5).length
-          const tCount     = key => loading
-            ? '…'
-            : activeVerbIds.filter(id => (modalVerbProgress[id]?.[`${key}_score`] ?? 0) >= 3).length
+          const tStageLabel = cjKey => {
+            if (loading) return '…'
+            const SUB_NAMES = ['Stage 1 – Drag & Match', 'Stage 2 – Multiple Choice', 'Stage 3 – Type Pronoun', 'Stage 4 – Full Conjugation']
+            const minCj = activeVerbIds.length > 0 ? Math.min(...activeVerbIds.map(id => modalVerbProgress[id]?.[cjKey] ?? 0)) : 0
+            return SUB_NAMES[Math.min(minCj, 3)] ?? 'Complete'
+          }
 
           // Compute completion state from freshly loaded modal data so it reflects
           // the current DB state rather than the potentially stale categoryTense snapshot.
           const localAllL4Done = !loading && activeVerbIds.length > 0
             && activeVerbIds.every(id => (modalVerbProgress[id]?.l4_score ?? 0) >= 5)
           const localT1Done = localAllL4Done
-            && activeVerbIds.every(id => (modalVerbProgress[id]?.t1_score ?? 0) >= 3)
+            && activeVerbIds.every(id => (modalVerbProgress[id]?.t1_cj_stage ?? 0) >= 4)
           const localT2Done = localT1Done
-            && activeVerbIds.every(id => (modalVerbProgress[id]?.t2_score ?? 0) >= 3)
+            && activeVerbIds.every(id => (modalVerbProgress[id]?.t2_cj_stage ?? 0) >= 4)
           const localT3Done = localT2Done
-            && activeVerbIds.every(id => (modalVerbProgress[id]?.t3_score ?? 0) >= 3)
+            && activeVerbIds.every(id => (modalVerbProgress[id]?.t3_cj_stage ?? 0) >= 4)
 
           const STAGES = [
             {
@@ -441,7 +459,7 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
               sub:      'T1',
               locked:   !localAllL4Done,
               complete: localT1Done,
-              progress: `${tCount('t1')} / ${total} mastered`,
+              progress: tStageLabel('t1_cj_stage'),
               color:    '#3b82f6',
             },
             {
@@ -450,7 +468,7 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
               sub:      'T2',
               locked:   !localT1Done,
               complete: localT2Done,
-              progress: `${tCount('t2')} / ${total} mastered`,
+              progress: tStageLabel('t2_cj_stage'),
               color:    '#f97316',
             },
             {
@@ -459,7 +477,7 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
               sub:      'T3',
               locked:   !localT2Done,
               complete: localT3Done,
-              progress: `${tCount('t3')} / ${total} mastered`,
+              progress: tStageLabel('t3_cj_stage'),
               color:    '#16a34a',
             },
           ]

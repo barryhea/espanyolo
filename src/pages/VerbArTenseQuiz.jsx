@@ -89,8 +89,10 @@ export default function VerbArTenseQuiz() {
   const [typedAnswer2,  setTypedAnswer2]  = useState('')  // second input for Stage 4 (conjugation)
   const [matchResult,   setMatchResult]   = useState(null)
   const [results,       setResults]       = useState([])
-  // Per-pronoun correct counts for Stage 2 MC — tracked in-memory, advances all verbs together
+  // Per-pronoun correct counts for Stages 2–4 — per-pronoun, not per-verb
   const [stage2PronounCounts, setStage2PronounCounts] = useState({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
+  const [stage3PronounCounts, setStage3PronounCounts] = useState({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
+  const [stage4PronounCounts, setStage4PronounCounts] = useState({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
 
   const progressRef = useRef({})
   const inputRef    = useRef(null)
@@ -109,13 +111,18 @@ export default function VerbArTenseQuiz() {
     setDragBlockResults([])
     setBlockPronounCounts([0, 0, 0, 0, 0])
     setDragRoundsThisTense(0)
-    setStage2PronounCounts({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
   }, [activeTense])
 
-  // Reset per-pronoun MC counts whenever we (re-)enter Stage 2 from Stage 1
+  // On entering a pronoun sub-stage, restore counts from localStorage (persists across page navigations)
   useEffect(() => {
-    if (activeSub === 1) setStage2PronounCounts({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
-  }, [activeSub])
+    const load = (sub) => {
+      try { return JSON.parse(localStorage.getItem(`verb-ar-cj-${user?.id}-${activeTense}-${sub}`) ?? 'null') } catch { return null }
+    }
+    const zero = { yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 }
+    if (activeSub === 1) setStage2PronounCounts(load(1) ?? zero)
+    if (activeSub === 2) setStage3PronounCounts(load(2) ?? zero)
+    if (activeSub === 3) setStage4PronounCounts(load(3) ?? zero)
+  }, [activeSub, activeTense])
 
   // One-time reset: clears any Stage 2 (MC) progress recorded under the old per-verb scoring
   // so the correct per-pronoun threshold takes effect from a clean slate.
@@ -151,6 +158,22 @@ export default function VerbArTenseQuiz() {
         .in('verb_id', verbIds)
     }
     localStorage.setItem(`${STAGE2_RESET_KEY}-${user.id}`, '1')
+  }
+
+  function savePronounCounts(tenseKey, subStage, counts) {
+    try { localStorage.setItem(`verb-ar-cj-${user?.id}-${tenseKey}-${subStage}`, JSON.stringify(counts)) } catch {}
+  }
+
+  // Advance all verbs from fromSub → fromSub+1 in memory and DB when per-pronoun threshold is met
+  function advanceAllVerbsFromSub(tenseKey, fromSub) {
+    const cfg = TENSE_CFG[tenseKey]
+    for (const verb of allVerbs.filter(v => !progressRef.current[v.id]?.hidden)) {
+      const prog = progressRef.current[verb.id] ?? {}
+      if ((prog[cfg.cjCol] ?? 0) === fromSub) {
+        progressRef.current[verb.id] = { ...prog, [cfg.cjCol]: fromSub + 1, [cfg.scoreCol]: 0 }
+        saveProgress(verb.id)
+      }
+    }
   }
 
   async function loadQuiz() {
@@ -402,25 +425,13 @@ export default function VerbArTenseQuiz() {
     const correct = option === question.correct
 
     if (activeSub === 1) {
-      // Stage 2: track correct answers per subject pronoun.
-      // Stage advances only when every pronoun has been answered correctly
-      // STAGE2_PER_PRONOUN_THRESHOLD times — not per-verb.
       if (correct) {
         const key = question.pronoun.key
         const newCounts = { ...stage2PronounCounts, [key]: (stage2PronounCounts[key] ?? 0) + 1 }
         setStage2PronounCounts(newCounts)
-
-        const stage2Done = PRONOUNS.every(p => (newCounts[p.key] ?? 0) >= STAGE2_PER_PRONOUN_THRESHOLD)
-        if (stage2Done) {
-          // Advance every Stage-2 verb in-memory (and save) so loadQuiz() lands on Stage 3
-          const cfg = TENSE_CFG[question.tenseKey]
-          for (const verb of allVerbs.filter(v => !progressRef.current[v.id]?.hidden)) {
-            const prog = progressRef.current[verb.id] ?? {}
-            if ((prog[cfg.cjCol] ?? 0) === 1) {
-              progressRef.current[verb.id] = { ...prog, [cfg.cjCol]: 2, [cfg.scoreCol]: 0 }
-              saveProgress(verb.id)
-            }
-          }
+        savePronounCounts(question.tenseKey, 1, newCounts)
+        if (PRONOUNS.every(p => (newCounts[p.key] ?? 0) >= STAGE2_PER_PRONOUN_THRESHOLD)) {
+          advanceAllVerbsFromSub(question.tenseKey, 1)
         }
       }
     } else {
@@ -438,13 +449,21 @@ export default function VerbArTenseQuiz() {
     const verbId = question.verb.id
 
     if (question.type === 'conj-typed-pron') {
-      // Stage 3: type the subject pronoun
       const cands  = question.correctCandidates ?? [question.correct]
       const result = cands
         .map(c => fuzzyMatch(typedAnswer, c))
         .reduce((best, r) => r === 'exact' ? 'exact' : best === 'exact' ? 'exact' : r === 'close' ? 'close' : best, 'wrong')
       const correct = result !== 'wrong'
-      recordAnswer(verbId, question.tenseKey, correct)
+      // Per-pronoun tracking — 5 correct per pronoun to pass, independent of verb count
+      if (correct) {
+        const key = question.pronoun.key
+        const newCounts = { ...stage3PronounCounts, [key]: (stage3PronounCounts[key] ?? 0) + 1 }
+        setStage3PronounCounts(newCounts)
+        savePronounCounts(question.tenseKey, 2, newCounts)
+        if (PRONOUNS.every(p => (newCounts[p.key] ?? 0) >= STAGE2_PER_PRONOUN_THRESHOLD)) {
+          advanceAllVerbsFromSub(question.tenseKey, 2)
+        }
+      }
       setMatchResult(result)
       setResults(r => [...r, { verb: question.verb, pronoun: question.pronoun, correct, matchResult: result }])
       setPhase('feedback')
@@ -453,7 +472,6 @@ export default function VerbArTenseQuiz() {
     }
 
     if (question.type === 'conj-typed-dual') {
-      // Stage 4: type both the subject pronoun and the conjugated form
       const pronResult = fuzzyMatch(typedAnswer,  question.correctPronoun)
       const conjResult = fuzzyMatch(typedAnswer2, question.correctConjugation)
       const pronOk = pronResult !== 'wrong'
@@ -462,7 +480,16 @@ export default function VerbArTenseQuiz() {
       const result  = correct
         ? (pronResult === 'exact' && conjResult === 'exact' ? 'exact' : 'close')
         : 'wrong'
-      recordAnswer(verbId, question.tenseKey, correct)
+      // Per-pronoun tracking — 5 correct per pronoun to pass, independent of verb count
+      if (correct) {
+        const key = question.pronoun.key
+        const newCounts = { ...stage4PronounCounts, [key]: (stage4PronounCounts[key] ?? 0) + 1 }
+        setStage4PronounCounts(newCounts)
+        savePronounCounts(question.tenseKey, 3, newCounts)
+        if (PRONOUNS.every(p => (newCounts[p.key] ?? 0) >= STAGE2_PER_PRONOUN_THRESHOLD)) {
+          advanceAllVerbsFromSub(question.tenseKey, 3)
+        }
+      }
       setMatchResult(result)
       setResults(r => [...r, { verb: question.verb, pronoun: question.pronoun, correct, matchResult: result }])
       setPhase('feedback')
