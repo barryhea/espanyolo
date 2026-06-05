@@ -48,6 +48,24 @@ function shuffle(arr) {
   return a
 }
 
+// Reorder so no two adjacent questions share the same pronoun key.
+// Uses a greedy forward-swap: when a repeat is found, find the nearest
+// later item with a different pronoun and swap it into position.
+function noConsecutivePronoun(arr) {
+  const result = [...arr]
+  for (let i = 1; i < result.length; i++) {
+    if (result[i].pronoun.key === result[i - 1].pronoun.key) {
+      for (let j = i + 1; j < result.length; j++) {
+        if (result[j].pronoun.key !== result[i - 1].pronoun.key) {
+          ;[result[i], result[j]] = [result[j], result[i]]
+          break
+        }
+      }
+    }
+  }
+  return result
+}
+
 function levenshtein(a, b) {
   const m = a.length, n = b.length
   const dp = Array.from({ length: m + 1 }, (_, i) => Array(n + 1).fill(0).map((_, j) => j === 0 ? i : 0))
@@ -320,7 +338,7 @@ export default function VerbArTenseQuiz() {
       }
     }
 
-    sess = shuffle(sess).slice(0, Math.max(15, needsWork.length * 2))
+    sess = noConsecutivePronoun(shuffle(sess).slice(0, Math.max(15, needsWork.length * 2)))
     if (!sess.length) { loadQuiz(); return }
 
     setSession(sess)
