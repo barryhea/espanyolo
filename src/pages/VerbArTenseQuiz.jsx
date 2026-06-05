@@ -214,7 +214,7 @@ export default function VerbArTenseQuiz() {
     const verbIds = verbData.map(v => v.id)
     const { data: progressData } = await supabase
       .from('user_verb_progress')
-      .select('id, verb_id, t1_score, t2_score, t3_score, t1_cj_stage, t2_cj_stage, t3_cj_stage, hidden')
+      .select('id, verb_id, t1_score, t2_score, t3_score, t1_cj_stage, t2_cj_stage, t3_cj_stage, hidden, l1_incorrect, l2_incorrect, l3_incorrect, l4_incorrect, l1_resets, l2_resets, l3_resets, l4_resets, total_incorrect')
       .eq('user_id', user.id)
       .in('verb_id', verbIds)
 
@@ -229,6 +229,15 @@ export default function VerbArTenseQuiz() {
         t2_cj_stage: p.t2_cj_stage ?? 0,
         t3_cj_stage: p.t3_cj_stage ?? 0,
         hidden:      p.hidden      ?? false,
+        l1_incorrect: p.l1_incorrect ?? 0,
+        l2_incorrect: p.l2_incorrect ?? 0,
+        l3_incorrect: p.l3_incorrect ?? 0,
+        l4_incorrect: p.l4_incorrect ?? 0,
+        l1_resets:    p.l1_resets    ?? 0,
+        l2_resets:    p.l2_resets    ?? 0,
+        l3_resets:    p.l3_resets    ?? 0,
+        l4_resets:    p.l4_resets    ?? 0,
+        total_incorrect: p.total_incorrect ?? 0,
       }
     }
 
@@ -243,6 +252,15 @@ export default function VerbArTenseQuiz() {
         progMap[verbId].t1_score    = Math.max(progMap[verbId].t1_score    ?? 0, prev.t1_score    ?? 0)
         progMap[verbId].t2_score    = Math.max(progMap[verbId].t2_score    ?? 0, prev.t2_score    ?? 0)
         progMap[verbId].t3_score    = Math.max(progMap[verbId].t3_score    ?? 0, prev.t3_score    ?? 0)
+        progMap[verbId].l1_incorrect = Math.max(progMap[verbId].l1_incorrect ?? 0, prev.l1_incorrect ?? 0)
+        progMap[verbId].l2_incorrect = Math.max(progMap[verbId].l2_incorrect ?? 0, prev.l2_incorrect ?? 0)
+        progMap[verbId].l3_incorrect = Math.max(progMap[verbId].l3_incorrect ?? 0, prev.l3_incorrect ?? 0)
+        progMap[verbId].l4_incorrect = Math.max(progMap[verbId].l4_incorrect ?? 0, prev.l4_incorrect ?? 0)
+        progMap[verbId].l1_resets    = Math.max(progMap[verbId].l1_resets    ?? 0, prev.l1_resets    ?? 0)
+        progMap[verbId].l2_resets    = Math.max(progMap[verbId].l2_resets    ?? 0, prev.l2_resets    ?? 0)
+        progMap[verbId].l3_resets    = Math.max(progMap[verbId].l3_resets    ?? 0, prev.l3_resets    ?? 0)
+        progMap[verbId].l4_resets    = Math.max(progMap[verbId].l4_resets    ?? 0, prev.l4_resets    ?? 0)
+        progMap[verbId].total_incorrect = Math.max(progMap[verbId].total_incorrect ?? 0, prev.total_incorrect ?? 0)
       }
     }
     progressRef.current = progMap
@@ -358,10 +376,22 @@ export default function VerbArTenseQuiz() {
     const prog = progressRef.current[verbId]
     if (!prog) return
 
+    const trackingPayload = {
+      l1_incorrect: prog.l1_incorrect ?? 0,
+      l2_incorrect: prog.l2_incorrect ?? 0,
+      l3_incorrect: prog.l3_incorrect ?? 0,
+      l4_incorrect: prog.l4_incorrect ?? 0,
+      l1_resets:    prog.l1_resets    ?? 0,
+      l2_resets:    prog.l2_resets    ?? 0,
+      l3_resets:    prog.l3_resets    ?? 0,
+      l4_resets:    prog.l4_resets    ?? 0,
+      total_incorrect: prog.total_incorrect ?? 0,
+    }
     const scorePayload = {
       t1_score: prog.t1_score ?? 0,
       t2_score: prog.t2_score ?? 0,
       t3_score: prog.t3_score ?? 0,
+      ...trackingPayload,
     }
     const fullPayload = {
       ...scorePayload,
@@ -425,6 +455,11 @@ export default function VerbArTenseQuiz() {
 
   async function handleDragComplete(correct, perPronounResults) {
     if (!roundVerb || !activeTense) return
+    if (!correct) {
+      const prog = progressRef.current[roundVerb.id] ?? {}
+      progressRef.current[roundVerb.id] = { ...prog, l1_incorrect: (prog.l1_incorrect ?? 0) + 1, total_incorrect: (prog.total_incorrect ?? 0) + 1 }
+      saveProgress(roundVerb.id)
+    }
     if (correct) recordAnswer(roundVerb.id, activeTense, true)
 
     const newBlockCounts = blockPronounCounts.map((cnt, i) => cnt + (Array.isArray(perPronounResults) && perPronounResults[i] ? 1 : 0))
@@ -462,8 +497,18 @@ export default function VerbArTenseQuiz() {
         if (PRONOUNS.every(p => (newCounts[p.key] ?? 0) >= STAGE2_PER_PRONOUN_THRESHOLD)) {
           advanceAllVerbsFromSub(question.tenseKey, 1)
         }
+      } else {
+        const verbId = question.verb.id
+        const prog = progressRef.current[verbId] ?? {}
+        progressRef.current[verbId] = { ...prog, l2_incorrect: (prog.l2_incorrect ?? 0) + 1, total_incorrect: (prog.total_incorrect ?? 0) + 1 }
+        saveProgress(verbId)
       }
     } else {
+      if (!correct) {
+        const verbId = question.verb.id
+        const prog = progressRef.current[verbId] ?? {}
+        progressRef.current[verbId] = { ...prog, l2_incorrect: (prog.l2_incorrect ?? 0) + 1, total_incorrect: (prog.total_incorrect ?? 0) + 1 }
+      }
       recordAnswer(question.verb.id, question.tenseKey, correct)
     }
 
@@ -497,6 +542,10 @@ export default function VerbArTenseQuiz() {
           .reduce((best, r) => r === 'exact' ? 'exact' : best === 'exact' ? 'exact' : r === 'close' ? 'close' : best, 'wrong')
       }
       const correct = result !== 'wrong'
+      if (!correct) {
+        const prog = progressRef.current[verbId] ?? {}
+        progressRef.current[verbId] = { ...prog, l3_incorrect: (prog.l3_incorrect ?? 0) + 1, total_incorrect: (prog.total_incorrect ?? 0) + 1 }
+      }
       recordAnswer(verbId, question.tenseKey, correct)
       // Per-pronoun tracking — 5 correct per pronoun to pass, independent of verb count
       if (correct) {
@@ -527,6 +576,10 @@ export default function VerbArTenseQuiz() {
       const result  = correct
         ? (pronResult === 'exact' && conjResult === 'exact' ? 'exact' : 'close')
         : 'wrong'
+      if (!correct) {
+        const prog = progressRef.current[verbId] ?? {}
+        progressRef.current[verbId] = { ...prog, l4_incorrect: (prog.l4_incorrect ?? 0) + 1, total_incorrect: (prog.total_incorrect ?? 0) + 1 }
+      }
       recordAnswer(verbId, question.tenseKey, correct)
       // Per-pronoun tracking — 5 correct per pronoun to pass, independent of verb count
       if (correct) {

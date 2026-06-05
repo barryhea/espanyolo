@@ -546,7 +546,7 @@ export default function VerbQuiz() {
     const verbIds = verbs.map(v => v.id)
     const { data: progress } = await supabase
       .from('user_verb_progress')
-      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, hidden, t1_score, t2_score, t3_score')
+      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, hidden, t1_score, t2_score, t3_score, l1_incorrect, l2_incorrect, l3_incorrect, l4_incorrect, l1_resets, l2_resets, l3_resets, l4_resets, total_incorrect')
       .eq('user_id', user.id)
       .in('verb_id', verbIds)
 
@@ -567,6 +567,15 @@ export default function VerbQuiz() {
         t3_score: p.t3_score ?? 0,
         db_id: p.id,
         consecutive_incorrect: 0,
+        l1_incorrect: p.l1_incorrect ?? 0,
+        l2_incorrect: p.l2_incorrect ?? 0,
+        l3_incorrect: p.l3_incorrect ?? 0,
+        l4_incorrect: p.l4_incorrect ?? 0,
+        l1_resets: p.l1_resets ?? 0,
+        l2_resets: p.l2_resets ?? 0,
+        l3_resets: p.l3_resets ?? 0,
+        l4_resets: p.l4_resets ?? 0,
+        total_incorrect: p.total_incorrect ?? 0,
       }
       if (p.hidden) hiddenVerbIds.add(p.verb_id)
     }
@@ -684,7 +693,7 @@ export default function VerbQuiz() {
   async function saveProgress(verbId) {
     const prog = progressRef.current[verbId]
     if (!prog) return
-    const { stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, hidden, t1_score, t2_score, t3_score, db_id } = prog
+    const { stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, hidden, t1_score, t2_score, t3_score, db_id, l1_incorrect, l2_incorrect, l3_incorrect, l4_incorrect, l1_resets, l2_resets, l3_resets, l4_resets, total_incorrect } = prog
     const payload = {
       current_stage: stage,
       stage2_mastery: stage2_mastery ?? 0,
@@ -695,6 +704,15 @@ export default function VerbQuiz() {
       t1_score: t1_score ?? 0,
       t2_score: t2_score ?? 0,
       t3_score: t3_score ?? 0,
+      l1_incorrect: l1_incorrect ?? 0,
+      l2_incorrect: l2_incorrect ?? 0,
+      l3_incorrect: l3_incorrect ?? 0,
+      l4_incorrect: l4_incorrect ?? 0,
+      l1_resets: l1_resets ?? 0,
+      l2_resets: l2_resets ?? 0,
+      l3_resets: l3_resets ?? 0,
+      l4_resets: l4_resets ?? 0,
+      total_incorrect: total_incorrect ?? 0,
     }
     if (db_id) {
       await supabase.from('user_verb_progress')
@@ -727,7 +745,7 @@ export default function VerbQuiz() {
     } else {
       const { data } = await supabase.from('user_verb_progress')
         .upsert(
-          { user_id: user.id, verb_id: verbId, hidden: willBeHidden, current_stage: prog.stage ?? 1, stage2_mastery: prog.stage2_mastery ?? 0, stage3_mastery: prog.stage3_mastery ?? 0, l4_score: prog.l4_score ?? 0, drag_match_score: prog.drag_match_score ?? 0, t1_score: prog.t1_score ?? 0, t2_score: prog.t2_score ?? 0, t3_score: prog.t3_score ?? 0 },
+          { user_id: user.id, verb_id: verbId, hidden: willBeHidden, current_stage: prog.stage ?? 1, stage2_mastery: prog.stage2_mastery ?? 0, stage3_mastery: prog.stage3_mastery ?? 0, l4_score: prog.l4_score ?? 0, drag_match_score: prog.drag_match_score ?? 0, t1_score: prog.t1_score ?? 0, t2_score: prog.t2_score ?? 0, t3_score: prog.t3_score ?? 0, l1_incorrect: prog.l1_incorrect ?? 0, l2_incorrect: prog.l2_incorrect ?? 0, l3_incorrect: prog.l3_incorrect ?? 0, l4_incorrect: prog.l4_incorrect ?? 0, l1_resets: prog.l1_resets ?? 0, l2_resets: prog.l2_resets ?? 0, l3_resets: prog.l3_resets ?? 0, l4_resets: prog.l4_resets ?? 0, total_incorrect: prog.total_incorrect ?? 0 },
           { onConflict: 'user_id,verb_id' }
         )
         .select('id').single()
@@ -754,7 +772,17 @@ export default function VerbQuiz() {
       const verbName = allVerbs.find(v => v.id === verbId)?.spanish_infinitive ?? String(verbId)
       console.log(`[L1] ${verbName}: match count ${newScore}/5${graduated ? ' → graduated to L2' : ''}`)
     }
-    await Promise.all(creditedIds.map(saveProgress))
+    for (const verbId of wrongIds ?? []) {
+      const prog = progressRef.current[verbId] ?? {
+        stage: 1, stage2_mastery: 0, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, mastered: false, db_id: null, consecutive_incorrect: 0,
+      }
+      progressRef.current[verbId] = {
+        ...prog,
+        l1_incorrect: (prog.l1_incorrect ?? 0) + 1,
+        total_incorrect: (prog.total_incorrect ?? 0) + 1,
+      }
+    }
+    await Promise.all([...creditedIds, ...(wrongIds ?? [])].map(saveProgress))
     l1RoundCountRef.current += 1
     if (l1RoundCountRef.current % 5 === 0) {
       setPhase('l1summary')
@@ -783,10 +811,12 @@ export default function VerbQuiz() {
       }
     } else {
       const newConsecIncorrect = (prog.consecutive_incorrect ?? 0) + 1
+      const newL2Inc = (prog.l2_incorrect ?? 0) + 1
+      const newTotal = (prog.total_incorrect ?? 0) + 1
       if (newConsecIncorrect >= 2) {
-        newProg = { ...prog, stage: 1, stage2_mastery: 0, consecutive_incorrect: 0 }
+        newProg = { ...prog, stage: 1, stage2_mastery: 0, consecutive_incorrect: 0, l2_incorrect: newL2Inc, l2_resets: (prog.l2_resets ?? 0) + 1, total_incorrect: newTotal }
       } else {
-        newProg = { ...prog, stage: effectiveStage, stage2_mastery: 0, consecutive_incorrect: newConsecIncorrect }
+        newProg = { ...prog, stage: effectiveStage, stage2_mastery: 0, consecutive_incorrect: newConsecIncorrect, l2_incorrect: newL2Inc, total_incorrect: newTotal }
       }
     }
 
@@ -805,15 +835,17 @@ export default function VerbQuiz() {
     const verbId = question.verb.id
     const scoreKey = `${question.tenseKey}_score`
 
+    const prog = progressRef.current[verbId] ?? {
+      stage: 4, stage2_mastery: 0, stage3_mastery: 0, l4_score: 5, drag_match_score: 0,
+      mastered: true, t1_score: 0, t2_score: 0, t3_score: 0, db_id: null, consecutive_incorrect: 0,
+    }
     if (correct) {
-      const prog = progressRef.current[verbId] ?? {
-        stage: 4, stage2_mastery: 0, stage3_mastery: 0, l4_score: 5, drag_match_score: 0,
-        mastered: true, t1_score: 0, t2_score: 0, t3_score: 0, db_id: null, consecutive_incorrect: 0,
-      }
       const newScore = (prog[scoreKey] ?? 0) + 1
       progressRef.current[verbId] = { ...prog, [scoreKey]: newScore }
-      saveProgress(verbId)
+    } else {
+      progressRef.current[verbId] = { ...prog, total_incorrect: (prog.total_incorrect ?? 0) + 1 }
     }
+    saveProgress(verbId)
 
     setMatchResult(result)
     setResults(r => [...r, { verb: question.verb, correct, matchResult: result }])
@@ -834,9 +866,13 @@ export default function VerbQuiz() {
         : { ...prog, stage3_mastery: newMastery, consecutive_incorrect: 0 }
     } else {
       const newConsecIncorrect = (prog.consecutive_incorrect ?? 0) + 1
-      newProg = newConsecIncorrect >= 2
-        ? { ...prog, stage3_mastery: 0, consecutive_incorrect: 0 }
-        : { ...prog, consecutive_incorrect: newConsecIncorrect }
+      const newL3Inc = (prog.l3_incorrect ?? 0) + 1
+      const newTotal = (prog.total_incorrect ?? 0) + 1
+      if (newConsecIncorrect >= 2) {
+        newProg = { ...prog, stage3_mastery: 0, consecutive_incorrect: 0, l3_incorrect: newL3Inc, l3_resets: (prog.l3_resets ?? 0) + 1, total_incorrect: newTotal }
+      } else {
+        newProg = { ...prog, consecutive_incorrect: newConsecIncorrect, l3_incorrect: newL3Inc, total_incorrect: newTotal }
+      }
     }
     progressRef.current[verbId] = newProg
     saveProgress(verbId)
@@ -895,7 +931,8 @@ export default function VerbQuiz() {
           ? { ...prog, l4_score: newL4, mastered: true, consecutive_incorrect: 0 }
           : { ...prog, l4_score: newL4, consecutive_incorrect: 0 }
       } else {
-        newProg = { ...prog, l4_score: 0 }
+        const hadProgress = (prog.l4_score ?? 0) > 0
+        newProg = { ...prog, l4_score: 0, l4_incorrect: (prog.l4_incorrect ?? 0) + 1, l4_resets: hadProgress ? (prog.l4_resets ?? 0) + 1 : (prog.l4_resets ?? 0), total_incorrect: (prog.total_incorrect ?? 0) + 1 }
       }
       progressRef.current[verbId] = newProg
       saveProgress(verbId)

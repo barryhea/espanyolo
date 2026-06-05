@@ -228,7 +228,7 @@ export default function Quiz() {
     const wordIds = words.map(w => w.id)
     const { data: progress } = await supabase
       .from('user_word_progress')
-      .select('id, word_id, stage, consecutive_correct, hidden, mastered')
+      .select('id, word_id, stage, consecutive_correct, hidden, mastered, s1_incorrect, s2_incorrect, s3_incorrect, s1_resets, s2_resets, s3_resets, total_incorrect')
       .eq('user_id', user.id)
       .in('word_id', wordIds)
 
@@ -246,6 +246,13 @@ export default function Quiz() {
           mastered: p.mastered ?? false,
           db_id: p.id,
           consecutive_incorrect: 0,
+          s1_incorrect: p.s1_incorrect ?? 0,
+          s2_incorrect: p.s2_incorrect ?? 0,
+          s3_incorrect: p.s3_incorrect ?? 0,
+          s1_resets: p.s1_resets ?? 0,
+          s2_resets: p.s2_resets ?? 0,
+          s3_resets: p.s3_resets ?? 0,
+          total_incorrect: p.total_incorrect ?? 0,
         }
       }
       if (p.hidden) hiddenWordIds.add(p.word_id)
@@ -280,20 +287,25 @@ export default function Quiz() {
   async function saveProgress(wordId) {
     const prog = progressRef.current[wordId]
     if (!prog) return
-    const { stage, consecutive_correct, hidden, mastered, db_id } = prog
+    const { stage, consecutive_correct, hidden, mastered, db_id, s1_incorrect, s2_incorrect, s3_incorrect, s1_resets, s2_resets, s3_resets, total_incorrect } = prog
     console.log('[saveProgress]', { wordId, stage, consecutive_correct, mastered, db_id: db_id ?? 'none' })
+    const trackingPayload = {
+      s1_incorrect: s1_incorrect ?? 0, s2_incorrect: s2_incorrect ?? 0, s3_incorrect: s3_incorrect ?? 0,
+      s1_resets: s1_resets ?? 0, s2_resets: s2_resets ?? 0, s3_resets: s3_resets ?? 0,
+      total_incorrect: total_incorrect ?? 0,
+    }
 
     if (db_id) {
       const { error } = await supabase
         .from('user_word_progress')
-        .update({ stage, consecutive_correct, hidden: hidden ?? false, mastered: mastered ?? false })
+        .update({ stage, consecutive_correct, hidden: hidden ?? false, mastered: mastered ?? false, ...trackingPayload })
         .eq('id', db_id)
       if (error) console.error('[saveProgress] UPDATE error', error)
       else console.log('[saveProgress] UPDATE ok → stage', stage, 'consec', consecutive_correct, 'mastered', mastered)
     } else {
       const { data, error } = await supabase
         .from('user_word_progress')
-        .insert({ user_id: user.id, word_id: wordId, stage, consecutive_correct, hidden: hidden ?? false, mastered: mastered ?? false })
+        .insert({ user_id: user.id, word_id: wordId, stage, consecutive_correct, hidden: hidden ?? false, mastered: mastered ?? false, ...trackingPayload })
         .select('id')
         .single()
       if (error) console.error('[saveProgress] INSERT error', error)
@@ -327,6 +339,13 @@ export default function Quiz() {
           consecutive_correct: currentProg?.consecutive_correct ?? 0,
           hidden: willBeHidden,
           mastered: currentProg?.mastered ?? false,
+          s1_incorrect: currentProg?.s1_incorrect ?? 0,
+          s2_incorrect: currentProg?.s2_incorrect ?? 0,
+          s3_incorrect: currentProg?.s3_incorrect ?? 0,
+          s1_resets: currentProg?.s1_resets ?? 0,
+          s2_resets: currentProg?.s2_resets ?? 0,
+          s3_resets: currentProg?.s3_resets ?? 0,
+          total_incorrect: currentProg?.total_incorrect ?? 0,
         },
         { onConflict: 'user_id,word_id' }
       )
@@ -357,17 +376,20 @@ export default function Quiz() {
       }
     } else {
       const newConsecIncorrect = (prog.consecutive_incorrect ?? 0) + 1
+      const incorrectKey = prog.stage === 1 ? 's1_incorrect' : prog.stage === 2 ? 's2_incorrect' : 's3_incorrect'
+      const newIncorrect = (prog[incorrectKey] ?? 0) + 1
+      const newTotal = (prog.total_incorrect ?? 0) + 1
       if (prog.stage === 2 && newConsecIncorrect >= 2) {
-        newProg = { ...prog, stage: 1, consecutive_correct: 0, consecutive_incorrect: 0 }
+        newProg = { ...prog, stage: 1, consecutive_correct: 0, consecutive_incorrect: 0, [incorrectKey]: newIncorrect, s2_resets: (prog.s2_resets ?? 0) + 1, total_incorrect: newTotal }
         console.log(`[handleAnswer] word ${wordId} REGRESSED S2 → S1 (2 consecutive incorrect)`)
       } else if (prog.stage === 3 && newConsecIncorrect >= 2) {
-        newProg = { ...prog, consecutive_correct: 0, consecutive_incorrect: 0 }
+        newProg = { ...prog, consecutive_correct: 0, consecutive_incorrect: 0, [incorrectKey]: newIncorrect, s3_resets: (prog.s3_resets ?? 0) + 1, total_incorrect: newTotal }
         console.log(`[handleAnswer] word ${wordId} S3 counter reset (2 consecutive incorrect)`)
       } else if (prog.stage === 3) {
-        newProg = { ...prog, consecutive_incorrect: newConsecIncorrect }
+        newProg = { ...prog, consecutive_incorrect: newConsecIncorrect, [incorrectKey]: newIncorrect, total_incorrect: newTotal }
         console.log(`[handleAnswer] word ${wordId} S3 forgiveness — cc preserved at ${prog.consecutive_correct}, ci: ${newConsecIncorrect}`)
       } else {
-        newProg = { ...prog, consecutive_correct: 0, consecutive_incorrect: newConsecIncorrect }
+        newProg = { ...prog, consecutive_correct: 0, consecutive_incorrect: newConsecIncorrect, [incorrectKey]: newIncorrect, total_incorrect: newTotal }
         console.log(`[handleAnswer] word ${wordId} incorrect — S${prog.stage} consec_correct reset, consec_incorrect: ${newConsecIncorrect}`)
       }
     }
