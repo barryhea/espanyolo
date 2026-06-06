@@ -113,6 +113,10 @@ export default function VerbArTenseQuiz() {
   const [typedAnswer2,  setTypedAnswer2]  = useState('')
   const [typedAnswer3,  setTypedAnswer3]  = useState('')  // third input for Stage 4 triple-pronoun (conjugation)
   const [matchResult,   setMatchResult]   = useState(null)
+  // Per-field result for Stage 4 — true=correct(locked), false=wrong(editable), null=not yet submitted
+  const [f1Ok, setF1Ok] = useState(null)
+  const [f2Ok, setF2Ok] = useState(null)
+  const [f3Ok, setF3Ok] = useState(null)
   const [results,       setResults]       = useState([])
   // Per-pronoun correct counts for Stages 2–4 — per-pronoun, not per-verb
   const [stage2PronounCounts, setStage2PronounCounts] = useState({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
@@ -370,6 +374,7 @@ export default function VerbArTenseQuiz() {
     setTypedAnswer2('')
     setTypedAnswer3('')
     setMatchResult(null)
+    setF1Ok(null); setF2Ok(null); setF3Ok(null)
     setQuestion(sess[0])
     setPhase('question')
   }
@@ -569,7 +574,7 @@ export default function VerbArTenseQuiz() {
     }
 
     if (question.type === 'conj-typed-dual') {
-      let result
+      let result, newF1Ok, newF2Ok, newF3Ok
       if (question.tripleInput) {
         // 3 inputs: pron1 + pron2 (order-independent) + conjugation
         const cands = question.correctPronounCandidates
@@ -579,9 +584,9 @@ export default function VerbArTenseQuiz() {
         const r11 = fuzzyMatch(typedAnswer2, cands[1])
         const aOk = r00 !== 'wrong' && r11 !== 'wrong'
         const bOk = r01 !== 'wrong' && r10 !== 'wrong'
-        const pronOk   = aOk || bOk
+        const pronOk    = aOk || bOk
         const conjResult = fuzzyMatch(typedAnswer3, question.correctConjugation)
-        const conjOk   = conjResult !== 'wrong'
+        const conjOk    = conjResult !== 'wrong'
         if (!pronOk || !conjOk) {
           result = 'wrong'
         } else {
@@ -591,6 +596,7 @@ export default function VerbArTenseQuiz() {
           )
           result = allExact ? 'exact' : 'close'
         }
+        newF1Ok = pronOk; newF2Ok = pronOk; newF3Ok = conjOk
       } else {
         // 2 inputs: single pronoun + conjugation
         const pronCands  = question.correctPronounCandidates ?? [question.correctPronoun]
@@ -598,9 +604,12 @@ export default function VerbArTenseQuiz() {
           .map(c => fuzzyMatch(typedAnswer, c))
           .reduce((best, r) => r === 'exact' ? 'exact' : best === 'exact' ? 'exact' : r === 'close' ? 'close' : best, 'wrong')
         const conjResult = fuzzyMatch(typedAnswer2, question.correctConjugation)
-        result = pronResult !== 'wrong' && conjResult !== 'wrong'
+        const pronOk = pronResult !== 'wrong'
+        const conjOk = conjResult !== 'wrong'
+        result = pronOk && conjOk
           ? (pronResult === 'exact' && conjResult === 'exact' ? 'exact' : 'close')
           : 'wrong'
+        newF1Ok = pronOk; newF2Ok = conjOk; newF3Ok = null
       }
       const correct = result !== 'wrong'
       if (!correct) {
@@ -618,10 +627,18 @@ export default function VerbArTenseQuiz() {
           advanceAllVerbsFromSub(question.tenseKey, 3)
         }
       }
+      setF1Ok(newF1Ok); setF2Ok(newF2Ok); setF3Ok(newF3Ok)
       setMatchResult(result)
       setResults(r => [...r, { verb: question.verb, pronoun: question.pronoun, correct, matchResult: result }])
       setPhase('feedback')
-      if (!correct) { setTypedAnswer(''); setTypedAnswer2(''); if (question.tripleInput) setTypedAnswer3('') }
+      // Only clear fields that were wrong; correct fields retain their value (shown green+locked)
+      if (question.tripleInput) {
+        if (!newF1Ok) { setTypedAnswer(''); setTypedAnswer2('') }
+        if (!newF3Ok) setTypedAnswer3('')
+      } else {
+        if (!newF1Ok) setTypedAnswer('')
+        if (!newF2Ok) setTypedAnswer2('')
+      }
       return
     }
   }
@@ -636,6 +653,7 @@ export default function VerbArTenseQuiz() {
     setTypedAnswer2('')
     setTypedAnswer3('')
     setMatchResult(null)
+    setF1Ok(null); setF2Ok(null); setF3Ok(null)
     setPhase('question')
   }
 
@@ -794,6 +812,20 @@ export default function VerbArTenseQuiz() {
 
   // ── Question / feedback ───────────────────────────────────────────────────
 
+  // Stage 4 per-field feedback state (recomputed each render)
+  const isDualFb  = phase === 'feedback' && question?.type === 'conj-typed-dual'
+  const f1Wrong   = isDualFb && f1Ok === false
+  const f1Correct = isDualFb && f1Ok === true
+  const f2Wrong   = isDualFb && f2Ok === false
+  const f2Correct = isDualFb && f2Ok === true
+  const f3Wrong   = isDualFb && f3Ok === false
+  const f3Correct = isDualFb && f3Ok === true
+  const dualInputStyle = (wrong, correct) => ({
+    ...s.typedInput,
+    ...(wrong   ? { borderColor: '#dc2626', borderWidth: 2 } : {}),
+    ...(correct ? { borderColor: '#16a34a', borderWidth: 2, backgroundColor: '#f0fdf4' } : {}),
+  })
+
   const confirmOk = (() => {
     if (phase !== 'feedback' || !matchResult) return true
     if (matchResult !== 'wrong') return true
@@ -804,16 +836,22 @@ export default function VerbArTenseQuiz() {
       return (r00 !== 'wrong' && r11 !== 'wrong') || (r01 !== 'wrong' && r10 !== 'wrong')
     }
     if (question?.type === 'conj-typed-dual') {
+      if (matchResult !== 'wrong') return true
       if (question.tripleInput) {
         const cands = question.correctPronounCandidates
-        const r00 = fuzzyMatch(typedAnswer,  cands[0]), r01 = fuzzyMatch(typedAnswer,  cands[1])
-        const r10 = fuzzyMatch(typedAnswer2, cands[0]), r11 = fuzzyMatch(typedAnswer2, cands[1])
-        return ((r00 !== 'wrong' && r11 !== 'wrong') || (r01 !== 'wrong' && r10 !== 'wrong'))
-            && fuzzyMatch(typedAnswer3, question.correctConjugation) !== 'wrong'
+        // Pron pair: already locked (f1Ok=true) OR both inputs now form a valid pair
+        const pronPairOk = f1Ok === true || (() => {
+          const r00 = fuzzyMatch(typedAnswer,  cands[0]), r01 = fuzzyMatch(typedAnswer,  cands[1])
+          const r10 = fuzzyMatch(typedAnswer2, cands[0]), r11 = fuzzyMatch(typedAnswer2, cands[1])
+          return (r00 !== 'wrong' && r11 !== 'wrong') || (r01 !== 'wrong' && r10 !== 'wrong')
+        })()
+        const conjOkNow = f3Ok === true || fuzzyMatch(typedAnswer3, question.correctConjugation) !== 'wrong'
+        return pronPairOk && conjOkNow
       }
       const pronCands = question.correctPronounCandidates ?? [question.correctPronoun]
-      return pronCands.some(c => fuzzyMatch(typedAnswer, c) !== 'wrong')
-          && fuzzyMatch(typedAnswer2, question.correctConjugation) !== 'wrong'
+      const f1OkNow = f1Ok === true || pronCands.some(c => fuzzyMatch(typedAnswer,  c) !== 'wrong')
+      const f2OkNow = f2Ok === true || fuzzyMatch(typedAnswer2, question.correctConjugation) !== 'wrong'
+      return f1OkNow && f2OkNow
     }
     const cands = question.correctCandidates ?? [question.correct]
     return cands.some(c => fuzzyMatch(typedAnswer, c) !== 'wrong')
@@ -920,25 +958,25 @@ export default function VerbArTenseQuiz() {
             </div>
           )}
 
-          {/* Stage 4: dual typed — show English phrase, type pronoun(s) + conjugation */}
+          {/* Stage 4: dual typed — per-field green/lock correct, red/editable wrong */}
           {question.type === 'conj-typed-dual' && (
             <div style={s.typedArea}>
               {/* Input 1: pronoun (or first of two pronouns for el/ella, ellos/ellas) */}
               <input
                 ref={inputRef}
-                style={{ ...s.typedInput, ...(phase === 'feedback' && matchResult === 'wrong' ? { borderColor: '#3b82f6', borderWidth: 2 } : {}) }}
+                style={dualInputStyle(f1Wrong, f1Correct)}
                 type="text"
                 value={typedAnswer}
                 onChange={e => setTypedAnswer(e.target.value)}
-                onFocus={() => { if (phase === 'feedback' && matchResult === 'wrong') setTypedAnswer('') }}
+                onFocus={() => { if (f1Wrong) setTypedAnswer('') }}
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
                     if (phase === 'question') inputRef2.current?.focus({ preventScroll: true })
                     else if (phase === 'feedback' && matchResult === 'wrong' && confirmOk) handleNext()
                   }
                 }}
-                disabled={phase === 'feedback' && matchResult !== 'wrong'}
-                placeholder={phase === 'feedback' && matchResult === 'wrong'
+                disabled={isDualFb && (matchResult !== 'wrong' || f1Correct)}
+                placeholder={f1Wrong
                   ? (question.tripleInput ? `${question.correctPronounCandidates[0]}…` : `Pronoun — ${question.correctPronoun}`)
                   : (question.tripleInput ? 'First subject pronoun…' : 'Subject pronoun (e.g. yo)')}
                 autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-form-type="other"
@@ -946,11 +984,11 @@ export default function VerbArTenseQuiz() {
               {/* Input 2: second pronoun (tripleInput) or conjugation (non-tripleInput) */}
               <input
                 ref={inputRef2}
-                style={{ ...s.typedInput, ...(phase === 'feedback' && matchResult === 'wrong' ? { borderColor: '#3b82f6', borderWidth: 2 } : {}) }}
+                style={dualInputStyle(f2Wrong, f2Correct)}
                 type="text"
                 value={typedAnswer2}
                 onChange={e => setTypedAnswer2(e.target.value)}
-                onFocus={() => { if (phase === 'feedback' && matchResult === 'wrong') setTypedAnswer2('') }}
+                onFocus={() => { if (f2Wrong) setTypedAnswer2('') }}
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
                     if (phase === 'question') {
@@ -959,8 +997,8 @@ export default function VerbArTenseQuiz() {
                     } else if (phase === 'feedback' && matchResult === 'wrong' && confirmOk) handleNext()
                   }
                 }}
-                disabled={phase === 'feedback' && matchResult !== 'wrong'}
-                placeholder={phase === 'feedback' && matchResult === 'wrong'
+                disabled={isDualFb && (matchResult !== 'wrong' || f2Correct)}
+                placeholder={f2Wrong
                   ? (question.tripleInput ? `${question.correctPronounCandidates[1]}…` : `Conjugation — ${question.correctConjugation}`)
                   : (question.tripleInput ? 'Second subject pronoun…' : 'Conjugated verb (e.g. hablo)')}
                 autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-form-type="other"
@@ -969,19 +1007,19 @@ export default function VerbArTenseQuiz() {
               {question.tripleInput && (
                 <input
                   ref={inputRef3}
-                  style={{ ...s.typedInput, ...(phase === 'feedback' && matchResult === 'wrong' ? { borderColor: '#3b82f6', borderWidth: 2 } : {}) }}
+                  style={dualInputStyle(f3Wrong, f3Correct)}
                   type="text"
                   value={typedAnswer3}
                   onChange={e => setTypedAnswer3(e.target.value)}
-                  onFocus={() => { if (phase === 'feedback' && matchResult === 'wrong') setTypedAnswer3('') }}
+                  onFocus={() => { if (f3Wrong) setTypedAnswer3('') }}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
                       if (phase === 'question') handleTyped()
                       else if (phase === 'feedback' && matchResult === 'wrong' && confirmOk) handleNext()
                     }
                   }}
-                  disabled={phase === 'feedback' && matchResult !== 'wrong'}
-                  placeholder={phase === 'feedback' && matchResult === 'wrong'
+                  disabled={isDualFb && (matchResult !== 'wrong' || f3Correct)}
+                  placeholder={f3Wrong
                     ? `Conjugation — ${question.correctConjugation}`
                     : 'Conjugated verb (e.g. habla)'}
                   autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" data-form-type="other"
