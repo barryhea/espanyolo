@@ -348,11 +348,10 @@ export default function VerbArTenseQuiz() {
           const pronoun     = PRONOUNS[Math.floor(Math.random() * PRONOUNS.length)]
           const form        = verb[cfg.conjKey]?.[pronoun.key] ?? ''
           const verbEnglish = verb.english.split('/')[0].replace(/\s*\(.*?\)\s*/g, '').trim()
-          const tLabel      = cfg.label.replace(' Tense', '')
           sess.push({
             type: 'conj-typed-dual',
             verb, pronoun,
-            prompt: `${pronoun.english} ${verbEnglish}  (${tLabel})`,
+            prompt: `${pronoun.english} ${verbEnglish}`,
             correctPronoun:           pronoun.key,
             correctPronounCandidates: PRONOUN_ALTERNATIVES[pronoun.key] ?? [pronoun.key],
             tripleInput:              !!PRONOUN_ALTERNATIVES[pronoun.key],
