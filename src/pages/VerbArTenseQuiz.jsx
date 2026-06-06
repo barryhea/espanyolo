@@ -122,7 +122,6 @@ export default function VerbArTenseQuiz() {
   const [stage2PronounCounts, setStage2PronounCounts] = useState({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
   const [stage3PronounCounts, setStage3PronounCounts] = useState({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
   const [stage4PronounCounts, setStage4PronounCounts] = useState({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
-  const [pronMode,       setPronMode]       = useState(false)
 
   const progressRef = useRef({})
   const inputRef    = useRef(null)
@@ -332,35 +331,37 @@ export default function VerbArTenseQuiz() {
     const cfg = TENSE_CFG[tenseKey]
 
     if (subStage === 2 || subStage === 3) {
-      // Stages 3 & 4: infinite per-pronoun mode — keep going until each of the 5
-      // pronouns has been answered correctly 5 times (25 total correct needed).
-      setPronMode(true)
-      const lsKey = `verb-ar-cj-${user?.id}-${tenseKey}-${subStage}`
-      const zero  = { yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 }
-      let counts  = zero
-      try { counts = JSON.parse(localStorage.getItem(lsKey) ?? 'null') ?? zero } catch {}
-
-      const activePronouns = PRONOUNS.filter(p => (counts[p.key] ?? 0) < STAGE2_PER_PRONOUN_THRESHOLD)
-      if (!activePronouns.length) { loadQuiz(); return }
-
+      // Stages 3 & 4: fixed 15-question session — 5 pronouns × 3 questions each.
+      // After each session a summary screen shows per-pronoun session tallies.
+      // Cumulative per-pronoun counts (across sessions) drive stage advancement.
+      const SESS_SIZE    = 15
       const visibleVerbs = allVerbData.filter(v => !progMap[v.id]?.hidden)
-      const pronoun = activePronouns[Math.floor(Math.random() * activePronouns.length)]
-      const verb    = shuffle(visibleVerbs)[0]
-      const q       = buildPronounQuestion(subStage, tenseKey, verb, pronoun, cfg)
+      if (!visibleVerbs.length) { loadQuiz(); return }
 
-      setSession([q])
+      // Build 3 shuffled copies of the pronoun list, then take the first SESS_SIZE
+      const pronounPool = []
+      for (let i = 0; i < Math.ceil(SESS_SIZE / PRONOUNS.length); i++) {
+        pronounPool.push(...shuffle([...PRONOUNS]))
+      }
+      const rawSess = pronounPool.slice(0, SESS_SIZE).map(pronoun => {
+        const verb = visibleVerbs[Math.floor(Math.random() * visibleVerbs.length)]
+        return buildPronounQuestion(subStage, tenseKey, verb, pronoun, cfg)
+      })
+
+      const sess = noConsecutivePronoun(rawSess)
+      if (!sess.length) { loadQuiz(); return }
+
+      setSession(sess)
       setCurrentIdx(0)
       setResults([])
       setSelectedOpt(null)
       setTypedAnswer(''); setTypedAnswer2(''); setTypedAnswer3('')
       setMatchResult(null)
       setF1Ok(null); setF2Ok(null); setF3Ok(null)
-      setQuestion(q)
+      setQuestion(sess[0])
       setPhase('question')
       return
     }
-
-    setPronMode(false)
     let sess = []
 
     if (subStage === 1) {
@@ -665,32 +666,6 @@ export default function VerbArTenseQuiz() {
 
   function handleNext() {
     const nextIdx = currentIdx + 1
-
-    if (pronMode) {
-      const counts = activeSub === 2 ? stage3PronounCounts : stage4PronounCounts
-      if (PRONOUNS.every(p => (counts[p.key] ?? 0) >= STAGE2_PER_PRONOUN_THRESHOLD)) {
-        loadQuiz()
-        return
-      }
-      const lastKey      = question?.pronoun?.key
-      const active       = PRONOUNS.filter(p => (counts[p.key] ?? 0) < STAGE2_PER_PRONOUN_THRESHOLD)
-      const pool         = active.filter(p => p.key !== lastKey)
-      const nextPronoun  = (pool.length ? pool : active)[Math.floor(Math.random() * (pool.length || active.length))]
-      const visibleVerbs = allVerbs.filter(v => !progressRef.current[v.id]?.hidden)
-      const nextVerb     = visibleVerbs[Math.floor(Math.random() * visibleVerbs.length)]
-      const cfg          = TENSE_CFG[activeTense]
-      const q            = buildPronounQuestion(activeSub, activeTense, nextVerb, nextPronoun, cfg)
-      setQuestion(q)
-      setSession([q])
-      setCurrentIdx(0)
-      setSelectedOpt(null)
-      setTypedAnswer(''); setTypedAnswer2(''); setTypedAnswer3('')
-      setMatchResult(null)
-      setF1Ok(null); setF2Ok(null); setF3Ok(null)
-      setPhase('question')
-      return
-    }
-
     if (nextIdx >= session.length) { setPhase('session-summary'); return }
     setCurrentIdx(nextIdx)
     setQuestion(session[nextIdx])
@@ -906,43 +881,18 @@ export default function VerbArTenseQuiz() {
   return (
     <div style={s.page}><NavBar />
       <main style={s.main}>
-        {pronMode ? (
-          <div style={s.pronProgress}>
-            {PRONOUNS.map(p => {
-              const counts = activeSub === 2 ? stage3PronounCounts : stage4PronounCounts
-              const count  = Math.min(counts[p.key] ?? 0, 5)
-              const done   = count >= 5
-              return (
-                <div key={p.key} style={s.pronProgressRow}>
-                  <span style={{ ...s.pronLabel, color: done ? '#16a34a' : '#555' }}>{p.label}</span>
-                  <div style={s.dots}>
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <div key={i} style={{
-                        width: '8px', height: '8px', borderRadius: '50%', boxSizing: 'border-box',
-                        backgroundColor: i < count ? (done ? '#16a34a' : '#3b82f6') : 'transparent',
-                        border: `1.5px solid ${i < count ? (done ? '#16a34a' : '#3b82f6') : '#d1d5db'}`,
-                      }} />
-                    ))}
-                  </div>
-                  <span style={s.pronCount}>{count}/5</span>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <div style={s.progressRow}>
-            <div style={s.progressBar}>
-              <div style={{ display: 'flex', height: '100%' }}>
-                {session.map((_, i) => {
-                  const r  = results[i]
-                  const bg = r ? (r.correct ? '#16a34a' : '#dc2626') : '#e5e5e5'
-                  return <div key={i} style={{ flex: 1, backgroundColor: bg }} />
-                })}
-              </div>
+        <div style={s.progressRow}>
+          <div style={s.progressBar}>
+            <div style={{ display: 'flex', height: '100%' }}>
+              {session.map((_, i) => {
+                const r  = results[i]
+                const bg = r ? (r.correct ? '#16a34a' : '#dc2626') : '#e5e5e5'
+                return <div key={i} style={{ flex: 1, backgroundColor: bg }} />
+              })}
             </div>
-            <span style={s.progressLabel}>{currentIdx + 1} / {session.length}</span>
           </div>
-        )}
+          <span style={s.progressLabel}>{currentIdx + 1} / {session.length}</span>
+        </div>
 
         <div style={s.card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1145,9 +1095,7 @@ export default function VerbArTenseQuiz() {
                   onClick={confirmOk ? handleNext : undefined}
                   disabled={!confirmOk}
                 >
-                  {pronMode
-                    ? (PRONOUNS.every(p => ((activeSub === 2 ? stage3PronounCounts : stage4PronounCounts)[p.key] ?? 0) >= STAGE2_PER_PRONOUN_THRESHOLD) ? 'Finish' : 'Next →')
-                    : (currentIdx + 1 >= session.length ? 'Finish' : 'Next →')}
+                  {currentIdx + 1 >= session.length ? 'Finish' : 'Next →'}
                 </button>
               </div>
             )
@@ -1229,10 +1177,6 @@ const s = {
   progressFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#16a34a', transformOrigin: 'left center', transform: 'scaleX(0)', animation: 'cjFill 2.5s linear forwards' },
   progressLabel: { position: 'relative', zIndex: 1, color: '#fff', fontWeight: 600, fontSize: '1rem', textShadow: '0 1px 3px rgba(0,0,0,0.35)' },
   dragChipGhost: { position: 'fixed', padding: '0.4rem 0.875rem', backgroundColor: '#3b82f6', color: '#fff', borderRadius: '6px', fontSize: '0.9rem', fontWeight: 500, pointerEvents: 'none', zIndex: 9999, userSelect: 'none', whiteSpace: 'nowrap', boxShadow: '0 4px 16px rgba(59,130,246,0.4)', transform: 'scale(1.08)' },
-  pronProgress:    { display: 'flex', flexDirection: 'column', gap: '0.28rem', padding: '0.15rem 0' },
-  pronProgressRow: { display: 'flex', alignItems: 'center', gap: '0.5rem' },
-  pronLabel:       { fontSize: '0.72rem', fontWeight: 500, minWidth: '82px', flexShrink: 0 },
-  pronCount:       { fontSize: '0.67rem', color: '#aaa', minWidth: '22px', textAlign: 'right', flexShrink: 0 },
   // Summary
   summaryCard: { backgroundColor: '#fff', border: '1px solid #e5e5e5', borderRadius: '12px', overflow: 'hidden' },
   summaryHeader: { padding: '1rem 1.25rem 0.75rem', borderBottom: '1px solid #f0f0f0', display: 'flex', flexDirection: 'column', gap: '2px' },
