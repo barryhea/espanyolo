@@ -334,7 +334,7 @@ export default function VerbArTenseQuiz() {
       // Stages 3 & 4: fixed 15-question session — 5 pronouns × 3 questions each.
       // After each session a summary screen shows per-pronoun session tallies.
       // Cumulative per-pronoun counts (across sessions) drive stage advancement.
-      const SESS_SIZE    = 15
+      const SESS_SIZE    = 10
       const visibleVerbs = allVerbData.filter(v => !progMap[v.id]?.hidden)
       if (!visibleVerbs.length) { loadQuiz(); return }
 
@@ -895,11 +895,6 @@ export default function VerbArTenseQuiz() {
         </div>
 
         <div style={s.card}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={s.tenseTag}>{tenseLabel}</span>
-            <span style={s.subTagSm}>Stage {activeSub + 1} · {subLabel}</span>
-          </div>
-
           <p style={s.word}>{question.prompt}</p>
 
           {/* Stage 2: MC — show conjugated form, pick subject pronoun */}
