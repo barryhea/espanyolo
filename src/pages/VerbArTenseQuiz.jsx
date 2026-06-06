@@ -844,7 +844,7 @@ export default function VerbArTenseQuiz() {
   const dualInputStyle = (wrong, correct) => ({
     ...s.typedInput,
     ...(wrong   ? { borderColor: '#dc2626', borderWidth: 2 } : {}),
-    ...(correct ? { borderColor: '#16a34a', borderWidth: 2, backgroundColor: '#f0fdf4' } : {}),
+    ...(correct ? { borderColor: '#16a34a', borderWidth: 2, backgroundColor: '#16a34a', color: '#fff' } : {}),
   })
 
   const confirmOk = (() => {
