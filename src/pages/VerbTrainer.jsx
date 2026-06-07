@@ -94,7 +94,7 @@ export default function VerbTrainer() {
       supabase.from('verbs').select('id, category'),
       supabase
         .from('user_verb_progress')
-        .select('verb_id, current_stage, l4_score, t1_score, t2_score, t3_score, t1_cj_stage, t2_cj_stage, t3_cj_stage')
+        .select('verb_id, current_stage, l4_score, t1_score, t2_score, t3_score, t1_cj_stage, t2_cj_stage, t3_cj_stage, hidden')
         .eq('user_id', user.id),
     ])
 
@@ -118,6 +118,7 @@ export default function VerbTrainer() {
         t1_cj_stage: p.t1_cj_stage  ?? 0,
         t2_cj_stage: p.t2_cj_stage  ?? 0,
         t3_cj_stage: p.t3_cj_stage  ?? 0,
+        hidden:      p.hidden        ?? false,
       }
     }
 
@@ -147,24 +148,26 @@ export default function VerbTrainer() {
         t3Mastered:  verbIds.filter(id => (progByVerb[id]?.t3_score ?? 0) >= 3).length,
       }
 
-      const any       = verbIds.length > 0
-      const allL1Done = any && verbIds.every(id => (progByVerb[id]?.stage    ?? 1) >= 2)
-      const allL2Done = any && verbIds.every(id => (progByVerb[id]?.stage    ?? 1) >= 3)
-      const allL3Done = any && verbIds.every(id => (progByVerb[id]?.stage    ?? 1) >= 4)
-      const allL4Done = any && verbIds.every(id => (progByVerb[id]?.l4_score ?? 0) >= 5)
+      // Exclude hidden verbs from all completion checks — they should not block progress.
+      const visibleIds = verbIds.filter(id => !(progByVerb[id]?.hidden ?? false))
+      const any       = visibleIds.length > 0
+      const allL1Done = any && visibleIds.every(id => (progByVerb[id]?.stage    ?? 1) >= 2)
+      const allL2Done = any && visibleIds.every(id => (progByVerb[id]?.stage    ?? 1) >= 3)
+      const allL3Done = any && visibleIds.every(id => (progByVerb[id]?.stage    ?? 1) >= 4)
+      const allL4Done = any && visibleIds.every(id => (progByVerb[id]?.l4_score ?? 0) >= 5)
       // Verbs -AR uses a 4-sub-stage conjugation flow tracked by t{n}_cj_stage (0–4).
       // t{n}_score resets to 0 on every sub-stage boundary so it cannot reliably
       // indicate completion for this category. All other categories use t{n}_score >= 3.
       const isAR = cat.title === 'Verbs -AR'
-      const t1Done = allL4Done && verbIds.every(id => isAR
+      const t1Done = allL4Done && visibleIds.every(id => isAR
         ? (progByVerb[id]?.t1_cj_stage ?? 0) >= 4
         : (progByVerb[id]?.t1_score    ?? 0) >= 3
       )
-      const t2Done = t1Done && verbIds.every(id => isAR
+      const t2Done = t1Done && visibleIds.every(id => isAR
         ? (progByVerb[id]?.t2_cj_stage ?? 0) >= 4
         : (progByVerb[id]?.t2_score    ?? 0) >= 3
       )
-      const t3Done = t2Done && verbIds.every(id => isAR
+      const t3Done = t2Done && visibleIds.every(id => isAR
         ? (progByVerb[id]?.t3_cj_stage ?? 0) >= 4
         : (progByVerb[id]?.t3_score    ?? 0) >= 3
       )
