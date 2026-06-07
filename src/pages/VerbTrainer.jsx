@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { VERB_CATEGORIES } from '../utils/courseData'
@@ -83,9 +83,11 @@ export default function VerbTrainer() {
   const [categoryTense, setCategoryTense] = useState({})
   const [activeCard,    setActiveCard]    = useState(null)
 
+  const location = useLocation()
+
   useEffect(() => {
     if (user) loadProgress()
-  }, [user?.id])
+  }, [user?.id, location.key])
 
   async function loadProgress() {
     const [{ data: allVerbs, error: verbsErr }, { data: progressRows, error: progressErr }] = await Promise.all([
