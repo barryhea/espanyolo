@@ -55,13 +55,10 @@ function FamilyStamp({ family }) {
   )
 }
 
-function StatCallout({ label, value, color = '#111' }) {
-  return (
-    <div style={styles.statBox}>
-      <span style={{ ...styles.statValue, color }}>{value}</span>
-      <span style={styles.statLabel}>{label}</span>
-    </div>
-  )
+function segColors(complete, active) {
+  if (complete) return { bar: '#22c55e', text: '#22c55e' }
+  if (active)   return { bar: '#f59e0b', text: '#f59e0b' }
+  return          { bar: '#e5e7eb', text: '#d1d5db' }
 }
 
 export default function VerbDetail() {
@@ -119,45 +116,25 @@ export default function VerbDetail() {
   const stage   = progress?.current_stage ?? 1
   const l4Score = progress?.l4_score     ?? 0
 
-  // Derive display stats from the columns that are actually stored
-  const levelLabel = (l4Score >= 5) ? 'Mastered'
-    : stage >= 4 ? 'L4'
-    : stage >= 3 ? 'L3'
-    : stage >= 2 ? 'L2'
-    : 'L1'
+  const l1 = stage >= 2 || l4Score >= 5
+  const l2 = stage >= 3 || l4Score >= 5
+  const l3 = stage >= 4 || l4Score >= 5
+  const l4 = l4Score >= 5
+  const t1 = (progress?.t1_cj_stage ?? 0) >= 4
+  const t2 = (progress?.t2_cj_stage ?? 0) >= 4
+  const t3 = (progress?.t3_cj_stage ?? 0) >= 4
 
-  const stageScore = stage === 1
-    ? (progress?.drag_match_score ?? 0)
-    : stage === 2 ? (progress?.stage2_mastery ?? 0)
-    : stage === 3 ? (progress?.stage3_mastery ?? 0)
-    : l4Score
-
-  const stageScoreMax = stage === 1 ? 5 : stage === 2 ? 3 : stage === 3 ? 3 : 5
-
-  const tensesMastered = [
-    (progress?.t1_cj_stage ?? 0) >= 4,
-    (progress?.t2_cj_stage ?? 0) >= 4,
-    (progress?.t3_cj_stage ?? 0) >= 4,
-  ].filter(Boolean).length
-
-  const stageFlags = {
-    l1: stage >= 2 || l4Score >= 5,
-    l2: stage >= 3 || l4Score >= 5,
-    l3: stage >= 4 || l4Score >= 5,
-    l4: l4Score >= 5,
-    t1: (progress?.t1_cj_stage ?? 0) >= 4,
-    t2: (progress?.t2_cj_stage ?? 0) >= 4,
-    t3: (progress?.t3_cj_stage ?? 0) >= 4,
-  }
-
-  const STAGE_SEGS = [
-    { key: 'l1', label: 'L1',      color: '#22c55e' },
-    { key: 'l2', label: 'L2',      color: '#cd7f32' },
-    { key: 'l3', label: 'L3',      color: '#a8a9ad' },
-    { key: 'l4', label: 'L4',      color: '#f5c518' },
-    { key: 't1', label: 'Present', color: '#3b82f6' },
-    { key: 't2', label: 'Past',    color: '#f97316' },
-    { key: 't3', label: 'Future',  color: '#16a34a' },
+  const tenseSegs = [
+    { label: 'Inf.',  ...segColors(l4,      !l4)           },
+    { label: 'Pres.', ...segColors(t1, l4 && !t1)          },
+    { label: 'Past',  ...segColors(t2, t1 && !t2)          },
+    { label: 'Fut.',  ...segColors(t3, t2 && !t3)          },
+  ]
+  const lSegs = [
+    { label: 'L1', ...segColors(l1,        !l1)            },
+    { label: 'L2', ...segColors(l2, l1 && !l2)             },
+    { label: 'L3', ...segColors(l3, l2 && !l3)             },
+    { label: 'L4', ...segColors(l4, l3 && !l4)             },
   ]
 
   return (
@@ -177,26 +154,23 @@ export default function VerbDetail() {
           <FamilyStamp family={verb.verb_family} />
         </div>
 
-        {/* Stat callouts */}
-        <div style={styles.statsRow}>
-          <StatCallout label="Level"     value={levelLabel} color="#111" />
-          <StatCallout label="Score"     value={`${stageScore}/${stageScoreMax}`} color="#3b82f6" />
-          <StatCallout label="Tenses"    value={`${tensesMastered}/3`} color="#16a34a" />
-        </div>
-
         {/* Stage progress */}
         <div style={styles.stageCard}>
           <span style={styles.stageCardTitle}>Stage Progress</span>
           <div style={styles.stageRow}>
-            {STAGE_SEGS.map(({ key, label, color }, i) => {
-              const done = stageFlags[key]
-              return (
-                <div key={key} style={{ ...styles.stageSeg, marginLeft: i === 4 ? '8px' : 0 }}>
-                  <div style={{ ...styles.stageRect, backgroundColor: done ? color : '#e5e7eb' }} />
-                  <span style={{ ...styles.stageLabel, color: done ? color : '#bbb' }}>{label}</span>
-                </div>
-              )
-            })}
+            {tenseSegs.map(({ label, bar, text }) => (
+              <div key={label} style={styles.stageSeg}>
+                <div style={{ ...styles.stageRect, backgroundColor: bar }} />
+                <span style={{ ...styles.stageLabel, color: text }}>{label}</span>
+              </div>
+            ))}
+            <div style={styles.stageDivider} />
+            {lSegs.map(({ label, bar, text }) => (
+              <div key={label} style={styles.stageSeg}>
+                <div style={{ ...styles.stageRect, backgroundColor: bar }} />
+                <span style={{ ...styles.stageLabel, color: text }}>{label}</span>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -289,33 +263,6 @@ const styles = {
     fontSize: '1rem',
     color: '#666',
   },
-  statsRow: {
-    display: 'flex',
-    gap: '0.75rem',
-  },
-  statBox: {
-    flex: 1,
-    backgroundColor: '#fff',
-    border: '1px solid #e5e5e5',
-    borderRadius: '10px',
-    padding: '0.875rem 0.5rem',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '3px',
-  },
-  statValue: {
-    fontSize: '1.5rem',
-    fontWeight: 700,
-    lineHeight: 1,
-  },
-  statLabel: {
-    fontSize: '0.7rem',
-    color: '#888',
-    fontWeight: 500,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
   stageCard: {
     backgroundColor: '#fff',
     border: '1px solid #e5e5e5',
@@ -334,9 +281,15 @@ const styles = {
   },
   stageRow: {
     display: 'flex',
-    gap: '8px',
+    gap: '6px',
     alignItems: 'flex-end',
-    flexWrap: 'wrap',
+  },
+  stageDivider: {
+    width: '1px',
+    height: '18px',
+    backgroundColor: '#e5e7eb',
+    margin: '0 1px',
+    flexShrink: 0,
   },
   stageSeg: {
     display: 'flex',
