@@ -1,0 +1,246 @@
+# ARCHITECTURE.md — Espanyolo Supabase Schema
+
+> Generated from `supabase/migrations/` and `src/` source files.
+> Update this file whenever a schema change is made or a component's data access changes.
+
+---
+
+## Tables
+
+- [profiles](#profiles)
+- [words](#words)
+- [user\_word\_progress](#user_word_progress)
+- [verbs](#verbs)
+- [user\_verb\_progress](#user_verb_progress)
+
+---
+
+## `profiles`
+
+Stores one row per authenticated user. Created on first login via `AuthCallback.jsx` or implicitly on first quiz load via `Quiz.jsx` / `VerbQuiz.jsx`.
+
+**Unique constraint:** `id`
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `id` | UUID | — | Primary key; equals `auth.users.id` |
+| `email` | TEXT | — | User's email address |
+| `full_name` | TEXT | NULL | From `user_metadata.full_name` at login |
+| `avatar_url` | TEXT | NULL | From `user_metadata.avatar_url` at login |
+
+### Column access
+
+| Column | Read by | Written by |
+|--------|---------|------------|
+| `id` | `AuthCallback.jsx` | `AuthCallback.jsx`, `Quiz.jsx`, `VerbQuiz.jsx` |
+| `email` | — | `AuthCallback.jsx`, `Quiz.jsx`, `VerbQuiz.jsx` |
+| `full_name` | — | `AuthCallback.jsx` |
+| `avatar_url` | — | `AuthCallback.jsx` |
+
+**Notes:**
+- `AuthCallback.jsx` does a `select('id')` existence check then `insert` on first login.
+- `Quiz.jsx` and `VerbQuiz.jsx` call `upsert({ id, email }, { onConflict: 'id' })` as a guard on every quiz load — they do not read from `profiles`.
+
+---
+
+## `words`
+
+Static vocabulary content table. No component writes to it; all rows are seeded via migrations or Supabase Studio.
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `id` | INTEGER | — | Primary key |
+| `english` | TEXT | — | English translation |
+| `spanish` | TEXT | — | Spanish word |
+| `theme` | TEXT | — | Vocab theme title (matches `VOCAB_THEMES[].title` in `courseData.js`) |
+| `phonetic` | TEXT | NULL | Phonetic pronunciation hint (added in `20260530120000`; not yet read by any component) |
+
+### Column access
+
+| Column | Read by | Written by |
+|--------|---------|------------|
+| `id` | `Dashboard.jsx`, `Quiz.jsx`, `CustomQuiz.jsx`, `Dictionary.jsx`, `HiddenWords.jsx` (join), `Polish.jsx` (join) | — |
+| `english` | `Quiz.jsx`, `CustomQuiz.jsx`, `Dictionary.jsx`, `HiddenWords.jsx` (join), `Polish.jsx` (join) | — |
+| `spanish` | `Quiz.jsx`, `CustomQuiz.jsx`, `Dictionary.jsx`, `HiddenWords.jsx` (join), `Polish.jsx` (join) | — |
+| `theme` | `Dashboard.jsx`, `Quiz.jsx`, `Dictionary.jsx`, `HiddenWords.jsx` (join) | — |
+| `phonetic` | *(unused)* | — |
+
+**Notes:**
+- `HiddenWords.jsx` and `Polish.jsx` access word content via a Supabase relational join from `user_word_progress`: `.select('id, word_id, words(english, spanish, theme)')`.
+- `phonetic` was added in migration `20260530120000` but is not yet selected in any component.
+
+---
+
+## `user_word_progress`
+
+Tracks each user's learning progress for each vocabulary word. One row per `(user_id, word_id)` pair.
+
+**Unique constraint:** `(user_id, word_id)`
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `id` | INTEGER | — | Primary key |
+| `user_id` | UUID | — | FK → `auth.users.id` |
+| `word_id` | INTEGER | — | FK → `words.id` |
+| `stage` | INTEGER | 1 | Current learning stage: 1 = MC, 2 = typed EN, 3 = typed ES |
+| `consecutive_correct` | INTEGER | 0 | Correct answers in a row in the current stage |
+| `hidden` | BOOLEAN | false | Whether the word is snoozed from quiz sessions |
+| `mastered` | BOOLEAN | false | Set true when S3 reaches 5 consecutive correct |
+| `polish_correct` | INTEGER | 0 | Correct answers in Polish mode (not in migrations — legacy column) |
+| `polish_incorrect` | INTEGER | 0 | Incorrect answers in Polish mode (not in migrations — legacy column) |
+| `s1_incorrect` | INTEGER | 0 | Total incorrect answers at stage 1 (added `20260605120000`) |
+| `s2_incorrect` | INTEGER | 0 | Total incorrect answers at stage 2 (added `20260605120000`) |
+| `s3_incorrect` | INTEGER | 0 | Total incorrect answers at stage 3 (added `20260605120000`) |
+| `s1_resets` | INTEGER | 0 | Number of times stage 1 was reset (added `20260605120000`) |
+| `s2_resets` | INTEGER | 0 | Number of times stage 2 was reset (added `20260605120000`) |
+| `s3_resets` | INTEGER | 0 | Number of times stage 3 was reset (added `20260605120000`) |
+| `total_incorrect` | INTEGER | 0 | Total incorrect answers across all stages (added `20260605120000`) |
+
+### Column access
+
+| Column | Read by | Written by |
+|--------|---------|------------|
+| `id` | `Quiz.jsx`, `CustomQuiz.jsx`, `Dashboard.jsx`, `Dictionary.jsx`, `Polish.jsx` | — |
+| `user_id` | — | `Quiz.jsx`, `CustomQuiz.jsx`, `Dashboard.jsx`, `Dictionary.jsx` |
+| `word_id` | `Quiz.jsx`, `CustomQuiz.jsx`, `Dashboard.jsx`, `Dictionary.jsx`, `HiddenWords.jsx`, `Polish.jsx` | `Quiz.jsx`, `CustomQuiz.jsx`, `Dashboard.jsx`, `Dictionary.jsx` |
+| `stage` | `Quiz.jsx`, `CustomQuiz.jsx`, `Dashboard.jsx`, `Dictionary.jsx` | `Quiz.jsx`, `CustomQuiz.jsx`, `Dashboard.jsx` |
+| `consecutive_correct` | `Quiz.jsx`, `CustomQuiz.jsx`, `Dashboard.jsx`, `Dictionary.jsx` | `Quiz.jsx`, `CustomQuiz.jsx` |
+| `hidden` | `Quiz.jsx`, `CustomQuiz.jsx`, `Dashboard.jsx`, `Dictionary.jsx`, `HiddenWords.jsx` | `Quiz.jsx`, `CustomQuiz.jsx`, `Dashboard.jsx`, `Dictionary.jsx`, `HiddenWords.jsx` |
+| `mastered` | `Quiz.jsx`, `CustomQuiz.jsx`, `Dashboard.jsx`, `Dictionary.jsx` | `Quiz.jsx`, `CustomQuiz.jsx` |
+| `polish_correct` | `Polish.jsx` | `Polish.jsx` |
+| `polish_incorrect` | `Polish.jsx` | `Polish.jsx` |
+| `s1_incorrect` | `Quiz.jsx` | `Quiz.jsx` |
+| `s2_incorrect` | `Quiz.jsx` | `Quiz.jsx` |
+| `s3_incorrect` | `Quiz.jsx` | `Quiz.jsx` |
+| `s1_resets` | `Quiz.jsx` | `Quiz.jsx` |
+| `s2_resets` | `Quiz.jsx` | `Quiz.jsx` |
+| `s3_resets` | `Quiz.jsx` | `Quiz.jsx` |
+| `total_incorrect` | `Quiz.jsx` | `Quiz.jsx` |
+
+**Notes:**
+- `Dashboard.jsx` reads `hidden` to filter the word list and writes it when the user toggles hide from the quiz selector panel.
+- `HiddenWords.jsx` sets `hidden = false` (unhide only) via `.update({ hidden: false })`.
+- `polish_correct` / `polish_incorrect` are not in any migration file — they pre-exist in the original schema.
+
+---
+
+## `verbs`
+
+Static verb content table. No component writes to it; all rows and schema changes are managed via migrations.
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `id` | INTEGER | — | Primary key |
+| `spanish_infinitive` | TEXT | — | Infinitive form (e.g. `hablar`) |
+| `english` | TEXT | — | Primary English translation |
+| `english_alt1` | TEXT | NULL | Alternate English meaning 1 (pre-migration column) |
+| `english_alt2` | TEXT | NULL | Alternate English meaning 2 (pre-migration column) |
+| `category` | TEXT | — | Verb group (e.g. `'Verbs -AR'`, `'Core Verbs'`, `'Stem-Changing O→UE'`, etc.) |
+| `verb_family` | TEXT | NULL | Family tag: `'regular-ar'`, `'regular-er'`, `'regular-ir'`, `'irregular'` (added `20260521140000`) |
+| `requires_all_answers` | BOOLEAN | false | If true, L3 typed stage shows one input per slash-separated meaning (added `20260521120000`) |
+| `present_conjugations` | JSONB | — | Map of pronoun key → conjugated form for present tense |
+| `past_conjugations` | JSONB | — | Map of pronoun key → conjugated form for past tense |
+| `future_conjugations` | JSONB | — | Map of pronoun key → conjugated form for future tense |
+
+Pronoun keys used in conjugation objects: `yo`, `tu`, `el`, `nosotros`, `ellos`.
+
+### Column access
+
+| Column | Read by | Written by |
+|--------|---------|------------|
+| `id` | `VerbTrainer.jsx`, `VerbCategoryModal.jsx`, `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbCustomQuiz.jsx`, `VerbDictionary.jsx`, `VerbDetail.jsx` | — |
+| `spanish_infinitive` | `VerbCategoryModal.jsx`, `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbCustomQuiz.jsx`, `VerbDictionary.jsx`, `VerbDetail.jsx` | — |
+| `english` | `VerbCategoryModal.jsx`, `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbCustomQuiz.jsx`, `VerbDictionary.jsx`, `VerbDetail.jsx` | — |
+| `english_alt1` | `VerbQuiz.jsx` | — |
+| `english_alt2` | `VerbQuiz.jsx` | — |
+| `category` | `VerbTrainer.jsx`, `VerbCategoryModal.jsx`, `VerbCustomQuiz.jsx`, `VerbDictionary.jsx` | — |
+| `verb_family` | `VerbDictionary.jsx`, `VerbDetail.jsx` | — |
+| `requires_all_answers` | `VerbQuiz.jsx` | — |
+| `present_conjugations` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbDictionary.jsx`, `VerbDetail.jsx` | — |
+| `past_conjugations` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbDictionary.jsx`, `VerbDetail.jsx` | — |
+| `future_conjugations` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbDictionary.jsx`, `VerbDetail.jsx` | — |
+
+**Notes:**
+- `english_alt1` / `english_alt2` are not in any migration file — pre-existing columns. `VerbQuiz.jsx` renders them as hint text in the L3/L4 typed stages.
+- `VerbArTenseQuiz.jsx` also queries `verbs` with `.eq('category', 'Verbs -AR')` to get the list of AR verb IDs for the stage-2 reset guard.
+
+---
+
+## `user_verb_progress`
+
+Tracks each user's learning progress for each verb across all quiz stages. One row per `(user_id, verb_id)` pair.
+
+**Unique constraint:** `(user_id, verb_id)`
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `id` | INTEGER | — | Primary key |
+| `user_id` | UUID | — | FK → `auth.users.id` |
+| `verb_id` | INTEGER | — | FK → `verbs.id` |
+| `current_stage` | INTEGER | 1 | Current L-stage: 1=L1 drag, 2=L2 MC, 3=L3 typed, 4=L4 typed |
+| `drag_match_score` | INTEGER | 0 | Cumulative correct drag rounds (L1); advances stage at 5 |
+| `stage2_mastery` | INTEGER | 0 | Score within L2 MC; advances stage at 3 |
+| `stage3_mastery` | INTEGER | 0 | Score within L3 typed; advances stage at 3 |
+| `l4_score` | INTEGER | 0 | Score within L4 typed; verb mastered at 5 |
+| `hidden` | BOOLEAN | false | Whether the verb is hidden from quiz sessions (added `20260521130000`) |
+| `t1_score` | INTEGER | 0 | Score within the current AR present-tense sub-stage (added `20260603130000`) |
+| `t2_score` | INTEGER | 0 | Score within the current AR past-tense sub-stage (added `20260603130000`) |
+| `t3_score` | INTEGER | 0 | Score within the current AR future-tense sub-stage (added `20260603130000`) |
+| `t1_cj_stage` | INTEGER | 0 | AR present-tense conjugation sub-stage (0–4); 4 = tense mastered (added `20260604120000`) |
+| `t2_cj_stage` | INTEGER | 0 | AR past-tense conjugation sub-stage (0–4); 4 = tense mastered (added `20260604120000`) |
+| `t3_cj_stage` | INTEGER | 0 | AR future-tense conjugation sub-stage (0–4); 4 = tense mastered (added `20260604120000`) |
+| `l1_incorrect` | INTEGER | 0 | Total incorrect answers at L1 (added `20260605120000`) |
+| `l2_incorrect` | INTEGER | 0 | Total incorrect answers at L2 (added `20260605120000`) |
+| `l3_incorrect` | INTEGER | 0 | Total incorrect answers at L3 (added `20260605120000`) |
+| `l4_incorrect` | INTEGER | 0 | Total incorrect answers at L4 (added `20260605120000`) |
+| `l1_resets` | INTEGER | 0 | Number of times L1 was reset (added `20260605120000`) |
+| `l2_resets` | INTEGER | 0 | Number of times L2 was reset (added `20260605120000`) |
+| `l3_resets` | INTEGER | 0 | Number of times L3 was reset (added `20260605120000`) |
+| `l4_resets` | INTEGER | 0 | Number of times L4 was reset (added `20260605120000`) |
+| `total_incorrect` | INTEGER | 0 | Total incorrect answers across all levels (added `20260605120000`) |
+
+### Column access
+
+| Column | Read by | Written by |
+|--------|---------|------------|
+| `id` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbCategoryModal.jsx`, `VerbDetail.jsx` | — |
+| `user_id` | — | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbCategoryModal.jsx` |
+| `verb_id` | `VerbTrainer.jsx`, `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbCategoryModal.jsx`, `VerbDictionary.jsx`, `VerbDetail.jsx` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbCategoryModal.jsx` |
+| `current_stage` | `VerbTrainer.jsx`, `VerbQuiz.jsx`, `VerbCategoryModal.jsx`, `VerbDictionary.jsx`, `VerbDetail.jsx` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbCategoryModal.jsx` |
+| `drag_match_score` | `VerbQuiz.jsx`, `VerbCategoryModal.jsx`, `VerbDetail.jsx` | `VerbQuiz.jsx`, `VerbCategoryModal.jsx` |
+| `stage2_mastery` | `VerbQuiz.jsx`, `VerbCategoryModal.jsx`, `VerbDetail.jsx` | `VerbQuiz.jsx`, `VerbCategoryModal.jsx` |
+| `stage3_mastery` | `VerbQuiz.jsx`, `VerbCategoryModal.jsx`, `VerbDetail.jsx` | `VerbQuiz.jsx`, `VerbCategoryModal.jsx` |
+| `l4_score` | `VerbTrainer.jsx`, `VerbQuiz.jsx`, `VerbCategoryModal.jsx`, `VerbDictionary.jsx`, `VerbDetail.jsx` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbCategoryModal.jsx` |
+| `hidden` | `VerbTrainer.jsx`, `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbCategoryModal.jsx` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` *(session toggle)*, `VerbCategoryModal.jsx` |
+| `t1_score` | `VerbTrainer.jsx`, `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbCategoryModal.jsx`, `VerbDetail.jsx` | `VerbArTenseQuiz.jsx`, `VerbCategoryModal.jsx` *(reset)* |
+| `t2_score` | `VerbTrainer.jsx`, `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbCategoryModal.jsx`, `VerbDetail.jsx` | `VerbArTenseQuiz.jsx`, `VerbCategoryModal.jsx` *(reset)* |
+| `t3_score` | `VerbTrainer.jsx`, `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx`, `VerbCategoryModal.jsx`, `VerbDetail.jsx` | `VerbArTenseQuiz.jsx`, `VerbCategoryModal.jsx` *(reset)* |
+| `t1_cj_stage` | `VerbTrainer.jsx`, `VerbArTenseQuiz.jsx`, `VerbDetail.jsx` | `VerbArTenseQuiz.jsx` |
+| `t2_cj_stage` | `VerbTrainer.jsx`, `VerbArTenseQuiz.jsx`, `VerbDetail.jsx` | `VerbArTenseQuiz.jsx` |
+| `t3_cj_stage` | `VerbTrainer.jsx`, `VerbArTenseQuiz.jsx`, `VerbDetail.jsx` | `VerbArTenseQuiz.jsx` |
+| `l1_incorrect` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` |
+| `l2_incorrect` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` |
+| `l3_incorrect` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` |
+| `l4_incorrect` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` |
+| `l1_resets` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` |
+| `l2_resets` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` |
+| `l3_resets` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` |
+| `l4_resets` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` |
+| `total_incorrect` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` | `VerbQuiz.jsx`, `VerbArTenseQuiz.jsx` |
+
+**Notes on `t_n_cj_stage` sub-stage encoding:**
+- `0` = sub-stage 1 (drag & match) in progress
+- `1` = sub-stage 2 (MC) in progress — drag done
+- `2` = sub-stage 3 (typed conj → EN) in progress
+- `3` = sub-stage 4 (typed EN → conj) in progress
+- `4` = all four sub-stages done; tense mastered
+
+**Notes on `VerbCategoryModal.jsx` resets:**
+- A level-1 reset writes: `current_stage=1, stage2_mastery=0, stage3_mastery=0, l4_score=0, drag_match_score=0, t1_score=0, t2_score=0, t3_score=0`
+- A level-2 reset writes: `current_stage=2, stage2_mastery=0, stage3_mastery=0, l4_score=0, drag_match_score=0, t1_score=0, t2_score=0, t3_score=0`
+- A level-3 reset writes: `current_stage=3, stage3_mastery=0, l4_score=0, drag_match_score=0, t1_score=0, t2_score=0, t3_score=0`
+- A level-4 reset writes: `current_stage=4, l4_score=0, drag_match_score=0, t1_score=0, t2_score=0, t3_score=0`
+- None of the reset paths clear `t_n_cj_stage`.
+
+**Notes on `VerbArTenseQuiz.jsx` stage-2 reset guard:**
+- On load, if the AR stage-2 t1 reset key is not found in `localStorage`, it resets `t1_cj_stage=1, t1_score=0` for all AR verbs that have `t1_cj_stage >= 1` (one-time migration guard).
