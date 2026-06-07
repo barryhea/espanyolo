@@ -112,4 +112,7 @@ Each AR tense stage (Present / Past / Future) runs a 10-question session. The pa
 
 | Date | Issue | Status |
 |------|-------|--------|
-| *(none logged yet)* | — | — |
+| 2026-06-08 | `VerbCategoryModal` tense unlock state is sometimes out of sync with `VerbTrainer` home card progress display | Open |
+| 2026-06-08 | Hidden verbs are excluded from regular quizzes but still appear in the custom quiz screen | Open |
+| 2026-06-08 | AR tense quiz occasionally serves wrong tense conjugations as prompts | Open |
+| 2026-06-08 | `VerbDetail.jsx` stage progress bars show tense completion as grey despite user having completed tenses | Open |
