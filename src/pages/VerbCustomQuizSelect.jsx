@@ -29,6 +29,7 @@ export default function VerbCustomQuizSelect() {
     return map
   })
   const [globalKey, setGlobalKey] = useState('all')
+  const [excluded, setExcluded] = useState(() => new Set())
 
   if (!verbs.length) {
     return (
@@ -51,6 +52,15 @@ export default function VerbCustomQuizSelect() {
     setVerbLevels(newMap)
   }
 
+  function toggleExclude(verbId) {
+    setExcluded(prev => {
+      const next = new Set(prev)
+      if (next.has(verbId)) next.delete(verbId)
+      else next.add(verbId)
+      return next
+    })
+  }
+
   function toggle(verbId, level) {
     setGlobalKey(null)
     setVerbLevels(prev => {
@@ -65,13 +75,16 @@ export default function VerbCustomQuizSelect() {
     })
   }
 
-  const totalQuestions = verbs.reduce((n, v) => n + (verbLevels[v.id]?.size ?? 0), 0)
+  const totalQuestions = verbs.reduce((n, v) =>
+    excluded.has(v.id) ? n : n + (verbLevels[v.id]?.size ?? 0), 0)
 
   function handleStart() {
-    const selections = verbs.map(v => ({
-      verb: v,
-      levels: [...(verbLevels[v.id] ?? new Set([1]))].sort(),
-    }))
+    const selections = verbs
+      .filter(v => !excluded.has(v.id))
+      .map(v => ({
+        verb: v,
+        levels: [...(verbLevels[v.id] ?? new Set([1]))].sort(),
+      }))
     navigate('/verb-custom-quiz', { state: { selections, categoryTitle } })
   }
 
@@ -106,12 +119,14 @@ export default function VerbCustomQuizSelect() {
                 <div key={l.key} style={s.levelHeaderLabel}>{l.label}</div>
               ))}
             </div>
+            <div style={{ width: '28px', flexShrink: 0 }} />
           </div>
 
           {verbs.map(verb => {
             const levels = verbLevels[verb.id] ?? new Set()
+            const isExcluded = excluded.has(verb.id)
             return (
-              <div key={verb.id} style={s.verbRow}>
+              <div key={verb.id} style={{ ...s.verbRow, ...(isExcluded ? { opacity: 0.38 } : {}) }}>
                 <div style={s.verbInfo}>
                   <span style={s.verbSpanish}>{verb.spanish_infinitive}</span>
                   <span style={s.verbEnglish}>{verb.english}</span>
@@ -122,7 +137,7 @@ export default function VerbCustomQuizSelect() {
                     return (
                       <button
                         key={l.key}
-                        style={{ ...s.levelBtn, ...(active ? s.levelBtnActive : {}) }}
+                        style={{ ...s.levelBtn, ...(active && !isExcluded ? s.levelBtnActive : {}) }}
                         onClick={() => toggle(verb.id, l.key)}
                         aria-pressed={active}
                         aria-label={`${verb.spanish_infinitive} ${l.full}`}
@@ -133,6 +148,14 @@ export default function VerbCustomQuizSelect() {
                     )
                   })}
                 </div>
+                <button
+                  style={{ ...s.excludeBtn, ...(isExcluded ? s.excludeBtnExcluded : {}) }}
+                  onClick={() => toggleExclude(verb.id)}
+                  title={isExcluded ? 'Include verb' : 'Exclude verb'}
+                  aria-label={isExcluded ? `Include ${verb.spanish_infinitive}` : `Exclude ${verb.spanish_infinitive}`}
+                >
+                  {isExcluded ? '+' : '×'}
+                </button>
               </div>
             )
           })}
@@ -217,6 +240,15 @@ const s = {
     transition: 'all 0.1s',
   },
   levelBtnActive: { backgroundColor: '#3b82f6', borderColor: '#3b82f6', color: '#fff' },
+  excludeBtn: {
+    width: '26px', height: '26px', fontSize: '0.85rem', fontWeight: 700,
+    border: '1.5px solid #e5e5e5', borderRadius: '50%',
+    backgroundColor: '#fafafa', color: '#bbb', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0, lineHeight: 1, padding: 0,
+    transition: 'all 0.1s',
+  },
+  excludeBtnExcluded: { backgroundColor: '#fee2e2', borderColor: '#fca5a5', color: '#dc2626' },
   footer: { position: 'sticky', bottom: '1.5rem', paddingTop: '0.5rem' },
   startBtn: {
     width: '100%', padding: '0.9rem', fontSize: '1rem', fontWeight: 600,
