@@ -318,7 +318,7 @@ export default function VerbArTenseQuiz() {
     return {
       type: 'conj-typed-dual',
       verb, pronoun,
-      prompt: `${pronoun.english} ${verbEnglish}`,
+      prompt: `${pronoun.english} ${verbEnglish}  ·  ${TENSE_CFG[tenseKey].label}`,
       correctPronoun:           pronoun.key,
       correctPronounCandidates: PRONOUN_ALTERNATIVES[pronoun.key] ?? [pronoun.key],
       tripleInput:              !!PRONOUN_ALTERNATIVES[pronoun.key],

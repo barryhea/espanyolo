@@ -84,7 +84,7 @@ export default function VerbDetail() {
       const progressPromise = user
         ? supabase
             .from('user_verb_progress')
-            .select('current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, t1_score, t2_score, t3_score')
+            .select('current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, t1_score, t2_score, t3_score, t1_cj_stage, t2_cj_stage, t3_cj_stage')
             .eq('user_id', user.id)
             .eq('verb_id', Number(verbId))
             .maybeSingle()
@@ -135,9 +135,9 @@ export default function VerbDetail() {
   const stageScoreMax = stage === 1 ? 5 : stage === 2 ? 3 : stage === 3 ? 3 : 5
 
   const tensesMastered = [
-    (progress?.t1_score ?? 0) >= 3,
-    (progress?.t2_score ?? 0) >= 3,
-    (progress?.t3_score ?? 0) >= 3,
+    (progress?.t1_cj_stage ?? 0) >= 4,
+    (progress?.t2_cj_stage ?? 0) >= 4,
+    (progress?.t3_cj_stage ?? 0) >= 4,
   ].filter(Boolean).length
 
   const stageFlags = {
@@ -145,9 +145,9 @@ export default function VerbDetail() {
     l2: stage >= 3 || l4Score >= 5,
     l3: stage >= 4 || l4Score >= 5,
     l4: l4Score >= 5,
-    t1: (progress?.t1_score ?? 0) >= 3,
-    t2: (progress?.t2_score ?? 0) >= 3,
-    t3: (progress?.t3_score ?? 0) >= 3,
+    t1: (progress?.t1_cj_stage ?? 0) >= 4,
+    t2: (progress?.t2_cj_stage ?? 0) >= 4,
+    t3: (progress?.t3_cj_stage ?? 0) >= 4,
   }
 
   const STAGE_SEGS = [
