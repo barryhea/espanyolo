@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
+import { useAuth } from '../hooks/useAuth'
 import NavBar from '../components/NavBar'
 
 function shuffle(arr) {
@@ -111,10 +112,15 @@ export default function VerbCustomQuiz() {
   const location = useLocation()
   const navigate = useNavigate()
   const inputRef = useRef(null)
+  const { user } = useAuth()
 
   const { selections = [], categoryTitle = 'Custom Quiz' } = location.state ?? {}
 
   const [phase, setPhase] = useState('loading')
+  const [showSaveModal, setShowSaveModal] = useState(false)
+  const [saveName, setSaveName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState(null)
   const [allCatVerbs, setAllCatVerbs] = useState([])
   const [session, setSession] = useState([])
   const [currentIdx, setCurrentIdx] = useState(0)
@@ -215,6 +221,35 @@ export default function VerbCustomQuiz() {
     setPhase('question')
   }
 
+  async function saveQuiz() {
+    if (!saveName.trim() || saving) return
+    setSaving(true)
+    const configuration = {
+      categoryTitle,
+      verbs: selections.map(sel => ({
+        id: sel.verb.id,
+        spanish_infinitive: sel.verb.spanish_infinitive,
+        english: sel.verb.english,
+        levels: sel.levels,
+      })),
+    }
+    const { error } = await supabase.from('saved_quizzes').insert({
+      user_id: user.id,
+      name: saveName.trim(),
+      quiz_type: 'verb',
+      configuration,
+    })
+    setSaving(false)
+    setSaveStatus(error ? 'error' : 'saved')
+    if (!error) {
+      setTimeout(() => {
+        setShowSaveModal(false)
+        setSaveStatus(null)
+        setSaveName('')
+      }, 1200)
+    }
+  }
+
   if (phase === 'loading') {
     return <div style={s.page}><NavBar /><p style={s.loadingMsg}>Loading…</p></div>
   }
@@ -278,17 +313,51 @@ export default function VerbCustomQuiz() {
 
           <div style={s.summaryActions}>
             <button style={s.primaryBtn} onClick={loadQuiz}>Play again</button>
-            <button
-              style={s.secondaryBtn}
-              onClick={() => navigate(-1)}
-            >
-              Change levels
-            </button>
+            <div style={s.summaryBtnRow}>
+              <button style={{ ...s.secondaryBtn, flex: 1 }} onClick={() => navigate(-1)}>
+                Change levels
+              </button>
+              <button style={{ ...s.secondaryBtn, flex: 1, color: '#3b82f6', borderColor: '#3b82f6' }} onClick={() => setShowSaveModal(true)}>
+                Save Quiz
+              </button>
+            </div>
             <button style={s.backToThemesBtn} onClick={() => navigate('/verbs')}>
               ← Back to Verb Trainer
             </button>
           </div>
         </main>
+
+        {showSaveModal && (
+          <div style={s.modalOverlay}>
+            <div style={s.modalCard}>
+              <p style={s.modalTitle}>Save Quiz</p>
+              <input
+                style={s.modalInput}
+                type="text"
+                placeholder="Give this quiz a name…"
+                value={saveName}
+                onChange={e => setSaveName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && saveQuiz()}
+                autoFocus
+                autoComplete="off"
+              />
+              {saveStatus === 'saved' && <p style={s.modalSuccess}>Saved!</p>}
+              {saveStatus === 'error' && <p style={s.modalError}>Failed to save — try again.</p>}
+              <div style={s.modalBtnRow}>
+                <button style={s.modalCancelBtn} onClick={() => { setShowSaveModal(false); setSaveStatus(null); setSaveName('') }}>
+                  Cancel
+                </button>
+                <button
+                  style={{ ...s.modalSaveBtn, ...(!saveName.trim() || saving ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }}
+                  onClick={saveQuiz}
+                  disabled={!saveName.trim() || saving}
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -508,6 +577,7 @@ const s = {
     borderRadius: '4px', whiteSpace: 'nowrap',
   },
   summaryActions: { display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingTop: '0.25rem' },
+  summaryBtnRow: { display: 'flex', gap: '0.75rem' },
   primaryBtn: {
     padding: '0.75rem 1.25rem', fontSize: '1rem', fontWeight: 600,
     backgroundColor: '#16a34a', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer',
@@ -521,5 +591,33 @@ const s = {
     padding: '0.75rem 1.25rem', fontSize: '1rem', fontWeight: 600,
     backgroundColor: '#3b82f6', color: '#fff', border: 'none',
     borderRadius: '8px', cursor: 'pointer', textAlign: 'center',
+  },
+  modalOverlay: {
+    position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+  },
+  modalCard: {
+    backgroundColor: '#fff', borderRadius: '14px', padding: '1.5rem',
+    width: '320px', maxWidth: 'calc(100vw - 2rem)',
+    display: 'flex', flexDirection: 'column', gap: '0.875rem',
+  },
+  modalTitle: { margin: 0, fontSize: '1rem', fontWeight: 700, color: '#111' },
+  modalInput: {
+    padding: '0.7rem 0.875rem', fontSize: '0.95rem',
+    border: '1.5px solid #e5e5e5', borderRadius: '8px', outline: 'none',
+    width: '100%', boxSizing: 'border-box',
+  },
+  modalSuccess: { margin: 0, fontSize: '0.85rem', color: '#16a34a', fontWeight: 600 },
+  modalError:   { margin: 0, fontSize: '0.85rem', color: '#dc2626', fontWeight: 600 },
+  modalBtnRow:  { display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' },
+  modalCancelBtn: {
+    padding: '0.55rem 1rem', fontSize: '0.9rem', fontWeight: 600,
+    backgroundColor: '#f3f4f6', color: '#555', border: 'none',
+    borderRadius: '8px', cursor: 'pointer',
+  },
+  modalSaveBtn: {
+    padding: '0.55rem 1.25rem', fontSize: '0.9rem', fontWeight: 600,
+    backgroundColor: '#3b82f6', color: '#fff', border: 'none',
+    borderRadius: '8px', cursor: 'pointer',
   },
 }
