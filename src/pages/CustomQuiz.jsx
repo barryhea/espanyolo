@@ -129,6 +129,10 @@ export default function CustomQuiz() {
   const inputRef = useRef(null)
 
   const [phase, setPhase] = useState('loading')
+  const [showSaveModal, setShowSaveModal] = useState(false)
+  const [saveName, setSaveName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState(null)
   const [session, setSession] = useState([])
   const [currentIdx, setCurrentIdx] = useState(0)
   const [question, setQuestion] = useState(null)
@@ -254,6 +258,29 @@ export default function CustomQuiz() {
     setPhase('feedback')
   }
 
+  async function saveQuiz() {
+    if (!saveName.trim() || saving) return
+    setSaving(true)
+    const configuration = selections
+      ? { selections: selections.map(sel => ({ word: { id: sel.word.id, english: sel.word.english, spanish: sel.word.spanish }, stages: sel.stages })) }
+      : { words: words.map(w => ({ id: w.id, english: w.english, spanish: w.spanish })) }
+    const { error } = await supabase.from('saved_quizzes').insert({
+      user_id: user.id,
+      name: saveName.trim(),
+      quiz_type: 'vocab',
+      configuration,
+    })
+    setSaving(false)
+    setSaveStatus(error ? 'error' : 'saved')
+    if (!error) {
+      setTimeout(() => {
+        setShowSaveModal(false)
+        setSaveStatus(null)
+        setSaveName('')
+      }, 1200)
+    }
+  }
+
   function handleNext() {
     const nextIdx = currentIdx + 1
     if (nextIdx >= session.length) {
@@ -352,11 +379,46 @@ export default function CustomQuiz() {
             <button style={{ ...styles.primaryBtn, width: '100%', textAlign: 'center' }} onClick={loadCustomQuiz}>
               Play again
             </button>
+            <button style={styles.saveBtn} onClick={() => setShowSaveModal(true)}>
+              Save Quiz
+            </button>
             <button style={styles.summaryBackLink} onClick={() => navigate('/vocabulary')}>
               ← Back to themes
             </button>
           </div>
         </main>
+
+        {showSaveModal && (
+          <div style={styles.modalOverlay}>
+            <div style={styles.modalCard}>
+              <p style={styles.modalTitle}>Save Quiz</p>
+              <input
+                style={styles.modalInput}
+                type="text"
+                placeholder="Give this quiz a name…"
+                value={saveName}
+                onChange={e => setSaveName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && saveQuiz()}
+                autoFocus
+                autoComplete="off"
+              />
+              {saveStatus === 'saved' && <p style={styles.modalSuccess}>Saved!</p>}
+              {saveStatus === 'error' && <p style={styles.modalError}>Failed to save — try again.</p>}
+              <div style={styles.modalBtnRow}>
+                <button style={styles.modalCancelBtn} onClick={() => { setShowSaveModal(false); setSaveStatus(null); setSaveName('') }}>
+                  Cancel
+                </button>
+                <button
+                  style={{ ...styles.modalSaveBtn, ...(!saveName.trim() || saving ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }}
+                  onClick={saveQuiz}
+                  disabled={!saveName.trim() || saving}
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -637,6 +699,40 @@ const styles = {
     flexDirection: 'column',
     gap: '0.75rem',
     paddingTop: '0.25rem',
+  },
+  saveBtn: {
+    width: '100%', padding: '0.75rem', fontSize: '0.9rem', fontWeight: 600,
+    backgroundColor: '#fff', color: '#3b82f6',
+    border: '1.5px solid #3b82f6', borderRadius: '8px', cursor: 'pointer',
+    textAlign: 'center',
+  },
+  modalOverlay: {
+    position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+  },
+  modalCard: {
+    backgroundColor: '#fff', borderRadius: '14px', padding: '1.5rem',
+    width: '320px', maxWidth: 'calc(100vw - 2rem)',
+    display: 'flex', flexDirection: 'column', gap: '0.875rem',
+  },
+  modalTitle: { margin: 0, fontSize: '1rem', fontWeight: 700, color: '#111' },
+  modalInput: {
+    padding: '0.7rem 0.875rem', fontSize: '0.95rem',
+    border: '1.5px solid #e5e5e5', borderRadius: '8px', outline: 'none',
+    width: '100%', boxSizing: 'border-box',
+  },
+  modalSuccess: { margin: 0, fontSize: '0.85rem', color: '#16a34a', fontWeight: 600 },
+  modalError:   { margin: 0, fontSize: '0.85rem', color: '#dc2626', fontWeight: 600 },
+  modalBtnRow:  { display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' },
+  modalCancelBtn: {
+    padding: '0.55rem 1rem', fontSize: '0.9rem', fontWeight: 600,
+    backgroundColor: '#f3f4f6', color: '#555', border: 'none',
+    borderRadius: '8px', cursor: 'pointer',
+  },
+  modalSaveBtn: {
+    padding: '0.55rem 1.25rem', fontSize: '0.9rem', fontWeight: 600,
+    backgroundColor: '#3b82f6', color: '#fff', border: 'none',
+    borderRadius: '8px', cursor: 'pointer',
   },
   summaryBackLink: {
     padding: '0.5rem',

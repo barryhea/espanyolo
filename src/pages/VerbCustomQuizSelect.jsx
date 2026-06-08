@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { supabase } from '../utils/supabaseClient'
+import { useAuth } from '../hooks/useAuth'
 import NavBar from '../components/NavBar'
 
 const LEVELS = [
@@ -20,8 +22,14 @@ const GLOBAL_OPTIONS = [
 export default function VerbCustomQuizSelect() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   const { verbs = [], categoryTitle = 'Custom Quiz' } = location.state ?? {}
+
+  const [showSaveModal, setShowSaveModal] = useState(false)
+  const [saveName, setSaveName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState(null)
 
   const [verbLevels, setVerbLevels] = useState(() => {
     const map = {}
@@ -86,6 +94,37 @@ export default function VerbCustomQuizSelect() {
         levels: [...(verbLevels[v.id] ?? new Set([1]))].sort(),
       }))
     navigate('/verb-custom-quiz', { state: { selections, categoryTitle } })
+  }
+
+  async function saveQuiz() {
+    if (!saveName.trim() || saving) return
+    setSaving(true)
+    const configuration = {
+      categoryTitle,
+      verbs: verbs
+        .filter(v => !excluded.has(v.id))
+        .map(v => ({
+          id: v.id,
+          spanish_infinitive: v.spanish_infinitive,
+          english: v.english,
+          levels: [...(verbLevels[v.id] ?? new Set([1, 2, 3, 4]))].sort(),
+        })),
+    }
+    const { error } = await supabase.from('saved_quizzes').insert({
+      user_id: user.id,
+      name: saveName.trim(),
+      quiz_type: 'verb',
+      configuration,
+    })
+    setSaving(false)
+    setSaveStatus(error ? 'error' : 'saved')
+    if (!error) {
+      setTimeout(() => {
+        setShowSaveModal(false)
+        setSaveStatus(null)
+        setSaveName('')
+      }, 1200)
+    }
   }
 
   return (
@@ -162,6 +201,9 @@ export default function VerbCustomQuizSelect() {
         </div>
 
         <div style={s.footer}>
+          <button style={s.saveBtn} onClick={() => setShowSaveModal(true)}>
+            Save Quiz
+          </button>
           <button
             style={{ ...s.startBtn, ...(totalQuestions === 0 ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }}
             onClick={handleStart}
@@ -171,6 +213,38 @@ export default function VerbCustomQuizSelect() {
           </button>
         </div>
       </main>
+
+      {showSaveModal && (
+        <div style={s.modalOverlay}>
+          <div style={s.modalCard}>
+            <p style={s.modalTitle}>Save Quiz</p>
+            <input
+              style={s.modalInput}
+              type="text"
+              placeholder="Give this quiz a name…"
+              value={saveName}
+              onChange={e => setSaveName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && saveQuiz()}
+              autoFocus
+              autoComplete="off"
+            />
+            {saveStatus === 'saved' && <p style={s.modalSuccess}>Saved!</p>}
+            {saveStatus === 'error' && <p style={s.modalError}>Failed to save — try again.</p>}
+            <div style={s.modalBtnRow}>
+              <button style={s.modalCancelBtn} onClick={() => { setShowSaveModal(false); setSaveStatus(null); setSaveName('') }}>
+                Cancel
+              </button>
+              <button
+                style={{ ...s.modalSaveBtn, ...(!saveName.trim() || saving ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }}
+                onClick={saveQuiz}
+                disabled={!saveName.trim() || saving}
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -249,11 +323,44 @@ const s = {
     transition: 'all 0.1s',
   },
   excludeBtnExcluded: { backgroundColor: '#fee2e2', borderColor: '#fca5a5', color: '#dc2626' },
-  footer: { position: 'sticky', bottom: '1.5rem', paddingTop: '0.5rem' },
+  footer: { position: 'sticky', bottom: '1.5rem', paddingTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' },
+  saveBtn: {
+    width: '100%', padding: '0.75rem', fontSize: '0.9rem', fontWeight: 600,
+    backgroundColor: '#fff', color: '#3b82f6',
+    border: '1.5px solid #3b82f6', borderRadius: '10px', cursor: 'pointer',
+  },
   startBtn: {
     width: '100%', padding: '0.9rem', fontSize: '1rem', fontWeight: 600,
     backgroundColor: '#16a34a', color: '#fff', border: 'none',
     borderRadius: '10px', cursor: 'pointer',
     boxShadow: '0 4px 14px rgba(22,163,74,0.3)',
+  },
+  modalOverlay: {
+    position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+  },
+  modalCard: {
+    backgroundColor: '#fff', borderRadius: '14px', padding: '1.5rem',
+    width: '320px', maxWidth: 'calc(100vw - 2rem)',
+    display: 'flex', flexDirection: 'column', gap: '0.875rem',
+  },
+  modalTitle: { margin: 0, fontSize: '1rem', fontWeight: 700, color: '#111' },
+  modalInput: {
+    padding: '0.7rem 0.875rem', fontSize: '0.95rem',
+    border: '1.5px solid #e5e5e5', borderRadius: '8px', outline: 'none',
+    width: '100%', boxSizing: 'border-box',
+  },
+  modalSuccess: { margin: 0, fontSize: '0.85rem', color: '#16a34a', fontWeight: 600 },
+  modalError:   { margin: 0, fontSize: '0.85rem', color: '#dc2626', fontWeight: 600 },
+  modalBtnRow:  { display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' },
+  modalCancelBtn: {
+    padding: '0.55rem 1rem', fontSize: '0.9rem', fontWeight: 600,
+    backgroundColor: '#f3f4f6', color: '#555', border: 'none',
+    borderRadius: '8px', cursor: 'pointer',
+  },
+  modalSaveBtn: {
+    padding: '0.55rem 1.25rem', fontSize: '0.9rem', fontWeight: 600,
+    backgroundColor: '#3b82f6', color: '#fff', border: 'none',
+    borderRadius: '8px', cursor: 'pointer',
   },
 }
