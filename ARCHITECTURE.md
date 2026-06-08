@@ -12,6 +12,7 @@
 - [user\_word\_progress](#user_word_progress)
 - [verbs](#verbs)
 - [user\_verb\_progress](#user_verb_progress)
+- [saved\_quizzes](#saved_quizzes)
 
 ---
 
@@ -244,3 +245,31 @@ Tracks each user's learning progress for each verb across all quiz stages. One r
 
 **Notes on `VerbArTenseQuiz.jsx` stage-2 reset guard:**
 - On load, if the AR stage-2 t1 reset key is not found in `localStorage`, it resets `t1_cj_stage=1, t1_score=0` for all AR verbs that have `t1_cj_stage >= 1` (one-time migration guard).
+
+---
+
+## `saved_quizzes`
+
+Persists user-defined quiz configurations so they can be replayed without reconfiguring. One row per saved quiz. Added in migration `20260608120000`.
+
+**RLS:** enabled — users can only read, insert, update, and delete their own rows.
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `id` | UUID | `gen_random_uuid()` | Primary key |
+| `user_id` | UUID | — | FK → `auth.users.id` (cascade delete) |
+| `name` | TEXT | — | User-supplied name for the saved quiz |
+| `quiz_type` | TEXT | — | `'vocab'` or `'verb'` |
+| `configuration` | JSONB | `{}` | Selected words/verbs and levels; shape depends on `quiz_type` |
+| `created_at` | TIMESTAMPTZ | `now()` | Creation timestamp |
+
+### Column access
+
+| Column | Read by | Written by |
+|--------|---------|------------|
+| `id` | *(no component yet)* | *(no component yet)* |
+| `user_id` | *(no component yet)* | *(no component yet)* |
+| `name` | *(no component yet)* | *(no component yet)* |
+| `quiz_type` | *(no component yet)* | *(no component yet)* |
+| `configuration` | *(no component yet)* | *(no component yet)* |
+| `created_at` | *(no component yet)* | *(no component yet)* |
