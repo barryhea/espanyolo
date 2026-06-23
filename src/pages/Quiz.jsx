@@ -28,9 +28,13 @@ function normalise(str) {
     .trim()
 }
 
+function stripParens(str) {
+  return str.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
 function fuzzyMatch(typed, correct) {
   const a = normalise(typed)
-  const b = normalise(correct)
+  const b = normalise(stripParens(correct))
   if (a === b) return 'exact'
   const maxLen = Math.max(a.length, b.length)
   if (maxLen === 0) return 'exact'
