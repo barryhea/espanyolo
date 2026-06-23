@@ -41,6 +41,30 @@ function fuzzyMatch(typed, correct) {
   return (1 - levenshtein(a, b) / maxLen) >= 0.8 ? 'close' : 'wrong'
 }
 
+// Words whose answer contains "/" (e.g. "By / For") require every segment to be
+// answered. Segments are matched independently and order-independently.
+function splitAnswers(correct) {
+  return correct.split('/').map(s => s.trim()).filter(Boolean)
+}
+
+function matchMulti(typedArr, segments) {
+  const used = new Array(typedArr.length).fill(false)
+  let worst = 'exact'
+  for (const seg of segments) {
+    let best = null, bestIdx = -1
+    for (let i = 0; i < typedArr.length; i++) {
+      if (used[i]) continue
+      const r = fuzzyMatch(typedArr[i] ?? '', seg)
+      if (r === 'exact') { best = 'exact'; bestIdx = i; break }
+      if (r === 'close' && best !== 'close') { best = 'close'; bestIdx = i }
+    }
+    if (best === null) return 'wrong'
+    used[bestIdx] = true
+    if (best === 'close') worst = 'close'
+  }
+  return worst
+}
+
 function shuffle(arr) {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
@@ -70,9 +94,9 @@ function buildQuestion(word, allWords, progressMap) {
     return { type: 'mc', word, options, prompt: word.spanish, promptLabel: 'What is the English for:', correct: word.english, stage }
   }
   if (stage === 2) {
-    return { type: 'typed', word, prompt: word.spanish, promptLabel: 'What is the English for:', correct: word.english, placeholder: 'Type the English word…', stage }
+    return { type: 'typed', word, prompt: word.spanish, promptLabel: 'What is the English for:', correct: word.english, answers: splitAnswers(word.english), placeholder: 'Type the English word…', stage }
   }
-  return { type: 'typed', word, prompt: word.english, promptLabel: 'What is the Spanish for:', correct: word.spanish, placeholder: 'Type the Spanish word…', stage }
+  return { type: 'typed', word, prompt: word.english, promptLabel: 'What is the Spanish for:', correct: word.spanish, answers: splitAnswers(word.spanish), placeholder: 'Type the Spanish word…', stage }
 }
 
 function EyeSlashIcon() {
@@ -191,7 +215,7 @@ export default function Quiz() {
   const [currentIdx, setCurrentIdx] = useState(0)
   const [question, setQuestion] = useState(null)
   const [selectedOption, setSelectedOption] = useState(null)
-  const [typedAnswer, setTypedAnswer] = useState('')
+  const [typedAnswers, setTypedAnswers] = useState([''])
   const [matchResult, setMatchResult] = useState(null)
   const [results, setResults] = useState([])
   const [hiddenWords, setHiddenWords] = useState(new Set())
@@ -276,7 +300,6 @@ export default function Quiz() {
     setCurrentIdx(0)
     setResults([])
     setSelectedOption(null)
-    setTypedAnswer('')
     setMatchResult(null)
 
     if (!sess.length) {
@@ -284,7 +307,9 @@ export default function Quiz() {
       return
     }
 
-    setQuestion(buildQuestion(sess[0], words, progMap))
+    const q0 = buildQuestion(sess[0], words, progMap)
+    setTypedAnswers(Array(Math.max(1, q0.answers?.length ?? 1)).fill(''))
+    setQuestion(q0)
     setPhase('question')
   }
 
@@ -358,8 +383,14 @@ export default function Quiz() {
     if (data) progressRef.current[wordId] = { ...progressRef.current[wordId], db_id: data.id }
   }
 
+  function evalTyped() {
+    const segs = question.answers ?? [question.correct]
+    if (segs.length > 1) return matchMulti(typedAnswers, segs)
+    return fuzzyMatch(typedAnswers[0] ?? '', question.correct)
+  }
+
   function handleAnswer(answer) {
-    const result = fuzzyMatch(answer, question.correct)
+    const result = question.type === 'typed' ? evalTyped() : fuzzyMatch(answer, question.correct)
     const isCorrect = result !== 'wrong'
     const wordId = question.word.id
     const prog = progressRef.current[wordId] ?? { stage: 1, consecutive_correct: 0, hidden: false, db_id: null }
@@ -404,7 +435,9 @@ export default function Quiz() {
     setSelectedOption(answer)
     setResults(r => [...r, { word: question.word, correct: isCorrect, result, stage: question.stage }])
     setPhase('feedback')
-    if (result === 'wrong' && question.type === 'typed') setTypedAnswer('')
+    if (result === 'wrong' && question.type === 'typed') {
+      setTypedAnswers(Array(Math.max(1, question.answers?.length ?? 1)).fill(''))
+    }
   }
 
   function handleNext() {
@@ -414,9 +447,10 @@ export default function Quiz() {
       return
     }
     setCurrentIdx(nextIdx)
-    setQuestion(buildQuestion(session[nextIdx], allWords, progressRef.current))
+    const q = buildQuestion(session[nextIdx], allWords, progressRef.current)
+    setQuestion(q)
     setSelectedOption(null)
-    setTypedAnswer('')
+    setTypedAnswers(Array(Math.max(1, q.answers?.length ?? 1)).fill(''))
     setMatchResult(null)
     setPhase('question')
   }
@@ -603,49 +637,65 @@ export default function Quiz() {
             </div>
           )}
 
-          {question.type === 'typed' && (
-            <div style={styles.typedArea}>
-              <input
-                ref={inputRef}
-                style={{
-                  ...styles.typedInput,
-                  ...(phase === 'feedback' && matchResult === 'wrong' ? { borderColor: '#3b82f6', borderWidth: 2 } : {}),
-                }}
-                type="text"
-                value={typedAnswer}
-                onChange={e => setTypedAnswer(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    if (phase === 'question') {
-                      handleAnswer(typedAnswer)
-                    } else if (phase === 'feedback' && matchResult === 'wrong' &&
-                               fuzzyMatch(typedAnswer, question.correct) !== 'wrong') {
-                      handleNext()
+          {question.type === 'typed' && (() => {
+            const segs = question.answers ?? [question.correct]
+            const isMulti = segs.length > 1
+            const anyTyped = typedAnswers.some(t => t.trim())
+            return (
+              <div style={styles.typedArea}>
+                {segs.map((seg, i) => (
+                  <input
+                    key={i}
+                    ref={i === 0 ? inputRef : null}
+                    style={{
+                      ...styles.typedInput,
+                      ...(phase === 'feedback' && matchResult === 'wrong' ? { borderColor: '#3b82f6', borderWidth: 2 } : {}),
+                    }}
+                    type="text"
+                    value={typedAnswers[i] ?? ''}
+                    onChange={e => setTypedAnswers(prev => {
+                      const next = [...prev]
+                      next[i] = e.target.value
+                      return next
+                    })}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        if (phase === 'question') {
+                          handleAnswer(typedAnswers[0])
+                        } else if (phase === 'feedback' && matchResult === 'wrong' &&
+                                   evalTyped() !== 'wrong') {
+                          handleNext()
+                        }
+                      }
+                    }}
+                    disabled={phase === 'feedback' && matchResult !== 'wrong'}
+                    placeholder={
+                      phase === 'feedback' && matchResult === 'wrong'
+                        ? 'Type the correct answer to continue…'
+                        : isMulti ? `Answer ${i + 1}…` : question.placeholder
                     }
-                  }
-                }}
-                disabled={phase === 'feedback' && matchResult !== 'wrong'}
-                placeholder={phase === 'feedback' && matchResult === 'wrong' ? 'Type the correct answer to continue…' : question.placeholder}
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck="false"
-                data-form-type="other"
-              />
-              {phase === 'question' && (
-                <button
-                  style={{ ...styles.typedBtn, backgroundColor: typedAnswer.trim() ? '#16a34a' : '#f59e0b', color: '#fff' }}
-                  onClick={() => handleAnswer(typedAnswer)}
-                >
-                  {typedAnswer.trim() ? 'Check' : 'Pass'}
-                </button>
-              )}
-            </div>
-          )}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck="false"
+                    data-form-type="other"
+                  />
+                ))}
+                {phase === 'question' && (
+                  <button
+                    style={{ ...styles.typedBtn, backgroundColor: anyTyped ? '#16a34a' : '#f59e0b', color: '#fff' }}
+                    onClick={() => handleAnswer(typedAnswers[0])}
+                  >
+                    {anyTyped ? 'Check' : 'Pass'}
+                  </button>
+                )}
+              </div>
+            )
+          })()}
 
           {phase === 'feedback' && (() => {
             const confirmOk = question.type !== 'typed' || matchResult !== 'wrong' ||
-              fuzzyMatch(typedAnswer, question.correct) !== 'wrong'
+              evalTyped() !== 'wrong'
             return (
               <div style={{
                 ...styles.feedbackBanner,
