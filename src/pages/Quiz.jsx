@@ -414,9 +414,9 @@ export default function Quiz() {
       const incorrectKey = prog.stage === 1 ? 's1_incorrect' : prog.stage === 2 ? 's2_incorrect' : 's3_incorrect'
       const newIncorrect = (prog[incorrectKey] ?? 0) + 1
       const newTotal = (prog.total_incorrect ?? 0) + 1
-      if (prog.stage === 2 && newConsecIncorrect >= 2) {
+      if (prog.stage === 2 && newConsecIncorrect >= 3) {
         newProg = { ...prog, stage: 1, consecutive_correct: 0, consecutive_incorrect: 0, [incorrectKey]: newIncorrect, s2_resets: (prog.s2_resets ?? 0) + 1, total_incorrect: newTotal }
-        console.log(`[handleAnswer] word ${wordId} REGRESSED S2 → S1 (2 consecutive incorrect)`)
+        console.log(`[handleAnswer] word ${wordId} REGRESSED S2 → S1 (3 consecutive incorrect)`)
       } else if (prog.stage === 3 && newConsecIncorrect >= 2) {
         newProg = { ...prog, consecutive_correct: 0, consecutive_incorrect: 0, [incorrectKey]: newIncorrect, s3_resets: (prog.s3_resets ?? 0) + 1, total_incorrect: newTotal }
         console.log(`[handleAnswer] word ${wordId} S3 counter reset (2 consecutive incorrect)`)
