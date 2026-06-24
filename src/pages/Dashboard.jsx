@@ -471,7 +471,14 @@ export default function Dashboard() {
       .map(w => ({ word: w, stages: [...(wordStages[w.id] ?? new Set())].sort() }))
     setSelectorOpen(false)
     setWordStages({})
-    navigate('/custom-quiz', { state: { selections } })
+    navigate('/custom-quiz', { state: { selections, sourceThemeId: selectorThemeId } })
+  }
+
+  function startThemeStruggleQuiz() {
+    if (!selectorThemeId) return
+    setSelectorOpen(false)
+    setWordStages({})
+    navigate(`/quiz/${selectorThemeId}`, { state: { mode: 'struggle' } })
   }
 
   const hiddenWords = modalWords.filter(w => modalProgress[w.id]?.hidden)
@@ -568,13 +575,6 @@ export default function Dashboard() {
                 >
                   <span style={styles.menuOptionLabel}>Start Quiz</span>
                   <span style={styles.menuOptionDesc}>Practice words in this theme</span>
-                </button>
-                <button
-                  style={styles.menuOption}
-                  onClick={() => { closeModal(); navigate(`/quiz/${modalTheme.id}`, { state: { mode: 'struggle' } }) }}
-                >
-                  <span style={styles.menuOptionLabel}>Top 10 Struggle Quiz</span>
-                  <span style={styles.menuOptionDesc}>Drill this theme's 10 most-missed words through every stage</span>
                 </button>
                 <button
                   style={styles.menuOption}
@@ -756,6 +756,13 @@ export default function Dashboard() {
                   {opt.label}
                 </button>
               ))}
+            </div>
+
+            <div style={styles.struggleBannerWrap}>
+              <button style={styles.struggleBannerCard} onClick={startThemeStruggleQuiz}>
+                <span style={styles.struggleBannerText}>🔥 Top 10 Struggle Quiz</span>
+                <span style={styles.struggleBannerSub}>Drill this theme's 10 most-missed words through every stage →</span>
+              </button>
             </div>
 
             <div style={styles.selectorBody}>
@@ -1253,6 +1260,37 @@ const styles = {
     lineHeight: 0,
     borderRadius: '4px',
     transition: 'color 0.15s',
+  },
+
+  // Top 10 Struggle Quiz banner (top of selector, above word list)
+  struggleBannerWrap: {
+    padding: '0.75rem 1rem',
+    borderBottom: '1px solid #e5e5e5',
+    backgroundColor: '#fff',
+    flexShrink: 0,
+  },
+  struggleBannerCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '2px',
+    width: '100%',
+    padding: '0.8rem 1rem',
+    background: '#fef2f2',
+    border: '1.5px solid #f87171',
+    borderRadius: '10px',
+    cursor: 'pointer',
+    textAlign: 'left',
+  },
+  struggleBannerText: {
+    fontSize: '0.95rem',
+    fontWeight: 700,
+    color: '#b91c1c',
+  },
+  struggleBannerSub: {
+    fontSize: '0.78rem',
+    color: '#9b1c1c',
+    opacity: 0.85,
   },
 
   // Custom Quiz selector overlay

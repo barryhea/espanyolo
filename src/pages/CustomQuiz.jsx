@@ -125,6 +125,11 @@ export default function CustomQuiz() {
 
   const words = location.state?.words ?? []
   const selections = location.state?.selections ?? null
+  const sourceThemeId = location.state?.sourceThemeId ?? null
+
+  function goBackToThemes() {
+    navigate('/vocabulary', sourceThemeId ? { state: { openThemeId: sourceThemeId } } : undefined)
+  }
   const progressRef = useRef({})
   const inputRef = useRef(null)
 
@@ -308,7 +313,7 @@ export default function CustomQuiz() {
       <div style={styles.page}>
         <NavBar />
         <main style={styles.main}>
-          <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back to themes</button>
+          <button style={styles.backLink} onClick={goBackToThemes}>← Back to themes</button>
           <div style={styles.card}>
             <p style={{ margin: 0, color: '#555' }}>No words selected. Go back and select some words to practise.</p>
           </div>
@@ -382,7 +387,7 @@ export default function CustomQuiz() {
             <button style={styles.saveBtn} onClick={() => setShowSaveModal(true)}>
               Save Quiz
             </button>
-            <button style={styles.summaryBackLink} onClick={() => navigate('/vocabulary')}>
+            <button style={styles.summaryBackLink} onClick={goBackToThemes}>
               ← Back to themes
             </button>
           </div>
@@ -429,6 +434,7 @@ export default function CustomQuiz() {
     <div style={styles.page}>
       <NavBar rightContent={<span style={styles.headerLabel}>Custom Quiz</span>} />
       <main style={styles.main}>
+        <button style={styles.backLink} onClick={goBackToThemes}>← Back to themes</button>
         <div style={styles.progressRow}>
           <div style={styles.progressBar}>
             <div style={{ ...styles.progressFill, width: `${(currentIdx / session.length) * 100}%` }} />
