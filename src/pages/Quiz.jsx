@@ -256,7 +256,7 @@ export default function Quiz() {
     const wordIds = words.map(w => w.id)
     const { data: progress } = await supabase
       .from('user_word_progress')
-      .select('id, word_id, stage, consecutive_correct, hidden, mastered, s1_incorrect, s2_incorrect, s3_incorrect, s1_resets, s2_resets, s3_resets, total_incorrect')
+      .select('id, word_id, stage, consecutive_correct, hidden, mastered, s1_incorrect, s2_incorrect, s3_incorrect, s1_resets, s2_resets, s3_resets, total_incorrect, recent_attempts')
       .eq('user_id', user.id)
       .in('word_id', wordIds)
 
@@ -281,6 +281,7 @@ export default function Quiz() {
           s2_resets: p.s2_resets ?? 0,
           s3_resets: p.s3_resets ?? 0,
           total_incorrect: p.total_incorrect ?? 0,
+          recent_attempts: Array.isArray(p.recent_attempts) ? p.recent_attempts : [],
         }
       }
       if (p.hidden) hiddenWordIds.add(p.word_id)
@@ -316,12 +317,13 @@ export default function Quiz() {
   async function saveProgress(wordId) {
     const prog = progressRef.current[wordId]
     if (!prog) return
-    const { stage, consecutive_correct, hidden, mastered, db_id, s1_incorrect, s2_incorrect, s3_incorrect, s1_resets, s2_resets, s3_resets, total_incorrect } = prog
+    const { stage, consecutive_correct, hidden, mastered, db_id, s1_incorrect, s2_incorrect, s3_incorrect, s1_resets, s2_resets, s3_resets, total_incorrect, recent_attempts } = prog
     console.log('[saveProgress]', { wordId, stage, consecutive_correct, mastered, db_id: db_id ?? 'none' })
     const trackingPayload = {
       s1_incorrect: s1_incorrect ?? 0, s2_incorrect: s2_incorrect ?? 0, s3_incorrect: s3_incorrect ?? 0,
       s1_resets: s1_resets ?? 0, s2_resets: s2_resets ?? 0, s3_resets: s3_resets ?? 0,
       total_incorrect: total_incorrect ?? 0,
+      recent_attempts: Array.isArray(recent_attempts) ? recent_attempts : [],
     }
 
     if (db_id) {
@@ -429,6 +431,7 @@ export default function Quiz() {
       }
     }
 
+    newProg.recent_attempts = [...(prog.recent_attempts ?? []), isCorrect ? 1 : 0].slice(-10)
     progressRef.current[wordId] = newProg
     saveProgress(wordId)
     setMatchResult(result)
