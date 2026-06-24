@@ -144,6 +144,8 @@ export default function Dashboard() {
   const [resetting, setResetting]   = useState(false)
   const [resetTarget, setResetTarget] = useState(1)
 
+  const [struggleLoading, setStruggleLoading] = useState(false)
+
   // Custom Quiz selector state
   const [selectorOpen, setSelectorOpen] = useState(false)
   const [selectorSourceTheme, setSelectorSourceTheme] = useState(null)
@@ -420,6 +422,49 @@ export default function Dashboard() {
     })
   }
 
+  // Top 10 Struggle Words: the 10 words with the highest total_incorrect,
+  // excluding any word that already has 7+ correct in its last 10 attempts.
+  // Each word is launched at its current stage.
+  async function startStruggleQuiz() {
+    if (struggleLoading) return
+    setStruggleLoading(true)
+
+    const { data: rows } = await supabase
+      .from('user_word_progress')
+      .select('word_id, total_incorrect, recent_attempts, stage')
+      .eq('user_id', user.id)
+      .order('total_incorrect', { ascending: false })
+
+    const eligible = (rows ?? [])
+      .filter(r => (r.total_incorrect ?? 0) > 0)
+      .filter(r => {
+        const arr = Array.isArray(r.recent_attempts) ? r.recent_attempts : []
+        const correct = arr.reduce((sum, v) => sum + (v === 1 ? 1 : 0), 0)
+        return correct < 7
+      })
+      .slice(0, 10)
+
+    if (eligible.length === 0) {
+      setStruggleLoading(false)
+      return
+    }
+
+    const wordIds = eligible.map(r => r.word_id)
+    const { data: wordRows } = await supabase
+      .from('words')
+      .select('id, english, spanish')
+      .in('id', wordIds)
+    const wordMap = {}
+    for (const w of wordRows ?? []) wordMap[w.id] = w
+
+    const selections = eligible
+      .map(r => wordMap[r.word_id] ? { word: wordMap[r.word_id], stages: [r.stage ?? 1] } : null)
+      .filter(Boolean)
+
+    setStruggleLoading(false)
+    if (selections.length) navigate('/custom-quiz', { state: { selections } })
+  }
+
   function startCustomQuiz() {
     const selections = selectorWords
       .filter(w => !selectorProgress[w.id]?.hidden && (wordStages[w.id]?.size ?? 0) > 0)
@@ -461,6 +506,20 @@ export default function Dashboard() {
               </button>
             ))}
           </div>
+          <div style={styles.struggleWrap}>
+            <h3 style={styles.struggleTitle}>Top 10 Struggle Words</h3>
+            <p style={styles.struggleSubtitle}>Quiz your most-missed words at their current stage</p>
+            <button
+              style={styles.struggleCard}
+              onClick={startStruggleQuiz}
+              disabled={struggleLoading}
+            >
+              <span style={styles.struggleCardText}>
+                {struggleLoading ? 'Building quiz…' : 'Launch struggle quiz →'}
+              </span>
+            </button>
+          </div>
+
           <div style={styles.polishWrap}>
             <h3 style={styles.polishTitle}>Polish</h3>
             <p style={styles.polishSubtitle}>Practise your mastered words</p>
@@ -851,6 +910,36 @@ const styles = {
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
+  },
+  struggleWrap: {
+    marginTop: '2rem',
+  },
+  struggleTitle: {
+    margin: '0 0 0.2rem',
+    fontSize: '1rem',
+    fontWeight: 600,
+    color: '#111',
+  },
+  struggleSubtitle: {
+    margin: '0 0 0.75rem',
+    fontSize: '0.85rem',
+    color: '#666',
+  },
+  struggleCard: {
+    display: 'block',
+    width: '100%',
+    padding: '1.1rem 1.5rem',
+    background: '#fef2f2',
+    border: '1.5px solid #f87171',
+    borderRadius: '10px',
+    cursor: 'pointer',
+    textAlign: 'left',
+    transition: 'border-color 0.15s, box-shadow 0.15s',
+  },
+  struggleCardText: {
+    fontSize: '0.9rem',
+    fontWeight: 600,
+    color: '#b91c1c',
   },
   polishWrap: {
     marginTop: '2rem',
