@@ -33,7 +33,7 @@ function stripParens(str) {
 }
 
 function fuzzyMatch(typed, correct) {
-  const a = normalise(typed)
+  const a = normalise(stripParens(typed))
   const b = normalise(stripParens(correct))
   if (a === b) return 'exact'
   const maxLen = Math.max(a.length, b.length)
