@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { VOCAB_THEMES } from '../utils/courseData'
@@ -87,8 +87,8 @@ function buildSession(words, progressMap) {
   return shuffle(words).slice(0, 5) // TESTING STATE
 }
 
-function buildQuestion(word, allWords, progressMap) {
-  const stage = progressMap[word.id]?.stage ?? 1
+function buildQuestion(word, allWords, progressMap, forcedStage = null) {
+  const stage = forcedStage ?? (progressMap[word.id]?.stage ?? 1)
   if (stage === 1 && allWords.length >= 4) {
     const options = shuffle([word.english, ...pickDistractors(word, allWords)])
     return { type: 'mc', word, options, prompt: word.spanish, promptLabel: 'What is the English for:', correct: word.english, stage }
@@ -203,11 +203,23 @@ function ProgressRing({ pct }) {
 export default function Quiz() {
   const { themeId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { user } = useAuth()
+
+  const mode = location.state?.mode === 'struggle' ? 'struggle' : 'normal'
 
   const theme = VOCAB_THEMES.find(t => t.id === Number(themeId))
   const progressRef = useRef({})
   const inputRef = useRef(null)
+
+  // Struggle-mode session state (top-10 most-missed words drilled S1→S2→S3)
+  const strugglePoolRef = useRef([])        // pending { wordId, stage } items (eligible, not in-flight)
+  const struggleWrongRef = useRef({})       // { [wordId]: { 1, 2, 3 } } incorrect counts per stage
+  const struggleRemainingRef = useRef(new Set()) // wordIds not yet fully resolved
+  const struggleOutcomeRef = useRef({})     // { [wordId]: { [stage]: 'pass' | 'fail' } }
+  const struggleWordsRef = useRef([])       // the selected word objects (for summary)
+  const struggleAllWordsRef = useRef([])    // full theme word list (for MC distractors)
+  const struggleCurrentRef = useRef(null)   // the in-flight { wordId, stage }
 
   const [phase, setPhase] = useState('loading')
   const [allWords, setAllWords] = useState([])
@@ -219,10 +231,14 @@ export default function Quiz() {
   const [matchResult, setMatchResult] = useState(null)
   const [results, setResults] = useState([])
   const [hiddenWords, setHiddenWords] = useState(new Set())
+  const [struggleTotal, setStruggleTotal] = useState(0)
 
   useEffect(() => {
-    if (theme && user) loadQuiz()
-  }, [theme?.id, user?.id])
+    if (theme && user) {
+      if (mode === 'struggle') loadStruggleQuiz()
+      else loadQuiz()
+    }
+  }, [theme?.id, user?.id, mode])
 
   useEffect(() => {
     if (question?.type === 'typed') inputRef.current?.focus({ preventScroll: true })
@@ -314,6 +330,118 @@ export default function Quiz() {
     setPhase('question')
   }
 
+  // ---- Top 10 Struggle Quiz (theme-scoped) ----------------------------------
+  // Picks the 10 words with the highest total_incorrect in this theme. Each word
+  // must pass S1 before S2 is eligible and S2 before S3, but the question order
+  // is fully randomised across every currently-eligible (word, stage) item.
+  // Wrong answers re-queue the same stage (max 2 retries per stage per word).
+  // The session is read-only — it does not mutate stored word progress.
+  async function loadStruggleQuiz() {
+    setPhase('loading')
+    await ensureProfile()
+    const { data: words, error } = await supabase
+      .from('words')
+      .select('id, english, spanish')
+      .eq('theme', theme.title)
+
+    if (error || !words?.length) {
+      setPhase('error')
+      return
+    }
+
+    const wordIds = words.map(w => w.id)
+    const { data: progress } = await supabase
+      .from('user_word_progress')
+      .select('word_id, total_incorrect')
+      .eq('user_id', user.id)
+      .in('word_id', wordIds)
+
+    const incByWord = {}
+    for (const p of progress ?? []) {
+      const v = p.total_incorrect ?? 0
+      if (!(p.word_id in incByWord) || v > incByWord[p.word_id]) incByWord[p.word_id] = v
+    }
+
+    const top = words
+      .filter(w => (incByWord[w.id] ?? 0) > 0)
+      .sort((a, b) => (incByWord[b.id] ?? 0) - (incByWord[a.id] ?? 0))
+      .slice(0, 10)
+
+    struggleAllWordsRef.current = words
+    struggleWordsRef.current = top
+    strugglePoolRef.current = shuffle(top.map(w => ({ wordId: w.id, stage: 1 })))
+    struggleWrongRef.current = {}
+    struggleOutcomeRef.current = {}
+    struggleRemainingRef.current = new Set(top.map(w => w.id))
+    struggleCurrentRef.current = null
+
+    setAllWords(words)
+    setResults([])
+    setSelectedOption(null)
+    setMatchResult(null)
+    setStruggleTotal(top.length)
+
+    if (top.length === 0) {
+      setPhase('empty')
+      return
+    }
+
+    presentNextStruggle()
+  }
+
+  function presentNextStruggle() {
+    const pool = strugglePoolRef.current
+    if (pool.length === 0) {
+      struggleCurrentRef.current = null
+      setPhase('summary')
+      return
+    }
+    const idx = Math.floor(Math.random() * pool.length)
+    const [item] = pool.splice(idx, 1)
+    struggleCurrentRef.current = item
+    const word = struggleAllWordsRef.current.find(w => w.id === item.wordId)
+    const q = buildQuestion(word, struggleAllWordsRef.current, {}, item.stage)
+    setSelectedOption(null)
+    setTypedAnswers(Array(Math.max(1, q.answers?.length ?? 1)).fill(''))
+    setMatchResult(null)
+    setQuestion(q)
+    setPhase('question')
+  }
+
+  function handleStruggleAnswer(answer) {
+    const result = question.type === 'typed' ? evalTyped() : fuzzyMatch(answer, question.correct)
+    const isCorrect = result !== 'wrong'
+    const { wordId, stage } = struggleCurrentRef.current
+
+    if (!struggleWrongRef.current[wordId]) struggleWrongRef.current[wordId] = { 1: 0, 2: 0, 3: 0 }
+    if (!struggleOutcomeRef.current[wordId]) struggleOutcomeRef.current[wordId] = {}
+
+    if (isCorrect) {
+      struggleOutcomeRef.current[wordId][stage] = 'pass'
+      if (stage < 3) {
+        strugglePoolRef.current.push({ wordId, stage: stage + 1 }) // next stage now eligible
+      } else {
+        struggleRemainingRef.current.delete(wordId) // passed all stages
+      }
+    } else {
+      const wrongCount = (struggleWrongRef.current[wordId][stage] += 1)
+      if (wrongCount >= 3) {
+        struggleOutcomeRef.current[wordId][stage] = 'fail' // initial + 2 retries exhausted
+        struggleRemainingRef.current.delete(wordId)
+      } else {
+        strugglePoolRef.current.push({ wordId, stage }) // re-queue same stage
+      }
+    }
+
+    setMatchResult(result)
+    setSelectedOption(answer)
+    setResults(r => [...r, { word: question.word, correct: isCorrect, result, stage }])
+    setPhase('feedback')
+    if (result === 'wrong' && question.type === 'typed') {
+      setTypedAnswers(Array(Math.max(1, question.answers?.length ?? 1)).fill(''))
+    }
+  }
+
   async function saveProgress(wordId) {
     const prog = progressRef.current[wordId]
     if (!prog) return
@@ -392,6 +520,7 @@ export default function Quiz() {
   }
 
   function handleAnswer(answer) {
+    if (mode === 'struggle') return handleStruggleAnswer(answer)
     const result = question.type === 'typed' ? evalTyped() : fuzzyMatch(answer, question.correct)
     const isCorrect = result !== 'wrong'
     const wordId = question.word.id
@@ -444,6 +573,7 @@ export default function Quiz() {
   }
 
   function handleNext() {
+    if (mode === 'struggle') { presentNextStruggle(); return }
     const nextIdx = currentIdx + 1
     if (nextIdx >= session.length) {
       setPhase('summary')
@@ -491,7 +621,73 @@ export default function Quiz() {
         <main style={styles.main}>
           <button style={styles.backLink} onClick={() => navigate('/vocabulary')}>← Back to themes</button>
           <div style={styles.card}>
-            <p style={{ margin: 0, color: '#555' }}>All words in this theme are hidden or mastered. Unhide some words to continue.</p>
+            <p style={{ margin: 0, color: '#555' }}>
+              {mode === 'struggle'
+                ? 'No struggle words in this theme yet — you haven’t answered any words incorrectly here.'
+                : 'All words in this theme are hidden or mastered. Unhide some words to continue.'}
+            </p>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  if (phase === 'summary' && mode === 'struggle') {
+    const words = struggleWordsRef.current
+    const passedWords = words.filter(w => struggleOutcomeRef.current[w.id]?.[3] === 'pass').length
+    const cell = (state) => {
+      if (state === 'pass') return <span style={{ color: '#16a34a', fontWeight: 700 }}>✓</span>
+      if (state === 'fail') return <span style={{ color: '#dc2626', fontWeight: 700 }}>✗</span>
+      return <span style={{ color: '#d1d5db' }}>–</span>
+    }
+    return (
+      <div style={styles.page}>
+        <NavBar />
+        <main style={{ ...styles.main, maxWidth: '820px' }}>
+          <div style={styles.summaryThemeCard}>
+            <div style={styles.cardLeft}>
+              <span style={styles.themeTitle}>{theme.title} · Struggle Quiz</span>
+              <span style={styles.themeSubtitle}>
+                {words.length} struggle words · {passedWords} cleared all stages
+              </span>
+            </div>
+          </div>
+
+          <div className="results-table-wrap" style={{ ...styles.tableWrap, maxHeight: '320px', overflowY: 'scroll' }}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={{ ...styles.thLeft, textAlign: 'center', position: 'sticky', top: 0 }}>English</th>
+                  <th style={{ ...styles.thLeft, textAlign: 'center', position: 'sticky', top: 0 }}>Spanish</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>S1</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>S2</th>
+                  <th style={{ ...styles.thCenter, position: 'sticky', top: 0 }}>S3</th>
+                </tr>
+              </thead>
+              <tbody>
+                {words.map(word => {
+                  const o = struggleOutcomeRef.current[word.id] ?? {}
+                  return (
+                    <tr key={word.id} style={styles.tableRow}>
+                      <td style={styles.tdEn}>{word.english}</td>
+                      <td style={styles.tdEs}>{word.spanish}</td>
+                      <td style={styles.stageCell}>{cell(o[1])}</td>
+                      <td style={styles.stageCell}>{cell(o[2])}</td>
+                      <td style={styles.stageCell}>{cell(o[3])}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={styles.summaryActions}>
+            <button style={{ ...styles.primaryBtn, width: '100%', alignSelf: 'auto', textAlign: 'center' }} onClick={loadStruggleQuiz}>
+              Play again
+            </button>
+            <button style={styles.backToThemesBtn} onClick={() => navigate('/vocabulary')}>
+              ← Back to themes
+            </button>
           </div>
         </main>
       </div>
@@ -598,6 +794,13 @@ export default function Quiz() {
   }
 
   const currentProg = progressRef.current[question?.word?.id]
+  const struggleDone = struggleTotal - struggleRemainingRef.current.size
+  const progressPct = mode === 'struggle'
+    ? (struggleTotal > 0 ? (struggleDone / struggleTotal) * 100 : 0)
+    : (currentIdx / session.length) * 100
+  const progressLabel = mode === 'struggle'
+    ? `${struggleDone} / ${struggleTotal}`
+    : `${currentIdx + 1} / ${session.length}`
 
   return (
     <div style={styles.page}>
@@ -605,17 +808,17 @@ export default function Quiz() {
       <main style={styles.main}>
         <div style={styles.progressRow}>
           <div style={styles.progressBar}>
-            <div style={{ ...styles.progressFill, width: `${(currentIdx / session.length) * 100}%` }} />
+            <div style={{ ...styles.progressFill, width: `${progressPct}%` }} />
           </div>
-          <span style={styles.progressLabel}>{currentIdx + 1} / {session.length}</span>
+          <span style={styles.progressLabel}>{progressLabel}</span>
         </div>
 
         <div style={styles.card}>
           <p style={styles.word}>{question.prompt}</p>
           <MasteryBar
-            stage={currentProg?.stage ?? 1}
-            consecutiveCorrect={currentProg?.consecutive_correct ?? 0}
-            mastered={currentProg?.mastered ?? false}
+            stage={mode === 'struggle' ? (question?.stage ?? 1) : (currentProg?.stage ?? 1)}
+            consecutiveCorrect={mode === 'struggle' ? 0 : (currentProg?.consecutive_correct ?? 0)}
+            mastered={mode === 'struggle' ? false : (currentProg?.mastered ?? false)}
           />
 
           {question.type === 'mc' && (
@@ -715,7 +918,7 @@ export default function Quiz() {
                   onClick={confirmOk ? handleNext : undefined}
                   disabled={!confirmOk}
                 >
-                  {currentIdx + 1 >= session.length ? 'Finish' : 'Next →'}
+                  {(mode === 'struggle' ? strugglePoolRef.current.length === 0 : currentIdx + 1 >= session.length) ? 'Finish' : 'Next →'}
                 </button>
               </div>
             )

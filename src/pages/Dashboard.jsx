@@ -571,6 +571,13 @@ export default function Dashboard() {
                 </button>
                 <button
                   style={styles.menuOption}
+                  onClick={() => { closeModal(); navigate(`/quiz/${modalTheme.id}`, { state: { mode: 'struggle' } }) }}
+                >
+                  <span style={styles.menuOptionLabel}>Top 10 Struggle Quiz</span>
+                  <span style={styles.menuOptionDesc}>Drill this theme's 10 most-missed words through every stage</span>
+                </button>
+                <button
+                  style={styles.menuOption}
                   onClick={() => openSelector(modalTheme)}
                 >
                   <span style={styles.menuOptionLabel}>Custom Quiz</span>
