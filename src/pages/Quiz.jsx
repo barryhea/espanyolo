@@ -794,12 +794,21 @@ export default function Quiz() {
   }
 
   const currentProg = progressRef.current[question?.word?.id]
-  const struggleDone = struggleTotal - struggleRemainingRef.current.size
+  // Struggle progress: X = questions answered, total = answered + remaining plan.
+  // Each pending {word, stage} item still needs (4 - stage) questions to finish
+  // that word (current stage + every higher stage). The in-flight question is
+  // counted only while it is still unanswered (the 'question' phase); once
+  // answered its outcome is already reflected back in the pool.
+  const struggleAnswered = results.length
+  const strugglePlannedRemaining =
+    strugglePoolRef.current.reduce((n, it) => n + (4 - it.stage), 0) +
+    (phase === 'question' && struggleCurrentRef.current ? (4 - struggleCurrentRef.current.stage) : 0)
+  const struggleQTotal = struggleAnswered + strugglePlannedRemaining
   const progressPct = mode === 'struggle'
-    ? (struggleTotal > 0 ? (struggleDone / struggleTotal) * 100 : 0)
+    ? (struggleQTotal > 0 ? (struggleAnswered / struggleQTotal) * 100 : 0)
     : (currentIdx / session.length) * 100
   const progressLabel = mode === 'struggle'
-    ? `${struggleDone} / ${struggleTotal}`
+    ? `${struggleAnswered} / ${struggleQTotal}`
     : `${currentIdx + 1} / ${session.length}`
 
   return (
