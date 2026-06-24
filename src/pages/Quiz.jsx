@@ -214,7 +214,7 @@ export default function Quiz() {
 
   // Struggle-mode session state (top-10 most-missed words drilled S1→S2→S3)
   const strugglePoolRef = useRef([])        // pending { wordId, stage } items (eligible, not in-flight)
-  const struggleWrongRef = useRef({})       // { [wordId]: { 1, 2, 3 } } incorrect counts per stage
+  const struggleAttemptsRef = useRef({})    // { [wordId]: total attempts asked this session (cap 3) }
   const struggleRemainingRef = useRef(new Set()) // wordIds not yet fully resolved
   const struggleOutcomeRef = useRef({})     // { [wordId]: { [stage]: 'pass' | 'fail' } }
   const struggleWordsRef = useRef([])       // the selected word objects (for summary)
@@ -370,7 +370,7 @@ export default function Quiz() {
     struggleAllWordsRef.current = words
     struggleWordsRef.current = top
     strugglePoolRef.current = shuffle(top.map(w => ({ wordId: w.id, stage: 1 })))
-    struggleWrongRef.current = {}
+    struggleAttemptsRef.current = {}
     struggleOutcomeRef.current = {}
     struggleRemainingRef.current = new Set(top.map(w => w.id))
     struggleCurrentRef.current = null
@@ -413,23 +413,25 @@ export default function Quiz() {
     const isCorrect = result !== 'wrong'
     const { wordId, stage } = struggleCurrentRef.current
 
-    if (!struggleWrongRef.current[wordId]) struggleWrongRef.current[wordId] = { 1: 0, 2: 0, 3: 0 }
     if (!struggleOutcomeRef.current[wordId]) struggleOutcomeRef.current[wordId] = {}
+
+    // A word may be asked at most 3 times per session across all stages combined.
+    const attempts = (struggleAttemptsRef.current[wordId] = (struggleAttemptsRef.current[wordId] ?? 0) + 1)
+    const attemptsLeft = attempts < 3
 
     if (isCorrect) {
       struggleOutcomeRef.current[wordId][stage] = 'pass'
-      if (stage < 3) {
+      if (stage < 3 && attemptsLeft) {
         strugglePoolRef.current.push({ wordId, stage: stage + 1 }) // next stage now eligible
       } else {
-        struggleRemainingRef.current.delete(wordId) // passed all stages
+        struggleRemainingRef.current.delete(wordId) // passed S3, or out of attempts
       }
     } else {
-      const wrongCount = (struggleWrongRef.current[wordId][stage] += 1)
-      if (wrongCount >= 3) {
-        struggleOutcomeRef.current[wordId][stage] = 'fail' // initial + 2 retries exhausted
-        struggleRemainingRef.current.delete(wordId)
+      if (attemptsLeft) {
+        strugglePoolRef.current.push({ wordId, stage }) // re-queue same stage, attempt still counted
       } else {
-        strugglePoolRef.current.push({ wordId, stage }) // re-queue same stage
+        struggleOutcomeRef.current[wordId][stage] = 'fail' // 3 attempts used up
+        struggleRemainingRef.current.delete(wordId)
       }
     }
 
@@ -800,9 +802,13 @@ export default function Quiz() {
   // counted only while it is still unanswered (the 'question' phase); once
   // answered its outcome is already reflected back in the pool.
   const struggleAnswered = results.length
+  // Questions still owed for a pending {word, stage}: bounded by both the stages
+  // left to clear (4 - stage) and the word's remaining attempts (3 - used).
+  const struggleItemRemaining = (it) =>
+    Math.min(4 - it.stage, 3 - (struggleAttemptsRef.current[it.wordId] ?? 0))
   const strugglePlannedRemaining =
-    strugglePoolRef.current.reduce((n, it) => n + (4 - it.stage), 0) +
-    (phase === 'question' && struggleCurrentRef.current ? (4 - struggleCurrentRef.current.stage) : 0)
+    strugglePoolRef.current.reduce((n, it) => n + struggleItemRemaining(it), 0) +
+    (phase === 'question' && struggleCurrentRef.current ? struggleItemRemaining(struggleCurrentRef.current) : 0)
   const struggleQTotal = struggleAnswered + strugglePlannedRemaining
   const progressPct = mode === 'struggle'
     ? (struggleQTotal > 0 ? (struggleAnswered / struggleQTotal) * 100 : 0)
