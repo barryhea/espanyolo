@@ -38,7 +38,7 @@ function fuzzyMatch(typed, correct) {
   if (a === b) return 'exact'
   const maxLen = Math.max(a.length, b.length)
   if (maxLen === 0) return 'exact'
-  return (1 - levenshtein(a, b) / maxLen) >= 0.8 ? 'close' : 'wrong'
+  return (1 - levenshtein(a, b) / maxLen) >= 0.75 ? 'close' : 'wrong'
 }
 
 // Words whose answer contains "/" (e.g. "By / For") require every segment to be
