@@ -447,7 +447,8 @@ const styles = {
   },
   stepInput: {
     width: '56px', height: '38px', textAlign: 'center',
-    fontSize: '1rem', fontWeight: 700, color: '#111',
+    fontSize: '1rem', fontWeight: 700,
+    color: '#111', backgroundColor: '#fff', colorScheme: 'light',
     border: '1.5px solid #d1d5db', borderRadius: '8px', outline: 'none',
     boxSizing: 'border-box', MozAppearance: 'textfield',
   },
