@@ -2,39 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
+import { fetchVocabQuestionCount } from '../utils/userSettings'
+import { fuzzyMatch } from '../utils/answerMatch'
 import NavBar from '../components/NavBar'
-
-function levenshtein(a, b) {
-  const m = a.length, n = b.length
-  const dp = Array.from({ length: m + 1 }, (_, i) => Array(n + 1).fill(0).map((_, j) => j === 0 ? i : 0))
-  for (let j = 0; j <= n; j++) dp[0][j] = j
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      dp[i][j] = a[i - 1] === b[j - 1]
-        ? dp[i - 1][j - 1]
-        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
-    }
-  }
-  return dp[m][n]
-}
-
-function normalise(str) {
-  return str
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-zA-Z0-9\s]/g, '')
-    .toLowerCase()
-    .trim()
-}
-
-function fuzzyMatch(typed, correct) {
-  const a = normalise(typed)
-  const b = normalise(correct)
-  if (a === b) return 'exact'
-  const maxLen = Math.max(a.length, b.length)
-  if (maxLen === 0) return 'exact'
-  return (1 - levenshtein(a, b) / maxLen) >= 0.8 ? 'close' : 'wrong'
-}
 
 function shuffle(arr) {
   const a = [...arr]
@@ -93,19 +63,13 @@ function MasteryBar({ stage, consecutiveCorrect, mastered }) {
   )
 }
 
-function buildCustomSession(words, progressMap) {
-  const target = Math.min(20, Math.max(5, words.length))
+// Build a session of exactly `count` questions from a flat word list, capped at
+// the number of available words — never repeating a word. Stage-1 words first.
+function buildCustomSession(words, progressMap, count) {
+  const target = Math.min(Math.max(1, count), words.length)
   const s1 = words.filter(w => (progressMap[w.id]?.stage ?? 1) === 1)
-  const pool = s1.length > 0 ? s1 : words
-  if (!pool.length) return []
-  const session = []
-  let i = 0
-  const shuffled = shuffle(pool)
-  while (session.length < target) {
-    session.push(shuffled[i % shuffled.length])
-    i++
-  }
-  return session
+  const rest = words.filter(w => (progressMap[w.id]?.stage ?? 1) !== 1)
+  return [...shuffle(s1), ...shuffle(rest)].slice(0, target)
 }
 
 function buildSelectionsSession(selections) {
@@ -126,6 +90,9 @@ export default function CustomQuiz() {
   const words = location.state?.words ?? []
   const selections = location.state?.selections ?? null
   const sourceThemeId = location.state?.sourceThemeId ?? null
+  // Struggle launches keep their own fixed length; only standard custom quizzes
+  // honour the user-configured question count.
+  const isStruggle = location.state?.mode === 'struggle'
 
   function goBackToThemes() {
     navigate('/vocabulary', sourceThemeId ? { state: { openThemeId: sourceThemeId } } : undefined)
@@ -183,9 +150,21 @@ export default function CustomQuiz() {
     }
 
     progressRef.current = progMap
-    const sess = selections
-      ? buildSelectionsSession(selections)
-      : buildCustomSession(words, progMap)
+
+    // Standard custom quizzes run exactly the user-configured number of
+    // questions (capped at the available set). Struggle quizzes are unchanged.
+    let sess
+    if (isStruggle) {
+      sess = selections ? buildSelectionsSession(selections) : buildCustomSession(words, progMap, words.length)
+    } else {
+      const questionCount = await fetchVocabQuestionCount(user.id)
+      if (selections) {
+        const pairs = buildSelectionsSession(selections) // already shuffled
+        sess = pairs.slice(0, Math.min(Math.max(1, questionCount), pairs.length))
+      } else {
+        sess = buildCustomSession(words, progMap, questionCount)
+      }
+    }
 
     setSession(sess)
     setCurrentIdx(0)

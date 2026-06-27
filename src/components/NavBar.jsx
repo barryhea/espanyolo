@@ -2,12 +2,31 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
+import {
+  fetchVocabQuestionCount,
+  saveVocabQuestionCount,
+  clampQuestionCount,
+  DEFAULT_VOCAB_QUESTION_COUNT,
+} from '../utils/userSettings'
+
+function CogIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  )
+}
 
 export default function NavBar({ rightContent }) {
   const [open, setOpen] = useState(false)
   const [showSaved, setShowSaved] = useState(false)
   const [savedQuizzes, setSavedQuizzes] = useState([])
   const [loadingSaved, setLoadingSaved] = useState(false)
+  const [settingsType, setSettingsType] = useState(null) // null | 'vocab' | 'verb'
+  const [vocabCount, setVocabCount] = useState(DEFAULT_VOCAB_QUESTION_COUNT) // committed value
+  const [vocabDraft, setVocabDraft] = useState(String(DEFAULT_VOCAB_QUESTION_COUNT)) // editable field text
+  const [vocabLoading, setVocabLoading] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const { user } = useAuth()
@@ -17,10 +36,30 @@ export default function NavBar({ rightContent }) {
   }, [location.pathname])
 
   useEffect(() => {
-    const anyOpen = open || showSaved
+    const anyOpen = open || showSaved || settingsType !== null
     document.body.style.overflow = anyOpen ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
-  }, [open, showSaved])
+  }, [open, showSaved, settingsType])
+
+  async function openSettings(type) {
+    setOpen(false)
+    setSettingsType(type)
+    if (type === 'vocab' && user) {
+      setVocabLoading(true)
+      const count = await fetchVocabQuestionCount(user.id)
+      setVocabCount(count)
+      setVocabDraft(String(count))
+      setVocabLoading(false)
+    }
+  }
+
+  // Commit a new vocab question count: clamp, update local state, persist.
+  function commitVocabCount(value) {
+    const clamped = clampQuestionCount(value, vocabCount)
+    setVocabCount(clamped)
+    setVocabDraft(String(clamped))
+    if (user) saveVocabQuestionCount(user.id, clamped)
+  }
 
   async function openSavedQuizzes() {
     setOpen(false)
@@ -100,18 +139,38 @@ export default function NavBar({ rightContent }) {
             <span style={styles.panelLogo}>espanyolo</span>
             <button style={styles.panelClose} onClick={() => setOpen(false)}>✕</button>
           </div>
-          <button
-            style={{ ...styles.navItem, ...(vocabActive ? styles.navItemActive : {}) }}
-            onClick={() => { setOpen(false); navigate('/vocabulary') }}
-          >
-            Vocabulary Trainer
-          </button>
-          <button
-            style={{ ...styles.navItem, ...(verbActive ? styles.navItemActive : {}) }}
-            onClick={() => { setOpen(false); navigate('/verbs') }}
-          >
-            Verb Trainer
-          </button>
+          <div style={styles.navRow}>
+            <button
+              style={{ ...styles.navItem, flex: 1, ...(vocabActive ? styles.navItemActive : {}) }}
+              onClick={() => { setOpen(false); navigate('/vocabulary') }}
+            >
+              Vocabulary Trainer
+            </button>
+            <button
+              style={{ ...styles.cogBtn, ...(vocabActive ? { color: '#1d4ed8' } : {}) }}
+              onClick={() => openSettings('vocab')}
+              aria-label="Vocabulary settings"
+              title="Vocabulary settings"
+            >
+              <CogIcon />
+            </button>
+          </div>
+          <div style={styles.navRow}>
+            <button
+              style={{ ...styles.navItem, flex: 1, ...(verbActive ? styles.navItemActive : {}) }}
+              onClick={() => { setOpen(false); navigate('/verbs') }}
+            >
+              Verb Trainer
+            </button>
+            <button
+              style={{ ...styles.cogBtn, ...(verbActive ? { color: '#1d4ed8' } : {}) }}
+              onClick={() => openSettings('verb')}
+              aria-label="Verb settings"
+              title="Verb settings"
+            >
+              <CogIcon />
+            </button>
+          </div>
           <button
             style={{ ...styles.navItem, ...(dictActive ? styles.navItemActive : {}) }}
             onClick={() => { setOpen(false); navigate('/dictionary') }}
@@ -156,6 +215,65 @@ export default function NavBar({ rightContent }) {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {settingsType && (
+        <div style={styles.modalOverlay} onClick={() => setSettingsType(null)}>
+          <div style={styles.modalCard} onClick={e => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <span style={styles.modalTitle}>
+                {settingsType === 'vocab' ? 'Vocabulary Settings' : 'Verb Settings'}
+              </span>
+              <button style={styles.modalClose} onClick={() => setSettingsType(null)}>✕</button>
+            </div>
+
+            {settingsType === 'verb' && (
+              <p style={styles.modalMuted}>No settings available yet.</p>
+            )}
+
+            {settingsType === 'vocab' && (
+              <div style={styles.settingsBody}>
+                <div style={styles.settingRow}>
+                  <div style={styles.settingLabelWrap}>
+                    <span style={styles.settingLabel}>Number of questions</span>
+                    <span style={styles.settingHint}>Per theme &amp; custom quiz (1–100)</span>
+                  </div>
+                  <div style={styles.stepper}>
+                    <button
+                      style={styles.stepBtn}
+                      onClick={() => commitVocabCount(vocabCount - 1)}
+                      disabled={vocabLoading}
+                      aria-label="Decrease"
+                    >
+                      −
+                    </button>
+                    <input
+                      style={styles.stepInput}
+                      type="text"
+                      inputMode="numeric"
+                      value={vocabLoading ? '' : vocabDraft}
+                      onChange={e => {
+                        const v = e.target.value
+                        if (v === '' || /^\d+$/.test(v)) setVocabDraft(v)
+                      }}
+                      onBlur={() => commitVocabCount(vocabDraft)}
+                      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                      aria-label="Number of questions"
+                    />
+                    <button
+                      style={styles.stepBtn}
+                      onClick={() => commitVocabCount(vocabCount + 1)}
+                      disabled={vocabLoading}
+                      aria-label="Increase"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -266,6 +384,21 @@ const styles = {
     color: '#1d4ed8',
     fontWeight: 600,
   },
+  navRow: {
+    display: 'flex',
+    alignItems: 'center',
+  },
+  cogBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: '#999',
+    padding: '0.875rem 1.1rem',
+    flexShrink: 0,
+  },
   navDivider: {
     height: '1px',
     backgroundColor: '#f0f0f0',
@@ -293,6 +426,30 @@ const styles = {
   modalMuted: {
     margin: 0, padding: '1.5rem 1.25rem',
     fontSize: '0.875rem', color: '#888', textAlign: 'center',
+  },
+  settingsBody: {
+    padding: '1.1rem 1.25rem 1.4rem',
+  },
+  settingRow: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
+  },
+  settingLabelWrap: { display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 },
+  settingLabel: { fontSize: '0.95rem', fontWeight: 600, color: '#111' },
+  settingHint: { fontSize: '0.78rem', color: '#999' },
+  stepper: {
+    display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0,
+  },
+  stepBtn: {
+    width: '38px', height: '38px', fontSize: '1.25rem', fontWeight: 700,
+    color: '#333', backgroundColor: '#f3f4f6', border: '1px solid #e5e5e5',
+    borderRadius: '8px', cursor: 'pointer', lineHeight: 1,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+  },
+  stepInput: {
+    width: '56px', height: '38px', textAlign: 'center',
+    fontSize: '1rem', fontWeight: 700, color: '#111',
+    border: '1.5px solid #d1d5db', borderRadius: '8px', outline: 'none',
+    boxSizing: 'border-box', MozAppearance: 'textfield',
   },
   quizList: { overflowY: 'auto', flex: 1 },
   quizRow: {

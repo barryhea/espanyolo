@@ -3,67 +3,9 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { VOCAB_THEMES } from '../utils/courseData'
+import { fetchVocabQuestionCount } from '../utils/userSettings'
+import { fuzzyMatch, splitAnswers, matchMulti } from '../utils/answerMatch'
 import NavBar from '../components/NavBar'
-
-function levenshtein(a, b) {
-  const m = a.length, n = b.length
-  const dp = Array.from({ length: m + 1 }, (_, i) => Array(n + 1).fill(0).map((_, j) => j === 0 ? i : 0))
-  for (let j = 0; j <= n; j++) dp[0][j] = j
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      dp[i][j] = a[i - 1] === b[j - 1]
-        ? dp[i - 1][j - 1]
-        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
-    }
-  }
-  return dp[m][n]
-}
-
-function normalise(str) {
-  return str
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-zA-Z0-9\s]/g, '')
-    .toLowerCase()
-    .trim()
-}
-
-function stripParens(str) {
-  return str.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim()
-}
-
-function fuzzyMatch(typed, correct) {
-  const a = normalise(stripParens(typed))
-  const b = normalise(stripParens(correct))
-  if (a === b) return 'exact'
-  const maxLen = Math.max(a.length, b.length)
-  if (maxLen === 0) return 'exact'
-  return (1 - levenshtein(a, b) / maxLen) >= 0.75 ? 'close' : 'wrong'
-}
-
-// Words whose answer contains "/" (e.g. "By / For") require every segment to be
-// answered. Segments are matched independently and order-independently.
-function splitAnswers(correct) {
-  return correct.split('/').map(s => s.trim()).filter(Boolean)
-}
-
-function matchMulti(typedArr, segments) {
-  const used = new Array(typedArr.length).fill(false)
-  let worst = 'exact'
-  for (const seg of segments) {
-    let best = null, bestIdx = -1
-    for (let i = 0; i < typedArr.length; i++) {
-      if (used[i]) continue
-      const r = fuzzyMatch(typedArr[i] ?? '', seg)
-      if (r === 'exact') { best = 'exact'; bestIdx = i; break }
-      if (r === 'close' && best !== 'close') { best = 'close'; bestIdx = i }
-    }
-    if (best === null) return 'wrong'
-    used[bestIdx] = true
-    if (best === 'close') worst = 'close'
-  }
-  return worst
-}
 
 function shuffle(arr) {
   const a = [...arr]
@@ -79,12 +21,14 @@ function pickDistractors(word, allWords, count = 3) {
   return pool.slice(0, count).map(w => w.english)
 }
 
-function buildSession(words, progressMap) {
+// Build a normal theme session of exactly `count` questions, capped at the
+// number of available (visible, non-mastered) words — never repeating a word.
+// Stage-1 words are served first, then any higher-stage words to fill the count.
+function buildSession(words, progressMap, count) {
+  const target = Math.min(Math.max(1, count), words.length)
   const s1 = words.filter(w => (progressMap[w.id]?.stage ?? 1) === 1)
-  if (s1.length > 0) {
-    return shuffle(s1).slice(0, 5) // TESTING STATE
-  }
-  return shuffle(words).slice(0, 5) // TESTING STATE
+  const rest = words.filter(w => (progressMap[w.id]?.stage ?? 1) !== 1)
+  return [...shuffle(s1), ...shuffle(rest)].slice(0, target)
 }
 
 function buildQuestion(word, allWords, progressMap, forcedStage = null) {
@@ -310,7 +254,8 @@ export default function Quiz() {
     setHiddenWords(hiddenWordIds)
 
     const visibleWords = words.filter(w => !hiddenWordIds.has(w.id) && !masteredWordIds.has(w.id))
-    const sess = buildSession(visibleWords, progMap)
+    const questionCount = await fetchVocabQuestionCount(user.id)
+    const sess = buildSession(visibleWords, progMap, questionCount)
 
     setAllWords(words)
     setSession(sess)

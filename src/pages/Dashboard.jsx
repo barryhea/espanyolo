@@ -462,7 +462,7 @@ export default function Dashboard() {
       .filter(Boolean)
 
     setStruggleLoading(false)
-    if (selections.length) navigate('/custom-quiz', { state: { selections } })
+    if (selections.length) navigate('/custom-quiz', { state: { selections, mode: 'struggle' } })
   }
 
   function startCustomQuiz() {
