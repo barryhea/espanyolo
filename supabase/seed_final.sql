@@ -662,7 +662,7 @@ INSERT INTO words (english, spanish, theme) VALUES
   ('Little', 'Poco', 'Core Grammar'),
   ('Very', 'Muy', 'Core Grammar'),
   ('Well', 'Bien', 'Core Grammar'),
-  ('Badly', 'Mal', 'Core Grammar'),
+  ('Bad', 'Mal', 'Core Grammar'),
   ('So', 'Tan', 'Core Grammar'),
   ('Here', 'Aquí', 'Core Grammar'),
   ('There', 'Allí', 'Core Grammar'),
