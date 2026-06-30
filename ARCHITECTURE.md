@@ -247,6 +247,8 @@ The verb trainer has two completely independent progression systems with differe
 | Pass rule | Per-verb thresholds: L1 `drag_match_score >= 5`; L2 `stage2_mastery >= 3`; L3 `stage3_mastery >= 3`; L4 `l4_score >= 5` (inline in `VerbQuiz.jsx`) | Flat **5 correct per pronoun** on every sub-stage: `STAGE2_PER_PRONOUN_THRESHOLD = 5`. A sub-stage advances only when all five pronouns (Yo, Tú, Él/Ella, Nosotros, Ellos/Ellas) reach 5 → `advanceAllVerbsFromSub` raises `t_n_cj_stage` for the whole cohort |
 | Columns | `current_stage`, `drag_match_score`, `stage2_mastery`, `stage3_mastery`, `l4_score` | `t_n_cj_stage` (the authoritative sub-stage); `t_n_score` is a legacy per-verb score and does **not** gate conjugation progression |
 
+All conjugation stage-completion / results cards render through a single shared `ConjResultsCard` component in `VerbArTenseQuiz.jsx`. Both the drag sub-stage (`drag-summary` phase) and the MC/typed sub-stages (`session-summary` phase) pass their per-pronoun cumulative counts to it, so every sub-stage and tense displays each pronoun as cumulative-correct out of a uniform denominator of five (dots match the count), with the per-session score shown separately. There is no per-sub-stage results rendering that can diverge.
+
 There is **no** per-verb pass counter or per-sub-stage threshold in the conjugation flow. The old `SUB_THRESHOLD = {0:5,1:3,2:3,3:5}` per-verb counter was removed from `VerbArTenseQuiz.jsx`; conjugation now depends solely on the five-correct-per-pronoun gate, applied identically across all four sub-stages of all three tenses. The infinitive thresholds in `VerbQuiz.jsx` are unrelated and unchanged.
 
 **Notes on `VerbCategoryModal.jsx` resets:**

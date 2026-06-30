@@ -96,6 +96,67 @@ function fuzzyMatch(typed, correct) {
   return (1 - levenshtein(a, b) / maxLen) >= 0.8 ? 'close' : 'wrong'
 }
 
+// ── Shared conjugation results card ─────────────────────────────────────────────
+// The ONE results-card rendering path for every AR tense conjugation sub-stage
+// (Drag & Match, Multiple Choice, Pronoun, Full Conjugation) across all three
+// tenses. Each pronoun is shown as cumulative-correct-toward-five with a uniform
+// denominator of 5 and dots reflecting that same cumulative count, so the display
+// can never diverge between sub-stages again. `cumulativeByKey` holds the persisted
+// cumulative correct count per pronoun key; `sessionScore` (optional) is the
+// just-completed run's tally, shown separately as the session result.
+function ConjResultsCard({ tenseLabel, subLabel, stageNumber, cumulativeByKey, sessionScore, onContinue, onBack }) {
+  const rows = PRONOUNS.map(p => ({
+    label: p.label,
+    cumulative: Math.min(cumulativeByKey[p.key] ?? 0, STAGE2_PER_PRONOUN_THRESHOLD),
+  }))
+  return (
+    <div style={s.page}><NavBar />
+      <main style={{ ...s.main, maxWidth: '560px' }}>
+        <div style={s.card}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+            <span style={s.tenseTag}>{tenseLabel}</span>
+            <span style={s.subTagSm}>Stage {stageNumber} · {subLabel}</span>
+          </div>
+          {sessionScore && (
+            <>
+              <p style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0.5rem 0 0.1rem', color: '#111' }}>
+                {sessionScore.correct} / {sessionScore.total} correct
+              </p>
+              <p style={{ fontSize: '0.72rem', color: '#aaa', margin: '0 0 0.85rem' }}>This session's result</p>
+            </>
+          )}
+          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.04em', margin: `${sessionScore ? 0 : '0.5rem'} 0 0.45rem` }}>
+            Progress to graduation · 5 correct per pronoun
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {rows.map(row => (
+              <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ width: '90px', fontSize: '0.85rem', color: '#555', flexShrink: 0 }}>
+                  {row.label}
+                </span>
+                <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} style={{
+                      width: '10px', height: '10px', borderRadius: '50%', boxSizing: 'border-box', flexShrink: 0,
+                      backgroundColor: i < row.cumulative ? '#16a34a' : 'transparent',
+                      border: `2px solid ${i < row.cumulative ? '#16a34a' : '#d1d5db'}`,
+                    }} />
+                  ))}
+                </div>
+                <span style={{ fontSize: '0.75rem', color: '#aaa', flexShrink: 0 }}>
+                  {row.cumulative} / 5
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <button style={{ ...s.primaryBtn, width: '100%' }} onClick={onContinue}>Continue</button>
+        <button style={s.blueBtn} onClick={onBack}>← Back to Verb Trainer</button>
+      </main>
+    </div>
+  )
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function VerbArTenseQuiz() {
@@ -741,51 +802,26 @@ export default function VerbArTenseQuiz() {
   // ── Drag summary ──────────────────────────────────────────────────────────
 
   if (phase === 'drag-summary') {
+    // Drag tracks per-pronoun correct in an array (block counter); map to keys for
+    // the shared card. No per-question session score here — the per-pronoun figures
+    // are themselves the run result, so sessionScore is omitted.
+    const dragCumulative = Object.fromEntries(PRONOUNS.map((p, i) => [p.key, blockPronounCounts[i] ?? 0]))
     return (
-      <div style={s.scrollPage}><NavBar />
-        <main style={s.scrollMain}>
-          <div style={s.summaryCard}>
-            <div style={s.summaryHeader}>
-              <span style={s.summaryTitle}>{tenseLabel} · Drag & Match</span>
-              <span style={s.summarySub}>Match conjugations to their pronoun</span>
-            </div>
-            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.1rem' }}>
-              Progress to graduation · 5 correct per pronoun
-            </div>
-            {PRONOUNS.map((p, i) => {
-              const count = Math.min(blockPronounCounts[i] ?? 0, STAGE2_PER_PRONOUN_THRESHOLD)
-              return (
-                <div key={p.key} style={s.summaryRow}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={s.summarySpanish}>{p.label}</div>
-                  </div>
-                  <div style={s.dots}>
-                    {Array.from({ length: 5 }).map((_, j) => (
-                      <div key={j} style={{
-                        width: '11px', height: '11px', borderRadius: '50%', boxSizing: 'border-box', flexShrink: 0,
-                        backgroundColor: j < count ? '#16a34a' : 'transparent',
-                        border: `2px solid ${j < count ? '#16a34a' : '#d1d5db'}`,
-                      }} />
-                    ))}
-                  </div>
-                  <span style={{ fontSize: '0.72rem', color: '#aaa', minWidth: '32px', textAlign: 'right', flexShrink: 0 }}>
-                    {count} / 5
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-          <button style={{ ...s.primaryBtn, width: '100%' }} onClick={() => { setBlockPronounCounts([0,0,0,0,0]); loadQuiz() }}>Continue</button>
-          <button style={s.blueBtn} onClick={() => navigate('/verbs')}>← Back to Verb Trainer</button>
-        </main>
-      </div>
+      <ConjResultsCard
+        tenseLabel={tenseLabel}
+        subLabel={SUB_LABEL[0]}
+        stageNumber={1}
+        cumulativeByKey={dragCumulative}
+        sessionScore={null}
+        onContinue={() => { setBlockPronounCounts([0, 0, 0, 0, 0]); loadQuiz() }}
+        onBack={() => navigate('/verbs')}
+      />
     )
   }
 
   // ── Session summary ───────────────────────────────────────────────────────
 
   if (phase === 'session-summary') {
-    const sessionCorrect = results.filter(r => r.correct).length
     // Cumulative, persisted per-pronoun progress toward the 5-correct-per-pronoun
     // graduation threshold for this sub-stage (sub 1→stage2, 2→stage3, 3→stage4).
     // These localStorage-backed counts already include the just-finished session's
@@ -794,51 +830,16 @@ export default function VerbArTenseQuiz() {
     const cumulativeCounts = activeSub === 1 ? stage2PronounCounts
       : activeSub === 2 ? stage3PronounCounts
       : stage4PronounCounts
-    const pronounRows = PRONOUNS.map(p => ({
-      label: p.label,
-      cumulative: Math.min(cumulativeCounts[p.key] ?? 0, STAGE2_PER_PRONOUN_THRESHOLD),
-    }))
     return (
-      <div style={s.page}><NavBar />
-        <main style={{ ...s.main, maxWidth: '560px' }}>
-          <div style={s.card}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-              <span style={s.tenseTag}>{tenseLabel}</span>
-              <span style={s.subTagSm}>Stage {activeSub + 1} · {subLabel}</span>
-            </div>
-            <p style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0.5rem 0 0.1rem', color: '#111' }}>
-              {sessionCorrect} / {results.length} correct
-            </p>
-            <p style={{ fontSize: '0.72rem', color: '#aaa', margin: '0 0 0.85rem' }}>This session's result</p>
-            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.45rem' }}>
-              Progress to graduation · 5 correct per pronoun
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {pronounRows.map(row => (
-                <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span style={{ width: '90px', fontSize: '0.85rem', color: '#555', flexShrink: 0 }}>
-                    {row.label}
-                  </span>
-                  <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <div key={i} style={{
-                        width: '10px', height: '10px', borderRadius: '50%', boxSizing: 'border-box', flexShrink: 0,
-                        backgroundColor: i < row.cumulative ? '#16a34a' : 'transparent',
-                        border: `2px solid ${i < row.cumulative ? '#16a34a' : '#d1d5db'}`,
-                      }} />
-                    ))}
-                  </div>
-                  <span style={{ fontSize: '0.75rem', color: '#aaa', flexShrink: 0 }}>
-                    {row.cumulative} / 5
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <button style={{ ...s.primaryBtn, width: '100%' }} onClick={loadQuiz}>Continue</button>
-          <button style={s.blueBtn} onClick={() => navigate('/verbs')}>← Back to Verb Trainer</button>
-        </main>
-      </div>
+      <ConjResultsCard
+        tenseLabel={tenseLabel}
+        subLabel={subLabel}
+        stageNumber={activeSub + 1}
+        cumulativeByKey={cumulativeCounts}
+        sessionScore={{ correct: results.filter(r => r.correct).length, total: results.length }}
+        onContinue={loadQuiz}
+        onBack={() => navigate('/verbs')}
+      />
     )
   }
 
