@@ -224,6 +224,9 @@ function MedalHeader({ color }) {
 }
 
 // ── L1: Drag & Match ──────────────────────────────────────────────────────────
+// Pointer travel (px) before a press is treated as a drag rather than a tap
+const DM_DRAG_THRESHOLD = 8
+
 // Props: roundVerbs [{id, english, spanish_infinitive}], onComplete(verbIds[])
 function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
   const [bank, setBank] = useState(() =>
@@ -233,15 +236,21 @@ function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
     roundVerbs.map(v => ({ verbId: v.id, english: v.english, chip: null }))
   )
   const [checkResult, setCheckResult] = useState(null) // null | boolean[]
+  const [selectedChip, setSelectedChip] = useState(null) // { chip, source: 'bank' | slotIdx }
 
   // Drag state stored in refs so window handlers never go stale
-  const dragChipRef = useRef(null)
+  const pendingDragRef = useRef(null) // { chip, source, startX, startY, offsetX, offsetY }
+  const dragChipRef = useRef(null) // set when a drag is actually active
   const ghostElRef = useRef(null)
   const ghostOffsetRef = useRef({ x: 0, y: 0 })
   const slotRefs = useRef([])
   const slotsStateRef = useRef(slots)
+  const selectedRef = useRef(null)
+  const checkResultRef = useRef(null)
   const autoAdvanceRef = useRef(null)
   useEffect(() => { slotsStateRef.current = slots }, [slots])
+  useEffect(() => { selectedRef.current = selectedChip }, [selectedChip])
+  useEffect(() => { checkResultRef.current = checkResult }, [checkResult])
 
   // Auto-advance 3 s after any Check result
   useEffect(() => {
@@ -257,43 +266,115 @@ function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
     return () => clearTimeout(tid)
   }, [checkResult])
 
-  // Attach global pointer listeners once on mount
+  // Attach global pointer listeners once on mount. A press becomes a drag only
+  // after the pointer moves past DRAG_THRESHOLD; a press-and-release with no
+  // movement is treated as a tap (select / place), so drag-and-drop and
+  // tap-to-place coexist on the same chips.
   useEffect(() => {
     const onMove = (e) => {
-      if (!dragChipRef.current || !ghostElRef.current) return
-      ghostElRef.current.style.left = (e.clientX - ghostOffsetRef.current.x) + 'px'
-      ghostElRef.current.style.top = (e.clientY - ghostOffsetRef.current.y) + 'px'
+      // Active drag — move the ghost chip
+      if (dragChipRef.current) {
+        if (ghostElRef.current) {
+          ghostElRef.current.style.left = (e.clientX - ghostOffsetRef.current.x) + 'px'
+          ghostElRef.current.style.top = (e.clientY - ghostOffsetRef.current.y) + 'px'
+        }
+        return
+      }
+
+      const pd = pendingDragRef.current
+      if (!pd) return
+
+      // Promote pending press to an active drag once movement exceeds threshold
+      if (Math.abs(e.clientX - pd.startX) > DM_DRAG_THRESHOLD || Math.abs(e.clientY - pd.startY) > DM_DRAG_THRESHOLD) {
+        pendingDragRef.current = null
+        ghostOffsetRef.current = { x: pd.offsetX, y: pd.offsetY }
+
+        if (pd.source === 'bank') setBank(prev => prev.filter(c => c.id !== pd.chip.id))
+        else setSlots(prev => prev.map((sl, i) => i === pd.source ? { ...sl, chip: null } : sl))
+
+        setSelectedChip(null)
+        setCheckResult(null)
+        dragChipRef.current = pd.chip
+
+        if (ghostElRef.current) {
+          ghostElRef.current.textContent = pd.chip.label
+          ghostElRef.current.style.left = (e.clientX - pd.offsetX) + 'px'
+          ghostElRef.current.style.top = (e.clientY - pd.offsetY) + 'px'
+          ghostElRef.current.style.display = 'block'
+        }
+      }
     }
 
     const onUp = (e) => {
-      const chip = dragChipRef.current
-      if (!chip) return
-      dragChipRef.current = null
-      if (ghostElRef.current) ghostElRef.current.style.display = 'none'
+      // ── Drop after a real drag ────────────────────────────────────────────
+      if (dragChipRef.current) {
+        const chip = dragChipRef.current
+        dragChipRef.current = null
+        if (ghostElRef.current) ghostElRef.current.style.display = 'none'
 
-      // Hit-test against slot bounding rects
-      let targetIdx = -1
-      for (let i = 0; i < slotRefs.current.length; i++) {
-        const el = slotRefs.current[i]
-        if (!el) continue
-        const r = el.getBoundingClientRect()
-        if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
-          targetIdx = i
-          break
+        // Hit-test against slot bounding rects
+        let targetIdx = -1
+        for (let i = 0; i < slotRefs.current.length; i++) {
+          const el = slotRefs.current[i]
+          if (!el) continue
+          const r = el.getBoundingClientRect()
+          if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+            targetIdx = i
+            break
+          }
         }
+
+        if (targetIdx >= 0) {
+          const existing = slotsStateRef.current[targetIdx]?.chip ?? null
+          setSlots(prev => {
+            const next = [...prev]
+            next[targetIdx] = { ...next[targetIdx], chip }
+            return next
+          })
+          if (existing) setBank(prev => [...prev, existing])
+        } else {
+          // Dropped outside any slot — return to bank
+          setBank(prev => [...prev, chip])
+        }
+        return
       }
 
-      if (targetIdx >= 0) {
-        const existing = slotsStateRef.current[targetIdx]?.chip ?? null
-        setSlots(prev => {
-          const next = [...prev]
-          next[targetIdx] = { ...next[targetIdx], chip }
-          return next
-        })
-        if (existing) setBank(prev => [...prev, existing])
+      // ── Tap on a chip (no drag occurred) ──────────────────────────────────
+      const pd = pendingDragRef.current
+      if (!pd) return
+      pendingDragRef.current = null
+
+      if (checkResultRef.current) return
+
+      const { chip, source } = pd
+      const selected = selectedRef.current
+
+      if (selected) {
+        if (selected.chip.id === chip.id) {
+          // Tapping the already-selected chip → deselect
+          setSelectedChip(null)
+        } else if (typeof source === 'number') {
+          // Tapping a different chip already in a slot → place selected chip
+          // there and bounce the displaced chip back to the bank (swap).
+          const slotIdx = source
+          const { chip: selChip, source: selSrc } = selected
+          setSlots(prev => {
+            const next = [...prev]
+            next[slotIdx] = { ...next[slotIdx], chip: selChip }
+            if (typeof selSrc === 'number') next[selSrc] = { ...next[selSrc], chip: null }
+            return next
+          })
+          if (selSrc === 'bank') setBank(prev => prev.filter(c => c.id !== selChip.id))
+          setBank(prev => [...prev, chip])
+          setSelectedChip(null)
+          setCheckResult(null)
+        } else {
+          // Tapping a different bank chip → move the selection
+          setSelectedChip({ chip, source })
+        }
       } else {
-        // Dropped outside any slot — return to bank
-        setBank(prev => [...prev, chip])
+        // Nothing selected → select this chip
+        setSelectedChip({ chip, source })
       }
     }
 
@@ -305,30 +386,45 @@ function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
     }
   }, []) // attach once
 
-  function startDrag(chip, source, e) {
-    e.preventDefault()
-    if (dragChipRef.current) return // already dragging
+  // Tap on a slot — place the selected chip (swapping out any current occupant)
+  function handleSlotTap(slotIdx) {
+    if (checkResult) return
+    if (!selectedChip) return
 
-    // Measure grab offset so ghost doesn't jump
-    const rect = e.currentTarget.getBoundingClientRect()
-    ghostOffsetRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    const { chip, source } = selectedChip
 
-    // Remove from source immediately
-    if (source === 'bank') {
-      setBank(prev => prev.filter(c => c.id !== chip.id))
-    } else {
-      // source is a slot index
-      setSlots(prev => prev.map((s, i) => i === source ? { ...s, chip: null } : s))
+    if (source === slotIdx) {
+      // Tapped the slot the selected chip already sits in → deselect
+      setSelectedChip(null)
+      return
     }
 
-    dragChipRef.current = chip
-    setCheckResult(null)
+    const existingChip = slots[slotIdx]?.chip ?? null
 
-    if (ghostElRef.current) {
-      ghostElRef.current.textContent = chip.label
-      ghostElRef.current.style.left = (e.clientX - ghostOffsetRef.current.x) + 'px'
-      ghostElRef.current.style.top = (e.clientY - ghostOffsetRef.current.y) + 'px'
-      ghostElRef.current.style.display = 'block'
+    setSlots(prev => {
+      const next = [...prev]
+      next[slotIdx] = { ...next[slotIdx], chip }
+      if (typeof source === 'number') next[source] = { ...next[source], chip: null }
+      return next
+    })
+    if (source === 'bank') setBank(prev => prev.filter(c => c.id !== chip.id))
+    if (existingChip)      setBank(prev => [...prev, existingChip])
+
+    setSelectedChip(null)
+    setCheckResult(null)
+  }
+
+  // Record a press; the move/up handlers decide whether it becomes a drag or a tap
+  function startPendingDrag(chip, source, e) {
+    e.preventDefault()
+    if (dragChipRef.current || pendingDragRef.current) return
+    if (checkResult) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    pendingDragRef.current = {
+      chip, source,
+      startX: e.clientX, startY: e.clientY,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
     }
   }
 
@@ -338,6 +434,7 @@ function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
   }
 
   const allFilled = slots.every(s => s.chip !== null)
+  const hasSelection = selectedChip !== null
   const allCorrect = checkResult !== null && checkResult.every(Boolean)
   const correctVerbIds = checkResult
     ? slots.map((slot, i) => checkResult[i] ? slot.verbId : null).filter(Boolean)
@@ -364,15 +461,18 @@ function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
       {/* Chip bank */}
       <div>
         <div style={styles.dmBank}>
-          {bank.map(chip => (
-            <div
-              key={chip.id}
-              style={styles.dmChip}
-              onPointerDown={e => startDrag(chip, 'bank', e)}
-            >
-              {chip.label}
-            </div>
-          ))}
+          {bank.map(chip => {
+            const isSel = selectedChip?.chip.id === chip.id
+            return (
+              <div
+                key={chip.id}
+                style={isSel ? styles.dmChipSelected : styles.dmChip}
+                onPointerDown={e => startPendingDrag(chip, 'bank', e)}
+              >
+                {chip.label}
+              </div>
+            )
+          })}
           {bank.length === 0 && (
             <span style={{ color: '#aaa', fontSize: '0.85rem' }}>All placed ✓</span>
           )}
@@ -381,30 +481,36 @@ function DragMatchRound({ roundVerbs, onComplete, roundsInBlock = 0 }) {
 
       {/* Pair rows */}
       <div style={styles.dmPairs}>
-        {slots.map((slot, i) => (
-          <div key={slot.verbId} style={styles.dmPairRow}>
-            <div style={styles.dmEnglish}>{slot.english}</div>
-            <div
-              ref={el => slotRefs.current[i] = el}
-              style={{
-                ...styles.dmSlot,
-                ...(checkResult ? (checkResult[i] ? styles.dmSlotCorrect : styles.dmSlotWrong) : {}),
-              }}
-            >
-              {slot.chip && (
-                <div
-                  style={{
-                    ...styles.dmChipInSlot,
-                    ...(checkResult ? (checkResult[i] ? styles.dmChipCorrect : styles.dmChipWrong) : {}),
-                  }}
-                  onPointerDown={!checkResult ? e => startDrag(slot.chip, i, e) : undefined}
-                >
-                  {slot.chip.label}
-                </div>
-              )}
+        {slots.map((slot, i) => {
+          const chipSel = selectedChip?.chip.id === slot.chip?.id
+          const slotStyle = checkResult
+            ? { ...styles.dmSlot, ...(checkResult[i] ? styles.dmSlotCorrect : styles.dmSlotWrong) }
+            : hasSelection ? styles.dmSlotTarget : styles.dmSlot
+          return (
+            <div key={slot.verbId} style={styles.dmPairRow}>
+              <div style={styles.dmEnglish}>{slot.english}</div>
+              <div
+                ref={el => slotRefs.current[i] = el}
+                style={slotStyle}
+                onClick={() => handleSlotTap(i)}
+              >
+                {slot.chip && (
+                  <div
+                    style={{
+                      ...(checkResult
+                        ? { ...styles.dmChipInSlot, ...(checkResult[i] ? styles.dmChipCorrect : styles.dmChipWrong) }
+                        : chipSel ? styles.dmChipInSlotSelected : styles.dmChipInSlot),
+                    }}
+                    onPointerDown={!checkResult ? e => startPendingDrag(slot.chip, i, e) : undefined}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {slot.chip.label}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {allFilled && !checkResult && (
@@ -1845,6 +1951,20 @@ const styles = {
     whiteSpace: 'nowrap',
     boxShadow: '0 1px 3px rgba(59,130,246,0.3)',
   },
+  dmChipSelected: {
+    padding: '0.4rem 0.875rem',
+    backgroundColor: '#1d4ed8',
+    color: '#fff',
+    borderRadius: '6px',
+    fontSize: '0.9rem',
+    fontWeight: 500,
+    cursor: 'pointer',
+    userSelect: 'none',
+    touchAction: 'none',
+    whiteSpace: 'nowrap',
+    boxShadow: '0 0 0 3px rgba(59,130,246,0.45)',
+    outline: 'none',
+  },
   dmPairs: {
     display: 'flex',
     flexDirection: 'column',
@@ -1874,6 +1994,19 @@ const styles = {
     flexShrink: 0,
     transition: 'border-color 0.15s, background-color 0.15s',
   },
+  dmSlotTarget: {
+    width: '130px',
+    minHeight: '40px',
+    borderRadius: '6px',
+    border: '2px dashed #3b82f6',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eff6ff',
+    flexShrink: 0,
+    transition: 'border-color 0.15s, background-color 0.15s',
+    cursor: 'pointer',
+  },
   dmSlotCorrect: {
     borderColor: '#16a34a',
     borderStyle: 'solid',
@@ -1898,6 +2031,22 @@ const styles = {
     maxWidth: '118px',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
+  },
+  dmChipInSlotSelected: {
+    padding: '0.35rem 0.625rem',
+    backgroundColor: '#1d4ed8',
+    color: '#fff',
+    borderRadius: '5px',
+    fontSize: '0.85rem',
+    fontWeight: 500,
+    cursor: 'pointer',
+    userSelect: 'none',
+    touchAction: 'none',
+    whiteSpace: 'nowrap',
+    maxWidth: '118px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    boxShadow: '0 0 0 3px rgba(59,130,246,0.45)',
   },
   dmChipCorrect: {
     backgroundColor: '#16a34a',
