@@ -1566,14 +1566,29 @@ export default function VerbQuiz() {
                       return isCorrect ? 'Correct!' : `Incorrect — ${displayAnswer}`
                     })()}
                   </span>
-                  {question.type === 'typed' && !question.prompt && !question.multiInput && question.verb.english_alt1 && (
-                    <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
-                      {'* also means: "'}
-                      {question.verb.english_alt1}
-                      {question.verb.english_alt2 ? ` / ${question.verb.english_alt2}` : ''}
-                      {'"'}
-                    </span>
-                  )}
+                  {question.type === 'typed' && !question.prompt && !question.multiInput && (() => {
+                    // Display-only: surface every accepted meaning except the one
+                    // already shown as the main answer. Derived from the accepted
+                    // candidate set (not english_alt1/alt2, which can duplicate the
+                    // primary — e.g. dejar). Scoring/data model are untouched.
+                    const main = question.correct.replace(/\s*\(.*?\)\s*/g, '').trim()
+                    const candidates = question.correctCandidates ?? [main]
+                    const seen = new Set([normalise(main)])
+                    const others = []
+                    for (const c of candidates) {
+                      const cleaned = c.replace(/\s*\(.*?\)\s*/g, '').trim()
+                      const key = normalise(cleaned)
+                      if (!cleaned || seen.has(key)) continue
+                      seen.add(key)
+                      others.push(cleaned)
+                    }
+                    if (others.length === 0) return null
+                    return (
+                      <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
+                        {`* also means: "${others.join(' / ')}"`}
+                      </span>
+                    )
+                  })()}
                 </div>
                 <button
                   style={{ ...styles.nextBtn, ...(confirmOk ? {} : { opacity: 0.35, cursor: 'not-allowed' }) }}
