@@ -749,8 +749,11 @@ export default function VerbArTenseQuiz() {
               <span style={s.summaryTitle}>{tenseLabel} · Drag & Match</span>
               <span style={s.summarySub}>Match conjugations to their pronoun</span>
             </div>
+            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.1rem' }}>
+              Progress to graduation · 5 correct per pronoun
+            </div>
             {PRONOUNS.map((p, i) => {
-              const count = blockPronounCounts[i]
+              const count = Math.min(blockPronounCounts[i] ?? 0, STAGE2_PER_PRONOUN_THRESHOLD)
               return (
                 <div key={p.key} style={s.summaryRow}>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -782,11 +785,19 @@ export default function VerbArTenseQuiz() {
   // ── Session summary ───────────────────────────────────────────────────────
 
   if (phase === 'session-summary') {
-    const correct = results.filter(r => r.correct).length
-    const pronounRows = PRONOUNS.map(p => {
-      const pr = results.filter(r => r.pronoun?.key === p.key)
-      return { label: p.label, correct: pr.filter(r => r.correct).length, total: pr.length }
-    })
+    const sessionCorrect = results.filter(r => r.correct).length
+    // Cumulative, persisted per-pronoun progress toward the 5-correct-per-pronoun
+    // graduation threshold for this sub-stage (sub 1→stage2, 2→stage3, 3→stage4).
+    // These localStorage-backed counts already include the just-finished session's
+    // correct answers (incremented + saved during the run), so reading them here
+    // shows true cumulative progress without double-counting or mutating anything.
+    const cumulativeCounts = activeSub === 1 ? stage2PronounCounts
+      : activeSub === 2 ? stage3PronounCounts
+      : stage4PronounCounts
+    const pronounRows = PRONOUNS.map(p => ({
+      label: p.label,
+      cumulative: Math.min(cumulativeCounts[p.key] ?? 0, STAGE2_PER_PRONOUN_THRESHOLD),
+    }))
     return (
       <div style={s.page}><NavBar />
         <main style={{ ...s.main, maxWidth: '560px' }}>
@@ -795,9 +806,13 @@ export default function VerbArTenseQuiz() {
               <span style={s.tenseTag}>{tenseLabel}</span>
               <span style={s.subTagSm}>Stage {activeSub + 1} · {subLabel}</span>
             </div>
-            <p style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0.5rem 0 0.75rem', color: '#111' }}>
-              {correct} / {results.length} correct
+            <p style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0.5rem 0 0.1rem', color: '#111' }}>
+              {sessionCorrect} / {results.length} correct
             </p>
+            <p style={{ fontSize: '0.72rem', color: '#aaa', margin: '0 0 0.85rem' }}>This session's result</p>
+            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.45rem' }}>
+              Progress to graduation · 5 correct per pronoun
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {pronounRows.map(row => (
                 <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -808,13 +823,13 @@ export default function VerbArTenseQuiz() {
                     {Array.from({ length: 5 }).map((_, i) => (
                       <div key={i} style={{
                         width: '10px', height: '10px', borderRadius: '50%', boxSizing: 'border-box', flexShrink: 0,
-                        backgroundColor: i < Math.min(row.correct, 5) ? '#16a34a' : 'transparent',
-                        border: `2px solid ${i < Math.min(row.correct, 5) ? '#16a34a' : '#d1d5db'}`,
+                        backgroundColor: i < row.cumulative ? '#16a34a' : 'transparent',
+                        border: `2px solid ${i < row.cumulative ? '#16a34a' : '#d1d5db'}`,
                       }} />
                     ))}
                   </div>
                   <span style={{ fontSize: '0.75rem', color: '#aaa', flexShrink: 0 }}>
-                    {row.correct} / {row.total}
+                    {row.cumulative} / 5
                   </span>
                 </div>
               ))}
