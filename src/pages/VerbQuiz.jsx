@@ -1567,21 +1567,26 @@ export default function VerbQuiz() {
                     })()}
                   </span>
                   {question.type === 'typed' && !question.prompt && !question.multiInput && (() => {
-                    // Display-only: surface every accepted meaning except the one
-                    // already shown as the main answer. Derived from the accepted
-                    // candidate set (not english_alt1/alt2, which can duplicate the
-                    // primary — e.g. dejar). Scoring/data model are untouched.
-                    const main = question.correct.replace(/\s*\(.*?\)\s*/g, '').trim()
-                    const candidates = question.correctCandidates ?? [main]
-                    const seen = new Set([normalise(main)])
-                    const others = []
-                    for (const c of candidates) {
+                    // Display-only: the "also means" line lists every accepted
+                    // meaning except the one the user actually entered, so it never
+                    // echoes their own answer. Derived from the accepted candidate
+                    // set; scoring and the english_alt1/alt2 data model are untouched.
+                    const distinct = []
+                    const seen = new Set()
+                    for (const c of question.correctCandidates ?? [question.correct]) {
                       const cleaned = c.replace(/\s*\(.*?\)\s*/g, '').trim()
                       const key = normalise(cleaned)
                       if (!cleaned || seen.has(key)) continue
                       seen.add(key)
-                      others.push(cleaned)
+                      distinct.push(cleaned)
                     }
+                    // Single-meaning verbs never get a second line.
+                    if (distinct.length <= 1) return null
+                    // Exclude the meaning the user typed. On a wrong answer the input
+                    // has been cleared/repurposed for the retype flow, so key off
+                    // matchResult and show every accepted meaning instead.
+                    const typed = matchResult === 'wrong' ? '' : (typedAnswer ?? '').trim()
+                    const others = distinct.filter(c => !(typed && fuzzyMatch(typed, c) !== 'wrong'))
                     if (others.length === 0) return null
                     return (
                       <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
