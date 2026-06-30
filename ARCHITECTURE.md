@@ -236,12 +236,25 @@ Tracks each user's learning progress for each verb across all quiz stages. One r
 - `3` = sub-stage 4 (typed EN → conj) in progress
 - `4` = all four sub-stages done; tense mastered
 
+**Two separate pass systems — infinitive vs conjugation (do not mix):**
+
+The verb trainer has two completely independent progression systems with different pass rules. They share neither thresholds nor logic.
+
+| | Infinitive verb-learning (`VerbQuiz.jsx`) | AR tense conjugation (`VerbArTenseQuiz.jsx`) |
+|---|---|---|
+| Purpose | Learn the verbs themselves (L1–L4) | Drill each subject pronoun (Present/Past/Future) |
+| Granularity | **Per-verb** — each verb advances independently | **Per-pronoun, cohort** — all verbs of a tense advance together |
+| Pass rule | Per-verb thresholds: L1 `drag_match_score >= 5`; L2 `stage2_mastery >= 3`; L3 `stage3_mastery >= 3`; L4 `l4_score >= 5` (inline in `VerbQuiz.jsx`) | Flat **5 correct per pronoun** on every sub-stage: `STAGE2_PER_PRONOUN_THRESHOLD = 5`. A sub-stage advances only when all five pronouns (Yo, Tú, Él/Ella, Nosotros, Ellos/Ellas) reach 5 → `advanceAllVerbsFromSub` raises `t_n_cj_stage` for the whole cohort |
+| Columns | `current_stage`, `drag_match_score`, `stage2_mastery`, `stage3_mastery`, `l4_score` | `t_n_cj_stage` (the authoritative sub-stage); `t_n_score` is a legacy per-verb score and does **not** gate conjugation progression |
+
+There is **no** per-verb pass counter or per-sub-stage threshold in the conjugation flow. The old `SUB_THRESHOLD = {0:5,1:3,2:3,3:5}` per-verb counter was removed from `VerbArTenseQuiz.jsx`; conjugation now depends solely on the five-correct-per-pronoun gate, applied identically across all four sub-stages of all three tenses. The infinitive thresholds in `VerbQuiz.jsx` are unrelated and unchanged.
+
 **Notes on `VerbCategoryModal.jsx` resets:**
 - A level-1 reset writes: `current_stage=1, stage2_mastery=0, stage3_mastery=0, l4_score=0, drag_match_score=0, t1_score=0, t2_score=0, t3_score=0`
 - A level-2 reset writes: `current_stage=2, stage2_mastery=0, stage3_mastery=0, l4_score=0, drag_match_score=0, t1_score=0, t2_score=0, t3_score=0`
 - A level-3 reset writes: `current_stage=3, stage3_mastery=0, l4_score=0, drag_match_score=0, t1_score=0, t2_score=0, t3_score=0`
 - A level-4 reset writes: `current_stage=4, l4_score=0, drag_match_score=0, t1_score=0, t2_score=0, t3_score=0`
-- None of the reset paths clear `t_n_cj_stage`.
+- All reset paths also clear the conjugation sub-stages: `t1_cj_stage=0, t2_cj_stage=0, t3_cj_stage=0` (tense progress is downstream of infinitive mastery, so it is reset alongside it).
 
 **Notes on `VerbArTenseQuiz.jsx` stage-2 reset guard:**
 - On load, if the AR stage-2 t1 reset key is not found in `localStorage`, it resets `t1_cj_stage=1, t1_score=0` for all AR verbs that have `t1_cj_stage >= 1` (one-time migration guard).

@@ -27,11 +27,17 @@ const TENSE_CFG = {
   t3: { conjKey: 'future_conjugations',  label: 'Future Tense',   cjCol: 't3_cj_stage', scoreCol: 't3_score' },
 }
 
-// Pass thresholds per sub-stage (0-indexed)
-const SUB_THRESHOLD = { 0: 5, 1: 3, 2: 3, 3: 5 }
-const SUB_LABEL     = ['Drag & Match', 'Multiple Choice', 'Pronoun', 'Full Conjugation']
+const SUB_LABEL = ['Drag & Match', 'Multiple Choice', 'Pronoun', 'Full Conjugation']
 
-// Stage 2 MC requires each subject pronoun to be answered correctly this many times
+// The ONLY pass threshold in the AR tense conjugation flow. Conjugation is not
+// about learning the verbs (those are already mastered in the infinitive flow) —
+// it is pure per-pronoun drilling, so every one of the four sub-stages (Drag &
+// Match, Multiple Choice, Pronoun typed, Full Conjugation typed), for all three
+// tenses, is passed only when each of the five subject pronouns (Yo, Tú, Él/Ella,
+// Nosotros, Ellos/Ellas) has been answered correctly this many times. A flat 5
+// per pronoun on every sub-stage, identically — no per-verb counter and no
+// reduced middle-stage value. That per-verb pattern is the separate infinitive
+// verb-learning system in VerbQuiz.jsx and must not be mixed in here.
 const STAGE2_PER_PRONOUN_THRESHOLD = 5
 
 // localStorage key for the one-time Stage 2 data reset
@@ -451,23 +457,13 @@ export default function VerbArTenseQuiz() {
     }
   }
 
-  function recordAnswer(verbId, tenseKey, correct) {
-    const prog      = progressRef.current[verbId] ?? {}
-    const cfg       = TENSE_CFG[tenseKey]
-    const curStage  = prog[cfg.cjCol]    ?? 0
-    const curScore  = prog[cfg.scoreCol] ?? 0
-    const threshold = SUB_THRESHOLD[curStage] ?? 5
-
-    if (correct) {
-      const newScore = curScore + 1
-      if (newScore >= threshold) {
-        progressRef.current[verbId] = { ...prog, [cfg.cjCol]: curStage + 1, [cfg.scoreCol]: 0 }
-      } else {
-        progressRef.current[verbId] = { ...prog, [cfg.scoreCol]: newScore }
-      }
-    } else {
-      progressRef.current[verbId] = { ...prog, [cfg.scoreCol]: 0 }
-    }
+  // AR tense progression is governed solely by the five-correct-per-pronoun gate
+  // (STAGE2_PER_PRONOUN_THRESHOLD → advanceAllVerbsFromSub), applied identically to
+  // all four sub-stages of all three tenses. This deliberately does NOT advance a
+  // verb's sub-stage on its own and keeps no per-verb pass counter — it only
+  // persists tracking counters the caller already updated in progressRef (e.g.
+  // the *_incorrect stats on a wrong answer).
+  function recordAnswer(verbId) {
     saveProgress(verbId)
   }
 
@@ -490,7 +486,7 @@ export default function VerbArTenseQuiz() {
       progressRef.current[roundVerb.id] = { ...prog, l1_incorrect: (prog.l1_incorrect ?? 0) + 1, total_incorrect: (prog.total_incorrect ?? 0) + 1 }
       saveProgress(roundVerb.id)
     }
-    if (correct) recordAnswer(roundVerb.id, activeTense, true)
+    if (correct) recordAnswer(roundVerb.id)
 
     const newBlockCounts = blockPronounCounts.map((cnt, i) => cnt + (Array.isArray(perPronounResults) && perPronounResults[i] ? 1 : 0))
     setBlockPronounCounts(newBlockCounts)
@@ -539,7 +535,7 @@ export default function VerbArTenseQuiz() {
         const prog = progressRef.current[verbId] ?? {}
         progressRef.current[verbId] = { ...prog, l2_incorrect: (prog.l2_incorrect ?? 0) + 1, total_incorrect: (prog.total_incorrect ?? 0) + 1 }
       }
-      recordAnswer(question.verb.id, question.tenseKey, correct)
+      recordAnswer(question.verb.id)
     }
 
     setSelectedOpt(option)
@@ -576,7 +572,7 @@ export default function VerbArTenseQuiz() {
         const prog = progressRef.current[verbId] ?? {}
         progressRef.current[verbId] = { ...prog, l3_incorrect: (prog.l3_incorrect ?? 0) + 1, total_incorrect: (prog.total_incorrect ?? 0) + 1 }
       }
-      recordAnswer(verbId, question.tenseKey, correct)
+      recordAnswer(verbId)
       // Per-pronoun tracking — 5 correct per pronoun to pass, independent of verb count
       if (correct) {
         const key = question.pronoun.key
@@ -637,7 +633,7 @@ export default function VerbArTenseQuiz() {
         const prog = progressRef.current[verbId] ?? {}
         progressRef.current[verbId] = { ...prog, l4_incorrect: (prog.l4_incorrect ?? 0) + 1, total_incorrect: (prog.total_incorrect ?? 0) + 1 }
       }
-      recordAnswer(verbId, question.tenseKey, correct)
+      recordAnswer(verbId)
       // Per-pronoun tracking — 5 correct per pronoun to pass, independent of verb count
       if (correct) {
         const key = question.pronoun.key
