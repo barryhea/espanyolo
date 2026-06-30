@@ -22,12 +22,16 @@ function segColors(complete, active) {
   return          { bar: '#e5e7eb', text: '#d1d5db' }
 }
 
-function MasteryStrip7({ l1, l2, l3, l4, t1, t2, t3, locked }) {
+function MasteryStrip7({ l1, l2, l3, l4, t1, t2, t3, t1Started, t2Started, t3Started, locked }) {
+  // A tense segment is green when mastered (done), orange only when it has real
+  // stored progress (started but not done), and grey when untouched. "Started"
+  // is derived from the actual stage values (t{n}_cj_stage / t{n}_score), so a
+  // tense with no conjugation work shows grey rather than an "up next" orange.
   const tenseSegs = [
     { label: 'Inf.',  ...segColors(!!l4,       !locked && !l4)                },
-    { label: 'Pres.', ...segColors(!!t1,       !locked && !!l4 && !t1)        },
-    { label: 'Past',  ...segColors(!!t2,       !locked && !!t1 && !t2)        },
-    { label: 'Fut.',  ...segColors(!!t3,       !locked && !!t2 && !t3)        },
+    { label: 'Pres.', ...segColors(!!t1,       !locked && !t1 && !!t1Started) },
+    { label: 'Past',  ...segColors(!!t2,       !locked && !t2 && !!t2Started) },
+    { label: 'Fut.',  ...segColors(!!t3,       !locked && !t3 && !!t3Started) },
   ]
   // L bars always reflect the actual L-stage completion from the DB
   // (allL1Done/allL2Done/allL3Done/allL4Done, derived from current_stage and l4_score).
@@ -171,7 +175,18 @@ export default function VerbTrainer() {
         ? (progByVerb[id]?.t3_cj_stage ?? 0) >= 4
         : (progByVerb[id]?.t3_score    ?? 0) >= 3
       )
-      tense[cat.title] = { allL1Done, allL2Done, allL3Done, allL4Done, t1Done, t2Done, t3Done }
+      // "Started" = the tense has genuine stored progress on at least one visible
+      // verb. For -AR that means an advanced sub-stage (t{n}_cj_stage >= 1) or any
+      // score within the first sub-stage; other categories use t{n}_score. A tense
+      // with no work done stays false → its card segment renders grey, not orange.
+      const tStarted = (cjKey, scoreKey) => any && visibleIds.some(id => isAR
+        ? ((progByVerb[id]?.[cjKey] ?? 0) >= 1 || (progByVerb[id]?.[scoreKey] ?? 0) >= 1)
+        : (progByVerb[id]?.[scoreKey] ?? 0) >= 1
+      )
+      const t1Started = tStarted('t1_cj_stage', 't1_score')
+      const t2Started = tStarted('t2_cj_stage', 't2_score')
+      const t3Started = tStarted('t3_cj_stage', 't3_score')
+      tense[cat.title] = { allL1Done, allL2Done, allL3Done, allL4Done, t1Done, t2Done, t3Done, t1Started, t2Started, t3Started }
     }
 
     setCategoryStats(stats)
@@ -188,6 +203,9 @@ export default function VerbTrainer() {
       t1Done:    PATTERNED_SUB_CATS.every(sc => t[sc.title]?.t1Done),
       t2Done:    PATTERNED_SUB_CATS.every(sc => t[sc.title]?.t2Done),
       t3Done:    PATTERNED_SUB_CATS.every(sc => t[sc.title]?.t3Done),
+      t1Started: PATTERNED_SUB_CATS.some(sc => t[sc.title]?.t1Started),
+      t2Started: PATTERNED_SUB_CATS.some(sc => t[sc.title]?.t2Started),
+      t3Started: PATTERNED_SUB_CATS.some(sc => t[sc.title]?.t3Started),
     }
   }
 
@@ -276,6 +294,7 @@ export default function VerbTrainer() {
                     <MasteryStrip7
                       l1={!!card.t.allL1Done} l2={!!card.t.allL2Done} l3={!!card.t.allL3Done} l4={!!card.t.allL4Done}
                       t1={!!card.t.t1Done}    t2={!!card.t.t2Done}    t3={!!card.t.t3Done}
+                      t1Started={!!card.t.t1Started} t2Started={!!card.t.t2Started} t3Started={!!card.t.t3Started}
                       locked={card.locked}
                     />
                   </div>

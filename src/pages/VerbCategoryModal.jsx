@@ -58,7 +58,7 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
     const verbIds = verbs.map(v => v.id)
     const { data: progress, error: progressErr } = await supabase
       .from('user_verb_progress')
-      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, t1_score, t2_score, t3_score, hidden')
+      .select('id, verb_id, current_stage, stage2_mastery, stage3_mastery, l4_score, drag_match_score, t1_score, t2_score, t3_score, t1_cj_stage, t2_cj_stage, t3_cj_stage, hidden')
       .eq('user_id', user.id)
       .in('verb_id', verbIds)
 
@@ -76,6 +76,9 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
         t1_score:         p.t1_score         ?? 0,
         t2_score:         p.t2_score         ?? 0,
         t3_score:         p.t3_score         ?? 0,
+        t1_cj_stage:      p.t1_cj_stage       ?? 0,
+        t2_cj_stage:      p.t2_cj_stage       ?? 0,
+        t3_cj_stage:      p.t3_cj_stage       ?? 0,
         hidden:           p.hidden           ?? false,
       }
     }
@@ -151,9 +154,16 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
   const showBackBtn       = modalView !== 'menu'
 
   const visibleModalVerbs = modalVerbs.filter(v => !modalVerbProgress[v.id]?.hidden)
+  // Verbs -AR judges tense completion by t{n}_cj_stage (4 = mastered); other
+  // categories by t{n}_score >= 3 — same sources as the stage-select locks below.
+  const _isAR = card.title === 'Verbs -AR'
+  const _tenseDone = (cjKey, scoreKey) => visibleModalVerbs.every(v => _isAR
+    ? (modalVerbProgress[v.id]?.[cjKey] ?? 0) >= 4
+    : (modalVerbProgress[v.id]?.[scoreKey] ?? 0) >= 3
+  )
   const _allL4Done = !modalLoading && visibleModalVerbs.length > 0 && visibleModalVerbs.every(v => (modalVerbProgress[v.id]?.l4_score ?? 0) >= 5)
-  const _allT1Done = _allL4Done && visibleModalVerbs.every(v => (modalVerbProgress[v.id]?.t1_score ?? 0) >= 3)
-  const _allT2Done = _allT1Done && visibleModalVerbs.every(v => (modalVerbProgress[v.id]?.t2_score ?? 0) >= 3)
+  const _allT1Done = _allL4Done && _tenseDone('t1_cj_stage', 't1_score')
+  const _allT2Done = _allT1Done && _tenseDone('t2_cj_stage', 't2_score')
   const defaultProgressTab = !_allL4Done ? 1 : !_allT1Done ? 2 : !_allT2Done ? 3 : 4
   const activeProgressTab  = progressTab ?? defaultProgressTab
 
@@ -433,14 +443,22 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
 
           // Compute completion state from freshly loaded modal data so it reflects
           // the current DB state rather than the potentially stale categoryTense snapshot.
-          const localAllL4Done = !loading && activeVerbIds.length > 0
-            && activeVerbIds.every(id => (modalVerbProgress[id]?.l4_score ?? 0) >= 5)
-          const localT1Done = localAllL4Done
-            && activeVerbIds.every(id => (modalVerbProgress[id]?.t1_score ?? 0) >= 3)
-          const localT2Done = localT1Done
-            && activeVerbIds.every(id => (modalVerbProgress[id]?.t2_score ?? 0) >= 3)
-          const localT3Done = localT2Done
-            && activeVerbIds.every(id => (modalVerbProgress[id]?.t3_score ?? 0) >= 3)
+          // Hidden verbs are excluded from every completion check (matching the card's
+          // visibleIds approach) so verbs the user marked as known never block unlocking.
+          // Verbs -AR tracks tense completion via t{n}_cj_stage (4 = mastered), exactly
+          // as the card and the AR quiz engine do; t{n}_score resets per sub-stage and
+          // is unreliable for completion. Other categories use t{n}_score >= 3.
+          const isAR = activeCatTitle === 'Verbs -AR'
+          const visibleActiveIds = activeVerbIds.filter(id => !(modalVerbProgress[id]?.hidden ?? false))
+          const tenseDone = (cjKey, scoreKey) => visibleActiveIds.every(id => isAR
+            ? (modalVerbProgress[id]?.[cjKey] ?? 0) >= 4
+            : (modalVerbProgress[id]?.[scoreKey] ?? 0) >= 3
+          )
+          const localAllL4Done = !loading && visibleActiveIds.length > 0
+            && visibleActiveIds.every(id => (modalVerbProgress[id]?.l4_score ?? 0) >= 5)
+          const localT1Done = localAllL4Done && tenseDone('t1_cj_stage', 't1_score')
+          const localT2Done = localT1Done && tenseDone('t2_cj_stage', 't2_score')
+          const localT3Done = localT2Done && tenseDone('t3_cj_stage', 't3_score')
 
           const STAGES = [
             {

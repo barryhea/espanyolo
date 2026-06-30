@@ -49,6 +49,7 @@ Summarised from the last 30 commits. Grouped by feature area. Newest changes fir
 
 ## Verb Trainer — Home & Navigation (VerbTrainer)
 
+- Fixed category-card tense segments showing a false "up next" orange: Present/Past/Future now render grey until the tense has real stored progress (`t{n}_cj_stage`/`t{n}_score`), so a -AR category with the infinitive done but no conjugation work shows grey tense bars instead of green/orange
 - Hidden verbs are now excluded from tense-completion checks when computing category card state
 - Progress data is re-fetched on every navigation back to the VerbTrainer screen
 - Refactored VerbTrainer into focused component files (`VerbProgress`, `VerbDragMatch`, `VerbCategoryModal`, etc.)
@@ -57,6 +58,7 @@ Summarised from the last 30 commits. Grouped by feature area. Newest changes fir
 
 ## Verb Trainer — Category Modal (VerbCategoryModal)
 
+- Fixed Locked/unlocked stages reading mastery from a different source than the home card: the modal now excludes hidden verbs from all completion checks (matching the card's `visibleIds`) and, for Verbs -AR, judges tense completion by `t{n}_cj_stage >= 4` (as the card and AR quiz engine do) instead of the unreliable `t{n}_score` counter. The card and modal now agree on every stage, and Present Tense unlocks once the infinitive is complete
 - Added L1–L4 tabs to the progress screen inside the category modal
 
 ---
