@@ -58,6 +58,7 @@ Summarised from the last 30 commits. Grouped by feature area. Newest changes fir
 
 ## Verb Trainer — Category Modal (VerbCategoryModal)
 
+- Fixed "Reset Level" not clearing -AR tense conjugation progress: the reset payloads zeroed `t{n}_score` but never `t{n}_cj_stage`, so once the AR tense flow advanced a sub-stage there was no way to clear it through the app. The stranded `t{n}_cj_stage` kept the home-card Present/Past segments rendering green/orange after every reset (the recurring "it reverts" bug). Reset now also zeroes `t1_cj_stage/t2_cj_stage/t3_cj_stage`. Existing stranded -AR tense data was corrected to 0 for affected accounts, preserving infinitive mastery (`current_stage`, `l4_score`) and hidden flags
 - Fixed Locked/unlocked stages reading mastery from a different source than the home card: the modal now excludes hidden verbs from all completion checks (matching the card's `visibleIds`) and, for Verbs -AR, judges tense completion by `t{n}_cj_stage >= 4` (as the card and AR quiz engine do) instead of the unreliable `t{n}_score` counter. The card and modal now agree on every stage, and Present Tense unlocks once the infinitive is complete
 - Added L1–L4 tabs to the progress screen inside the category modal
 

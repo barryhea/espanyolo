@@ -112,11 +112,17 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
         return stage >= 4 || l4Score > 0
       })
       .map(v => v.id)
+    // Tense conjugation progress (the -AR t{n}_cj_stage sub-stage columns) is
+    // downstream of infinitive mastery, so any reset must also clear it. Omitting
+    // these columns previously left t{n}_cj_stage stranded at its last value with
+    // no way to clear it through the app, so the home-card tense segments kept
+    // reading the stale stage and reverting to green/orange after every reset.
+    const clearTense = { t1_score: 0, t2_score: 0, t3_score: 0, t1_cj_stage: 0, t2_cj_stage: 0, t3_cj_stage: 0 }
     const updates =
-      target === 2 ? { current_stage: 2, stage2_mastery: 0, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, t1_score: 0, t2_score: 0, t3_score: 0 }
-      : target === 3 ? { current_stage: 3, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, t1_score: 0, t2_score: 0, t3_score: 0 }
-      : target === 4 ? { current_stage: 4, l4_score: 0, drag_match_score: 0, t1_score: 0, t2_score: 0, t3_score: 0 }
-      : { current_stage: 1, stage2_mastery: 0, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, t1_score: 0, t2_score: 0, t3_score: 0 }
+      target === 2 ? { current_stage: 2, stage2_mastery: 0, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, ...clearTense }
+      : target === 3 ? { current_stage: 3, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, ...clearTense }
+      : target === 4 ? { current_stage: 4, l4_score: 0, drag_match_score: 0, ...clearTense }
+      : { current_stage: 1, stage2_mastery: 0, stage3_mastery: 0, l4_score: 0, drag_match_score: 0, ...clearTense }
     if (verbIds.length > 0) {
       await supabase
         .from('user_verb_progress')
