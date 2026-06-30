@@ -712,7 +712,12 @@ export default function VerbQuiz() {
     }
 
     // ── T1/T2/T3: once all verbs are L4 mastered, unlock tense stages ─────────
-    const allL4Mastered = verbs.every(v => {
+    // Hidden verbs are excluded from the mastery gate (matching the card/modal
+    // unlock logic). Otherwise a hidden, un-mastered verb keeps allL4Mastered
+    // false, the Verbs -AR tense hand-off never fires, and this screen falls
+    // through to the "empty/complete" state instead of launching the tense quiz.
+    const visibleVerbs = verbs.filter(v => !progMap[v.id]?.hidden)
+    const allL4Mastered = visibleVerbs.length > 0 && visibleVerbs.every(v => {
       const p = progMap[v.id]
       return p?.mastered || ((p?.stage ?? 1) === 4 && (p?.l4_score ?? 0) >= 5)
     })
@@ -724,9 +729,9 @@ export default function VerbQuiz() {
     }
 
     if (allL4Mastered) {
-      const t1Done = verbs.every(v => (progMap[v.id]?.t1_score ?? 0) >= 3)
-      const t2Done = t1Done && verbs.every(v => (progMap[v.id]?.t2_score ?? 0) >= 3)
-      const t3Done = t2Done && verbs.every(v => (progMap[v.id]?.t3_score ?? 0) >= 3)
+      const t1Done = visibleVerbs.every(v => (progMap[v.id]?.t1_score ?? 0) >= 3)
+      const t2Done = t1Done && visibleVerbs.every(v => (progMap[v.id]?.t2_score ?? 0) >= 3)
+      const t3Done = t2Done && visibleVerbs.every(v => (progMap[v.id]?.t3_score ?? 0) >= 3)
       const activeStage = !t1Done ? 't1' : !t2Done ? 't2' : !t3Done ? 't3' : null
 
       if (!activeStage) {

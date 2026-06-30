@@ -466,6 +466,19 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
           const localT2Done = localT1Done && tenseDone('t2_cj_stage', 't2_score')
           const localT3Done = localT2Done && tenseDone('t3_cj_stage', 't3_score')
 
+          // "Started" = the tense has genuine stored progress on at least one
+          // visible verb (AR: an advanced sub-stage or any score within the first;
+          // others: any t{n}_score). Drives a grey/orange/green status dot so an
+          // unstarted-but-unlocked tense shows grey rather than a false orange.
+          const tenseStarted = (cjKey, scoreKey) => visibleActiveIds.some(id => isAR
+            ? ((modalVerbProgress[id]?.[cjKey] ?? 0) >= 1 || (modalVerbProgress[id]?.[scoreKey] ?? 0) >= 1)
+            : (modalVerbProgress[id]?.[scoreKey] ?? 0) >= 1
+          )
+          const infinitiveStarted = visibleActiveIds.some(id => {
+            const p = modalVerbProgress[id]
+            return (p?.stage ?? 1) >= 2 || (p?.drag_match_score ?? 0) >= 1 || (p?.l4_score ?? 0) >= 1
+          })
+
           const STAGES = [
             {
               key:      'infinitive',
@@ -473,6 +486,7 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
               sub:      'L1 → L4',
               locked:   false,
               complete: localAllL4Done,
+              started:  infinitiveStarted,
               progress: `${masteredCt} / ${total} mastered`,
               color:    '#f5c518',
             },
@@ -482,6 +496,7 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
               sub:      'T1',
               locked:   !localAllL4Done,
               complete: localT1Done,
+              started:  tenseStarted('t1_cj_stage', 't1_score'),
               progress: tScoreLabel('t1_score'),
               color:    '#3b82f6',
             },
@@ -491,6 +506,7 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
               sub:      'T2',
               locked:   !localT1Done,
               complete: localT2Done,
+              started:  tenseStarted('t2_cj_stage', 't2_score'),
               progress: tScoreLabel('t2_score'),
               color:    '#f97316',
             },
@@ -500,6 +516,7 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
               sub:      'T3',
               locked:   !localT2Done,
               complete: localT3Done,
+              started:  tenseStarted('t3_cj_stage', 't3_score'),
               progress: tScoreLabel('t3_score'),
               color:    '#16a34a',
             },
@@ -528,7 +545,7 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
                 >
                   <div style={mStyles.stageLeft}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: stage.complete ? '#22c55e' : '#f59e0b', flexShrink: 0 }} />
+                      <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: stage.complete ? '#22c55e' : stage.started ? '#f59e0b' : '#e5e7eb', flexShrink: 0 }} />
                       <span style={mStyles.stageLabel}>{stage.name}</span>
                     </div>
                   </div>
