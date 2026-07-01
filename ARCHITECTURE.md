@@ -363,3 +363,21 @@ Each element of `recent_sessions` is one completed session:
 | Column | Read by | Written by |
 |--------|---------|------------|
 | `recent_sessions` | `VerbMasteryQuiz.jsx` (`saveMasterySession` read-modify-write; future overview screen) | `VerbMasteryQuiz.jsx` (`saveMasterySession`, on session completion) |
+
+---
+
+## `user_verb_match_tree_results`
+
+Last-5 results metric for the **AR Match Tree** practice quiz (`VerbMatchTree.jsx`, route `/verb-match-tree`), which is **Mastery Stage 1** (the typed Mastery quiz is Stage 2). Both stages are reached from the Verbs -AR category modal and share the same unlock (every visible AR verb has `t1/t2/t3_cj_stage = 4`).
+
+Match Tree is **practice-only** — one question per subject pronoun; the user drags/tap-places a single verb's Past/Present/Future forms into three tense slots (reusing the Level 1 drag-and-match interaction), among plausible distractors. It **never** modifies tense progression or conjugation counts. Same shape/RLS/CHECK as `user_verb_mastery_results` (one row per user, `recent_sessions` JSONB array capped at 5, newest first). Added in migration `20260701140000`.
+
+Each element of `recent_sessions`: `{ at, correct, total, tense: { past|present|future → {correct, incorrect} }, pronoun: { yo|tu|el|nosotros|ellos → {correct, incorrect} } }`.
+
+**RLS:** enabled — users can only read, insert, update, and delete their own rows.
+
+### Column access
+
+| Column | Read by | Written by |
+|--------|---------|------------|
+| `recent_sessions` | `VerbMatchTree.jsx` (`saveSession` read-modify-write; future overview screen) | `VerbMatchTree.jsx` (`saveSession`, on session completion) |

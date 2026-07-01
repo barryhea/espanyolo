@@ -562,6 +562,38 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
             },
           ]
 
+          // AR Mastery is presented as two always-accessible practice stages once
+          // Present/Past/Future are all mastered; the user picks which to practise.
+          const masteryRow = (key, label, sub, go) => arMasteryUnlocked ? (
+            <button key={key} style={mStyles.stageOption} onClick={() => { onClose(); go() }}>
+              <div style={mStyles.stageLeft}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: '#7c3aed', flexShrink: 0 }} />
+                  <span style={mStyles.stageLabel}>{label}</span>
+                </div>
+                <span style={mStyles.stageSub}>{sub}</span>
+              </div>
+              <div style={mStyles.stageRight}>
+                <span style={mStyles.stageProgressText}>Practice</span>
+                <span style={mStyles.stageChevron}>›</span>
+              </div>
+            </button>
+          ) : (
+            <div key={key} style={mStyles.stageOptionLocked}>
+              <div style={mStyles.stageLeft}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: '#e5e7eb', flexShrink: 0 }} />
+                  <span style={mStyles.stageLabelLocked}>{label}</span>
+                </div>
+                <span style={mStyles.stageSub}>Master Present, Past &amp; Future to unlock</span>
+              </div>
+              <div style={mStyles.stageRight}>
+                <span style={mStyles.stageProgressText}>Locked</span>
+                <span style={{ fontSize: '0.9rem', lineHeight: 1 }}>🔒</span>
+              </div>
+            </div>
+          )
+
           return (
             <div style={mStyles.menuList}>
               {STAGES.map(stage => stage.locked ? (
@@ -598,40 +630,10 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
                 </button>
               ))}
 
-              {/* AR Mastery — practice quiz mixing Stage 4 across all tenses.
-                  Locked until Present, Past and Future are all mastered. */}
-              {isAR && (arMasteryUnlocked ? (
-                <button
-                  style={mStyles.stageOption}
-                  onClick={() => { onClose(); navigate('/verb-mastery-quiz') }}
-                >
-                  <div style={mStyles.stageLeft}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: '#7c3aed', flexShrink: 0 }} />
-                      <span style={mStyles.stageLabel}>AR Mastery</span>
-                    </div>
-                    <span style={mStyles.stageSub}>Mixed Stage 4 · all tenses · practice</span>
-                  </div>
-                  <div style={mStyles.stageRight}>
-                    <span style={mStyles.stageProgressText}>Practice</span>
-                    <span style={mStyles.stageChevron}>›</span>
-                  </div>
-                </button>
-              ) : (
-                <div style={mStyles.stageOptionLocked}>
-                  <div style={mStyles.stageLeft}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: '#e5e7eb', flexShrink: 0 }} />
-                      <span style={mStyles.stageLabelLocked}>AR Mastery</span>
-                    </div>
-                    <span style={mStyles.stageSub}>Master Present, Past &amp; Future to unlock</span>
-                  </div>
-                  <div style={mStyles.stageRight}>
-                    <span style={mStyles.stageProgressText}>Locked</span>
-                    <span style={{ fontSize: '0.9rem', lineHeight: 1 }}>🔒</span>
-                  </div>
-                </div>
-              ))}
+              {/* AR Mastery — two always-accessible practice stages (Match Tree +
+                  Mastery quiz), unlocked once Present, Past and Future are mastered. */}
+              {isAR && masteryRow('mt', 'Mastery · Stage 1 — Match Tree', 'Drag/tap a verb’s Past/Present/Future by pronoun', () => navigate('/verb-match-tree'))}
+              {isAR && masteryRow('mq', 'Mastery · Stage 2 — Quiz', 'Mixed Stage 4 typed · all tenses', () => navigate('/verb-mastery-quiz'))}
             </div>
           )
         })()}

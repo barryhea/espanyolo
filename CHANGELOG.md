@@ -73,6 +73,12 @@ Summarised from the last 30 commits. Grouped by feature area. Newest changes fir
 
 ---
 
+## Verb Trainer — AR Match Tree (Mastery Stage 1)
+
+- Added a new practice-only "Match Tree" mode to the AR Mastery section, presented as **Stage 1** alongside the existing Mastery quiz (now **Stage 2**). Both stages are always accessible once unlocked (same condition as before — Present, Past and Future all mastered for every AR verb, read from Supabase); the user chooses which to practise. Match Tree (`/verb-match-tree`, `VerbMatchTree.jsx`) asks one question per subject pronoun (Yo, Tú, Él/Ella, Nosotros, Ellos/Ellas); for that pronoun the user places a single chosen verb's Past/Present/Future forms into three labelled tense slots via drag **or** tap-to-place (reusing the Level 1 drag-and-match interaction). Each question offers the 3 correct forms plus a few plausible distractors (wrong-pronoun forms of the same verb). Correctness is by-tense-slot placement; either gendered form is inherently accepted. It is practice only — it never modifies tense progression or conjugation counts. Its last-5 results (timestamp, score, per-tense and per-pronoun breakdown) are stored in Supabase (`user_verb_match_tree_results`), not localStorage.
+
+---
+
 ## Verb Trainer — AR Endings Cheat Sheet
 
 - Added a regular -AR endings cheat sheet, shown **only** for the Verbs -AR category (whose verbs are all perfectly regular). It strips the verb stem and shows just the shared ending for each pronoun (Yo, Tú, Él/Ella, Nosotros, Ellos/Ellas) across Present, Past and Future as `___` + ending (e.g. `___o`, `___é`, `___aré`). The endings are **derived from the actual regular -AR conjugation data** (stem = infinitive minus "ar", most-common remainder), not hardcoded, so they stay correct if the data changes. Surfaced in two places, both reusing the same `FilteredDictionaryModal`: as an extra "-AR Endings" tab inside the filtered Verb Dictionary modal when it's showing Verbs -AR, and as an "-AR Endings Cheat Sheet" option on the Verbs -AR quiz conclusion screen (opens the modal on that tab). The other three categories (Core Verbs, Patterned Irregulars, True Irregulars) contain irregular AR verbs and never show it.
