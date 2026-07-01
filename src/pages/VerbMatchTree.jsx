@@ -195,9 +195,9 @@ function MatchTreeRound({ verb, pronoun, correctByTense, chips, onComplete }) {
     <div style={s.card}>
       <div style={s.cardHead}>
         <span style={s.anchor}>{pronoun.label}</span>
-        <span style={s.verbInf}>{verb.spanish_infinitive}</span>
-        <span style={s.verbEng}>{verb.english}</span>
-        <span style={s.instr}>Place this verb's forms for “{pronoun.label}” into the right tense</span>
+        <span style={s.verbInf}>
+          {verb.spanish_infinitive} <span style={s.verbEng}>({verb.english})</span>
+        </span>
       </div>
 
       {/* Bank */}
@@ -484,8 +484,7 @@ const s = {
   cardHead: { display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center', textAlign: 'center' },
   anchor: { fontSize: '0.72rem', fontWeight: 700, color: '#7c3aed', backgroundColor: '#f5f3ff', padding: '0.2rem 0.6rem', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.04em' },
   verbInf: { fontSize: '1.5rem', fontWeight: 700, color: '#111', marginTop: '4px' },
-  verbEng: { fontSize: '0.85rem', color: '#888' },
-  instr: { fontSize: '0.72rem', color: '#aaa', marginTop: '4px' },
+  verbEng: { fontSize: '0.9rem', fontWeight: 400, fontStyle: 'italic', color: '#999' },
   bank: { display: 'flex', flexWrap: 'wrap', gap: '0.5rem', minHeight: '48px', backgroundColor: '#f8f8f6', borderRadius: '8px', padding: '0.5rem', border: '1.5px dashed #e0e0e0', alignItems: 'center', justifyContent: 'center' },
   chip: { padding: '0.45rem 0.9rem', backgroundColor: '#3b82f6', color: '#fff', borderRadius: '6px', fontSize: '0.95rem', fontWeight: 500, cursor: 'grab', userSelect: 'none', touchAction: 'none', whiteSpace: 'nowrap', boxShadow: '0 1px 3px rgba(59,130,246,0.3)' },
   chipSelected: { padding: '0.45rem 0.9rem', backgroundColor: '#1d4ed8', color: '#fff', borderRadius: '6px', fontSize: '0.95rem', fontWeight: 500, cursor: 'pointer', userSelect: 'none', touchAction: 'none', whiteSpace: 'nowrap', boxShadow: '0 0 0 3px rgba(59,130,246,0.45)', outline: 'none' },
