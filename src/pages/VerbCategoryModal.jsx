@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../utils/supabaseClient'
 import { VerbProgressRow, PronounProgressView, PRONOUNS } from './VerbProgress'
+import FilteredDictionaryModal from './FilteredDictionaryModal'
 
 const PATTERNED_SUB_CATS = [
   { id: 3, title: 'Stem-Changing O→UE' },
@@ -23,6 +24,7 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
   // Persisted AR conjugation per-pronoun counts from the DB (was localStorage),
   // keyed t1/t2/t3 → the most-advanced sub-stage's { pronoun: count } for that tense.
   const [conjCounts,       setConjCounts]       = useState({})
+  const [showDictionary,   setShowDictionary]   = useState(false)
 
   const prevCardIdRef = useRef(null)
 
@@ -40,6 +42,7 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
     setModalVerbs([])
     setModalVerbProgress({})
     setProgressTab(null)
+    setShowDictionary(false)
     loadModalData(card)
   }, [card])
 
@@ -197,6 +200,7 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
   const activeProgressTab  = progressTab ?? defaultProgressTab
 
   return (
+    <>
     <div style={mStyles.backdrop} onClick={onClose}>
       <div style={mStyles.modalBox} onClick={e => e.stopPropagation()}>
 
@@ -273,6 +277,17 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
                 Hidden Verbs {modalLoading && <span style={mStyles.loadingDot}>…</span>}
               </span>
               <span style={mStyles.menuOptionDesc}>Verbs you've excluded from quizzes</span>
+            </button>
+
+            <button
+              style={mStyles.menuOption}
+              onClick={() => setShowDictionary(true)}
+              disabled={modalLoading}
+            >
+              <span style={mStyles.menuOptionLabel}>
+                Verb Dictionary {modalLoading && <span style={mStyles.loadingDot}>…</span>}
+              </span>
+              <span style={mStyles.menuOptionDesc}>Conjugations for this category's verbs</span>
             </button>
 
             <button
@@ -623,6 +638,17 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
 
       </div>
     </div>
+
+    {/* Filtered Verb Dictionary — overlay above the category popup, showing only
+        this category's verbs. Closing returns to the category popup. */}
+    {showDictionary && (
+      <FilteredDictionaryModal
+        verbs={modalVerbs}
+        title={card.title}
+        onClose={() => setShowDictionary(false)}
+      />
+    )}
+    </>
   )
 }
 
