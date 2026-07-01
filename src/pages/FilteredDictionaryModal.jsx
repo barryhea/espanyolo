@@ -29,13 +29,49 @@ function familyColors(f) {
   return { bg: '#ffedd5', color: '#c2410c', border: '#fdba74' }
 }
 
-export default function FilteredDictionaryModal({ verbs, title, onClose }) {
+// ── Regular -AR endings cheat sheet ─────────────────────────────────────────────
+const ENDING_TENSES = [
+  { key: 'present_conjugations', label: 'Present', th: { backgroundColor: '#f3f4f6', color: '#374151' } },
+  { key: 'past_conjugations',    label: 'Past',    th: { backgroundColor: '#dbeafe', color: '#1e40af' } },
+  { key: 'future_conjugations',  label: 'Future',  th: { backgroundColor: '#dcfce7', color: '#166534' } },
+]
+
+// Derive the shared regular -AR ending for each (tense, pronoun) from the actual
+// conjugation data — strip the stem (infinitive minus the final "ar") from each
+// verb's form and take the most common remainder, so it stays correct if data
+// changes and ignores any stray irregular form.
+function deriveArEndings(verbs) {
+  const out = {}
+  for (const t of ENDING_TENSES) {
+    out[t.key] = {}
+    for (const p of PERSONS) {
+      const counts = {}
+      for (const v of verbs) {
+        const inf = v.spanish_infinitive ?? ''
+        if (!/ar$/i.test(inf)) continue
+        const stem = inf.slice(0, -2)
+        const conj = v[t.key]?.[p.key]
+        if (!conj) continue
+        const ending = conj.startsWith(stem) ? conj.slice(stem.length) : conj
+        counts[ending] = (counts[ending] ?? 0) + 1
+      }
+      let best = '', bestN = -1
+      for (const [e, n] of Object.entries(counts)) if (n > bestN) { best = e; bestN = n }
+      out[t.key][p.key] = best
+    }
+  }
+  return out
+}
+
+export default function FilteredDictionaryModal({ verbs, title, onClose, showEndings = false, initialTab = 'verbs' }) {
   const [full, setFull]       = useState([])   // full verb records (with conjugations)
   const [loading, setLoading] = useState(true)
   const [query, setQuery]     = useState('')
   const [expandedId, setExpandedId] = useState(null)
+  const [tab, setTab] = useState(showEndings && initialTab === 'endings' ? 'endings' : 'verbs')
 
   const ids = useMemo(() => (verbs ?? []).map(v => v.id).filter(id => id != null), [verbs])
+  const arEndings = useMemo(() => (showEndings ? deriveArEndings(full) : null), [showEndings, full])
 
   useEffect(() => {
     let cancelled = false
@@ -66,6 +102,15 @@ export default function FilteredDictionaryModal({ verbs, title, onClose }) {
           <button style={s.closeBtn} onClick={onClose}>✕</button>
         </div>
 
+        {showEndings && (
+          <div style={s.tabRow}>
+            <button style={tab === 'verbs'   ? s.tabActive : s.tab} onClick={() => setTab('verbs')}>Verbs</button>
+            <button style={tab === 'endings' ? s.tabActive : s.tab} onClick={() => setTab('endings')}>-AR Endings</button>
+          </div>
+        )}
+
+        {tab === 'verbs' ? (
+        <>
         <div style={s.searchWrap}>
           <div style={s.searchBox}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#aaa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -139,6 +184,42 @@ export default function FilteredDictionaryModal({ verbs, title, onClose }) {
             </div>
           )}
         </div>
+        </>
+        ) : (
+          <div style={s.body}>
+            {loading ? (
+              <p style={s.muted}>Loading…</p>
+            ) : (
+              <>
+                <p style={s.endHint}>
+                  All Verbs -AR are perfectly regular — they share these endings. Drop the stem and memorise the pattern.
+                </p>
+                <div style={s.tableWrap}>
+                  <table style={s.table}>
+                    <thead>
+                      <tr>
+                        <th style={s.thPerson} />
+                        {ENDING_TENSES.map(t => (
+                          <th key={t.key} style={{ ...s.thTense, ...t.th }}>{t.label}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {PERSONS.map(({ label, key }) => (
+                        <tr key={key} style={s.tableRow}>
+                          <td style={s.tdPerson}>{label}</td>
+                          {ENDING_TENSES.map(t => (
+                            <td key={t.key} style={s.tdEnding}>___{arEndings?.[t.key]?.[key] ?? ''}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -162,6 +243,11 @@ const s = {
   title: { flex: 1, margin: 0, fontSize: '1rem', fontWeight: 600, color: '#111', display: 'flex', alignItems: 'baseline', gap: '0.5rem', minWidth: 0 },
   titleSub: { fontSize: '0.72rem', fontWeight: 500, color: '#999', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
   closeBtn: { background: 'none', border: 'none', fontSize: '1rem', color: '#888', cursor: 'pointer', padding: '0.25rem', lineHeight: 1, borderRadius: '4px', flexShrink: 0 },
+  tabRow: { display: 'flex', gap: '0.375rem', padding: '0.5rem 1rem', borderBottom: '1px solid #f0f0f0', flexShrink: 0 },
+  tab: { flex: 1, padding: '0.4rem 0.25rem', fontSize: '0.8rem', fontWeight: 500, color: '#888', backgroundColor: '#f5f5f5', border: '1px solid #e5e5e5', borderRadius: '6px', cursor: 'pointer' },
+  tabActive: { flex: 1, padding: '0.4rem 0.25rem', fontSize: '0.8rem', fontWeight: 700, color: '#111', backgroundColor: '#fff', border: '1px solid #111', borderRadius: '6px', cursor: 'pointer' },
+  endHint: { margin: '0 0 0.75rem', fontSize: '0.78rem', color: '#666', lineHeight: 1.45 },
+  tdEnding: { padding: '0.5rem 0.25rem', textAlign: 'center', color: '#111', fontWeight: 700, fontSize: '0.82rem', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', whiteSpace: 'nowrap' },
   searchWrap: { padding: '0.6rem 1rem', borderBottom: '1px solid #f0f0f0', flexShrink: 0 },
   searchBox: { display: 'flex', alignItems: 'center', backgroundColor: '#f8f8f6', border: '1px solid #e5e5e5', borderRadius: '9px', padding: '0 0.75rem', gap: '0.5rem' },
   searchInput: { flex: 1, padding: '0.55rem 0', fontSize: '0.9rem', border: 'none', outline: 'none', background: 'none', color: '#111' },

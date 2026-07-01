@@ -584,7 +584,7 @@ export default function VerbQuiz() {
 
   const [phase, setPhase] = useState('loading')
   const [allVerbs, setAllVerbs] = useState([])
-  const [showDictionary, setShowDictionary] = useState(false) // results-screen dictionary overlay
+  const [dictTab, setDictTab] = useState(null) // null | 'verbs' | 'endings' — results-screen dictionary overlay
   const [roundVerbs, setRoundVerbs] = useState([])             // L1 current round
   const [session, setSession] = useState([])
   const [currentIdx, setCurrentIdx] = useState(0)
@@ -1353,9 +1353,14 @@ export default function VerbQuiz() {
             <button style={{ ...styles.primaryBtn, width: '100%', textAlign: 'center' }} onClick={loadQuiz}>
               Play again
             </button>
-            <button style={styles.secondaryBtn} onClick={() => setShowDictionary(true)}>
+            <button style={styles.secondaryBtn} onClick={() => setDictTab('verbs')}>
               Verb Dictionary
             </button>
+            {category.title === 'Verbs -AR' && (
+              <button style={styles.secondaryBtn} onClick={() => setDictTab('endings')}>
+                -AR Endings Cheat Sheet
+              </button>
+            )}
             <div style={styles.summaryBtnRow}>
               <button style={styles.secondaryBtn} onClick={() => navigate('/verbs')}>
                 Progress
@@ -1373,11 +1378,13 @@ export default function VerbQuiz() {
 
       {/* Verb Dictionary — overlay above the results screen, filtered to the
           just-quizzed category's verbs. Dismissing returns to the results. */}
-      {showDictionary && (
+      {dictTab && (
         <FilteredDictionaryModal
           verbs={allVerbs}
           title={category.title}
-          onClose={() => setShowDictionary(false)}
+          showEndings={category.title === 'Verbs -AR'}
+          initialTab={dictTab}
+          onClose={() => setDictTab(null)}
         />
       )}
       </>

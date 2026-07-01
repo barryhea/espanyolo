@@ -145,6 +145,10 @@ Static verb content table. No component writes to it; all rows and schema change
 
 Pronoun keys used in conjugation objects: `yo`, `tu`, `el`, `nosotros`, `ellos`.
 
+**Reusable filtered Verb Dictionary modal (`FilteredDictionaryModal.jsx`):** a popup overlay (not a navigation) that takes a set of verbs and shows a condensed, searchable dictionary of just those verbs, each expandable to its Present/Past/Future conjugation table. It fetches the `verbs` conjugation columns for the given ids. Reused from the category options popup (`VerbCategoryModal.jsx`, filtered to that category) and from the verb quiz conclusion screen (`VerbQuiz.jsx`, filtered to the just-quizzed category).
+
+**Regular -AR endings cheat sheet:** when `FilteredDictionaryModal` is passed `showEndings` (only for the Verbs -AR category), it adds an "-AR Endings" tab. The endings are **derived at runtime** from the fetched conjugation data — for each tense/pronoun it strips the stem (infinitive minus the final `ar`) from each verb's form and takes the most common remainder — and rendered as `___` + ending (e.g. `___o`, `___é`, `___aré`). It is never shown for the other categories, which contain irregular AR verbs. It is presented in two places: the tab inside the AR dictionary modal, and an option on the Verbs -AR quiz conclusion screen (which opens the modal on that tab).
+
 ### Column access
 
 | Column | Read by | Written by |

@@ -73,6 +73,12 @@ Summarised from the last 30 commits. Grouped by feature area. Newest changes fir
 
 ---
 
+## Verb Trainer — AR Endings Cheat Sheet
+
+- Added a regular -AR endings cheat sheet, shown **only** for the Verbs -AR category (whose verbs are all perfectly regular). It strips the verb stem and shows just the shared ending for each pronoun (Yo, Tú, Él/Ella, Nosotros, Ellos/Ellas) across Present, Past and Future as `___` + ending (e.g. `___o`, `___é`, `___aré`). The endings are **derived from the actual regular -AR conjugation data** (stem = infinitive minus "ar", most-common remainder), not hardcoded, so they stay correct if the data changes. Surfaced in two places, both reusing the same `FilteredDictionaryModal`: as an extra "-AR Endings" tab inside the filtered Verb Dictionary modal when it's showing Verbs -AR, and as an "-AR Endings Cheat Sheet" option on the Verbs -AR quiz conclusion screen (opens the modal on that tab). The other three categories (Core Verbs, Patterned Irregulars, True Irregulars) contain irregular AR verbs and never show it.
+
+---
+
 ## Verb Trainer — Quiz (VerbQuiz)
 
 - Added a "Verb Dictionary" button to the quiz results/conclusion screen. It opens the reusable `FilteredDictionaryModal` as an overlay on top of the results (no navigation away), filtered to the just-quizzed category's verbs; dismissing it returns to the results screen intact.

@@ -645,6 +645,7 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
       <FilteredDictionaryModal
         verbs={modalVerbs}
         title={card.title}
+        showEndings={card.title === 'Verbs -AR'}
         onClose={() => setShowDictionary(false)}
       />
     )}
