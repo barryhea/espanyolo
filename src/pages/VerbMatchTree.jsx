@@ -20,37 +20,21 @@ const TENSE_SLOTS = [
   { tense: 'future',  label: 'Future',  conjKey: 'future_conjugations'  },
 ]
 
-// Build the 3 correct forms + up to 3 distractors for (verb, pronoun).
+// Build exactly the 3 correct forms (Past/Present/Future) for (verb, pronoun) —
+// no distractors. The task is purely to order these three into the right tense
+// slots. Note for Nosotros the -AR present and preterite are the identical form,
+// which yields two chips with the same text; that is expected and both satisfy
+// their slot since correctness compares the placed form to the slot's tense form.
 function buildForms(verb, pkey) {
   const correctByTense = {
     past:    verb.past_conjugations?.[pkey]    ?? '',
     present: verb.present_conjugations?.[pkey] ?? '',
     future:  verb.future_conjugations?.[pkey]  ?? '',
   }
-  const correctSet = new Set(Object.values(correctByTense).filter(Boolean).map(normalise))
-  // Distractors: same verb, OTHER pronouns, any tense — plausible wrong-pronoun
-  // forms — excluding anything equal to a correct form; de-duplicated; take 3.
-  const pool = []
-  for (const p of PRONOUNS) {
-    if (p.key === pkey) continue
-    for (const t of TENSE_SLOTS) {
-      const f = verb[t.conjKey]?.[p.key]
-      if (f && !correctSet.has(normalise(f))) pool.push(f)
-    }
-  }
-  const seen = new Set(), distractors = []
-  for (const f of shuffle(pool)) {
-    const n = normalise(f)
-    if (seen.has(n)) continue
-    seen.add(n); distractors.push(f)
-    if (distractors.length >= 3) break
-  }
-  let n = 0
   const chips = [
-    { id: `c${n++}`, label: correctByTense.past },
-    { id: `c${n++}`, label: correctByTense.present },
-    { id: `c${n++}`, label: correctByTense.future },
-    ...distractors.map(f => ({ id: `d${n++}`, label: f })),
+    { id: 'c0', label: correctByTense.past },
+    { id: 'c1', label: correctByTense.present },
+    { id: 'c2', label: correctByTense.future },
   ].filter(c => c.label)
   return { correctByTense, chips }
 }
