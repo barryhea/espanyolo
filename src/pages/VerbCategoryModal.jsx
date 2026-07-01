@@ -483,6 +483,14 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
           const localT2Done = localT1Done && tenseDone('t2_cj_stage', 't2_score')
           const localT3Done = localT2Done && tenseDone('t3_cj_stage', 't3_score')
 
+          // AR Mastery unlock: Present, Past and Future all fully mastered for every
+          // visible AR verb (t1/t2/t3_cj_stage all = 4), read from Supabase.
+          const arMasteryUnlocked = isAR && !loading && visibleActiveIds.length > 0
+            && visibleActiveIds.every(id =>
+              (modalVerbProgress[id]?.t1_cj_stage ?? 0) >= 4 &&
+              (modalVerbProgress[id]?.t2_cj_stage ?? 0) >= 4 &&
+              (modalVerbProgress[id]?.t3_cj_stage ?? 0) >= 4)
+
           // "Started" = the tense has genuine stored progress on at least one
           // visible verb (AR: an advanced sub-stage or any score within the first;
           // others: any t{n}_score). Drives a grey/orange/green status dot so an
@@ -573,6 +581,41 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
                     <span style={mStyles.stageChevron}>›</span>
                   </div>
                 </button>
+              ))}
+
+              {/* AR Mastery — practice quiz mixing Stage 4 across all tenses.
+                  Locked until Present, Past and Future are all mastered. */}
+              {isAR && (arMasteryUnlocked ? (
+                <button
+                  style={mStyles.stageOption}
+                  onClick={() => { onClose(); navigate('/verb-mastery-quiz') }}
+                >
+                  <div style={mStyles.stageLeft}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: '#7c3aed', flexShrink: 0 }} />
+                      <span style={mStyles.stageLabel}>AR Mastery</span>
+                    </div>
+                    <span style={mStyles.stageSub}>Mixed Stage 4 · all tenses · practice</span>
+                  </div>
+                  <div style={mStyles.stageRight}>
+                    <span style={mStyles.stageProgressText}>Practice</span>
+                    <span style={mStyles.stageChevron}>›</span>
+                  </div>
+                </button>
+              ) : (
+                <div style={mStyles.stageOptionLocked}>
+                  <div style={mStyles.stageLeft}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: '#e5e7eb', flexShrink: 0 }} />
+                      <span style={mStyles.stageLabelLocked}>AR Mastery</span>
+                    </div>
+                    <span style={mStyles.stageSub}>Master Present, Past &amp; Future to unlock</span>
+                  </div>
+                  <div style={mStyles.stageRight}>
+                    <span style={mStyles.stageProgressText}>Locked</span>
+                    <span style={{ fontSize: '0.9rem', lineHeight: 1 }}>🔒</span>
+                  </div>
+                </div>
               ))}
             </div>
           )

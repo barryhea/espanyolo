@@ -25,6 +25,12 @@ Summarised from the last 30 commits. Grouped by feature area. Newest changes fir
 
 ---
 
+## Verb Trainer — AR Mastery Quiz (VerbMasteryQuiz)
+
+- New practice-only AR Mastery quiz for Verbs -AR (`/verb-mastery-quiz`), reachable from the Verbs -AR category modal. Locked until Present, Past and Future are all fully mastered (every visible AR verb has `t1/t2/t3_cj_stage = 4`, read from Supabase). Draws Stage 4 Full Conjugation (typed EN→conjugation) questions mixed evenly across the three tenses (5 each), each shown under a distinct coloured tense banner (Present/Past/Future). Reuses the exact Stage 4 typed-answer checking (extracted to `src/utils/arConjugation.js`) including the order-independent el/ella and ellos/ellas gendered acceptance. Practice only — it never writes conjugation counts or any tense progression; results are in-memory for the session summary. The tense progression engine (`VerbArTenseQuiz.jsx`) is untouched.
+
+---
+
 ## Verb Trainer — AR Tense Quiz (VerbArTenseQuiz)
 
 - Reduced sessions to 10 questions with a progress bar and a results screen (down from 15, then from infinite)
