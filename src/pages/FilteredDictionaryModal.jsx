@@ -30,9 +30,12 @@ function familyColors(f) {
 }
 
 // ── Regular -AR endings cheat sheet ─────────────────────────────────────────────
+// Column order Past → Present → Future (left to right), matching the rest of the
+// app (Verb Detail / dictionary conjugation tables). Header, colour and endings
+// travel together per entry, so reordering here reorders the whole column.
 const ENDING_TENSES = [
-  { key: 'present_conjugations', label: 'Present', th: { backgroundColor: '#f3f4f6', color: '#374151' } },
   { key: 'past_conjugations',    label: 'Past',    th: { backgroundColor: '#dbeafe', color: '#1e40af' } },
+  { key: 'present_conjugations', label: 'Present', th: { backgroundColor: '#f3f4f6', color: '#374151' } },
   { key: 'future_conjugations',  label: 'Future',  th: { backgroundColor: '#dcfce7', color: '#166534' } },
 ]
 
