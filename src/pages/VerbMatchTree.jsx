@@ -446,7 +446,6 @@ export default function VerbMatchTree() {
           verbs={arVerbs}
           title="Verbs -AR"
           showEndings
-          initialTab="verbs"
           onClose={() => setShowDictionary(false)}
         />
       )}

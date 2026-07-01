@@ -1383,7 +1383,6 @@ export default function VerbQuiz() {
           verbs={allVerbs}
           title={category.title}
           showEndings={category.title === 'Verbs -AR'}
-          initialTab={dictTab}
           onClose={() => setDictTab(null)}
         />
       )}

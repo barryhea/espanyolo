@@ -63,14 +63,15 @@ function deriveArEndings(verbs) {
   return out
 }
 
-export default function FilteredDictionaryModal({ verbs, title, onClose, showEndings = false, initialTab }) {
+export default function FilteredDictionaryModal({ verbs, title, onClose, showEndings = false }) {
   const [full, setFull]       = useState([])   // full verb records (with conjugations)
   const [loading, setLoading] = useState(true)
   const [query, setQuery]     = useState('')
   const [expandedId, setExpandedId] = useState(null)
-  // For the Verbs -AR dictionary the endings tab is the default; a caller can still
-  // force the verbs list by explicitly passing initialTab='verbs'.
-  const [tab, setTab] = useState(showEndings && initialTab !== 'verbs' ? 'endings' : 'verbs')
+  // The default tab is a property of the modal itself: any Verbs -AR dictionary
+  // instance (`showEndings`) opens on the -AR Endings tab regardless of entry
+  // point; the Verbs tab is always available when tapped. Non-AR opens on Verbs.
+  const [tab, setTab] = useState(showEndings ? 'endings' : 'verbs')
 
   const ids = useMemo(() => (verbs ?? []).map(v => v.id).filter(id => id != null), [verbs])
   const arEndings = useMemo(() => (showEndings ? deriveArEndings(full) : null), [showEndings, full])
