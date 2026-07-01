@@ -40,6 +40,23 @@ const SUB_LABEL = ['Drag & Match', 'Multiple Choice', 'Pronoun', 'Full Conjugati
 // verb-learning system in VerbQuiz.jsx and must not be mixed in here.
 const STAGE2_PER_PRONOUN_THRESHOLD = 5
 
+// Persistent per-pronoun conjugation progress now lives in Supabase
+// (user_verb_conjugation_progress), keyed by tense number: t1→1 (Present),
+// t2→2 (Past), t3→3 (Future). sub_stage 1/2/3 = Multiple Choice / Pronoun /
+// Full Conjugation (matches activeSub). Drag & Match is not persisted per pronoun.
+const TENSE_NUM = { t1: 1, t2: 2, t3: 3 }
+const CONJ_PRONOUNS = ['yo', 'tu', 'el', 'nosotros', 'ellos']
+
+// One-time backfill safety net: known snapshot of the current per-pronoun counts,
+// keyed tense(1-3) → sub_stage(1-3) → pronoun. Seeded into the DB only when a user
+// has no stored conjugation counts yet, taking the higher of any existing /
+// localStorage value and this snapshot so nothing is lost.
+const CONJ_SNAPSHOT = {
+  1: { 1: { yo: 6, tu: 7, el: 8, nosotros: 9, ellos: 8 }, 2: { yo: 8, tu: 8, el: 5, nosotros: 7, ellos: 8 }, 3: { yo: 8, tu: 7, el: 5, nosotros: 8, ellos: 8 } },
+  2: { 1: { yo: 6, tu: 6, el: 9, nosotros: 8, ellos: 12 }, 2: { yo: 6, tu: 6, el: 5, nosotros: 6, ellos: 6 }, 3: { yo: 9, tu: 6, el: 6, nosotros: 9, ellos: 10 } },
+  3: { 1: { yo: 6, tu: 7, el: 8, nosotros: 9, ellos: 8 }, 2: { yo: 5, tu: 6, el: 6, nosotros: 6, ellos: 6 }, 3: { yo: 4, tu: 2, el: 3, nosotros: 4, ellos: 4 } },
+}
+
 // localStorage key for the one-time Stage 2 data reset
 const STAGE2_RESET_KEY = 'ar-t1-stage2-reset-v2'
 
@@ -189,6 +206,7 @@ export default function VerbArTenseQuiz() {
   const [stage2PronounCounts, setStage2PronounCounts] = useState({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
   const [stage3PronounCounts, setStage3PronounCounts] = useState({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
   const [stage4PronounCounts, setStage4PronounCounts] = useState({ yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 })
+  const [conjReady, setConjReady] = useState(false) // DB backfill complete → safe to load per-sub-stage counts
 
   const progressRef = useRef({})
   const inputRef    = useRef(null)
@@ -210,16 +228,34 @@ export default function VerbArTenseQuiz() {
     setDragRoundsThisTense(0)
   }, [activeTense])
 
-  // On entering a pronoun sub-stage, restore counts from localStorage (persists across page navigations)
+  // On mount, run the one-time backfill (legacy localStorage + migration snapshot →
+  // DB, only if the user has no DB counts yet), then mark ready so the per-sub-stage
+  // loader can run against reliable persisted data.
   useEffect(() => {
-    const load = (sub) => {
-      try { return JSON.parse(localStorage.getItem(`verb-ar-cj-${user?.id}-${activeTense}-${sub}`) ?? 'null') } catch { return null }
-    }
-    const zero = { yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 }
-    if (activeSub === 1) setStage2PronounCounts(load(1) ?? zero)
-    if (activeSub === 2) setStage3PronounCounts(load(2) ?? zero)
-    if (activeSub === 3) setStage4PronounCounts(load(3) ?? zero)
-  }, [activeSub, activeTense])
+    if (!user?.id) return
+    let cancelled = false
+    ;(async () => {
+      await backfillConjProgress(user.id)
+      if (!cancelled) setConjReady(true)
+    })()
+    return () => { cancelled = true }
+  }, [user?.id])
+
+  // On entering a pronoun sub-stage, load the true stored per-pronoun counts from
+  // the DB. This replaces the old localStorage save/restore (whose key mismatch /
+  // empty reload lost progress); counts now carry reliably across sessions/devices.
+  useEffect(() => {
+    if (!conjReady || !user?.id || !activeTense || ![1, 2, 3].includes(activeSub)) return
+    let cancelled = false
+    ;(async () => {
+      const counts = await loadConjCounts(user.id, TENSE_NUM[activeTense], activeSub)
+      if (cancelled) return
+      if (activeSub === 1) setStage2PronounCounts(counts)
+      else if (activeSub === 2) setStage3PronounCounts(counts)
+      else setStage4PronounCounts(counts)
+    })()
+    return () => { cancelled = true }
+  }, [activeSub, activeTense, user?.id, conjReady])
 
   // One-time reset: clears any Stage 2 (MC) progress recorded under the old per-verb scoring
   // so the correct per-pronoun threshold takes effect from a clean slate.
@@ -257,8 +293,81 @@ export default function VerbArTenseQuiz() {
     localStorage.setItem(`${STAGE2_RESET_KEY}-${user.id}`, '1')
   }
 
-  function savePronounCounts(tenseKey, subStage, counts) {
-    try { localStorage.setItem(`verb-ar-cj-${user?.id}-${tenseKey}-${subStage}`, JSON.stringify(counts)) } catch {}
+  // Load the persisted per-pronoun counts for one (tense, sub_stage) from the DB.
+  async function loadConjCounts(userId, tense, subStage) {
+    const counts = { yo: 0, tu: 0, el: 0, nosotros: 0, ellos: 0 }
+    const { data, error } = await supabase
+      .from('user_verb_conjugation_progress')
+      .select('pronoun, correct_count')
+      .eq('user_id', userId).eq('tense', tense).eq('sub_stage', subStage)
+    if (error) { console.warn('[conj] load failed:', error.message); return counts }
+    for (const r of data ?? []) if (r.pronoun in counts) counts[r.pronoun] = r.correct_count ?? 0
+    return counts
+  }
+
+  // Persist one pronoun's cumulative correct-count. Monotonic: only called on a
+  // correct answer, so it never decreases, and a wrong answer never resets it.
+  async function saveConjCount(tenseKey, subStage, pronoun, correctCount) {
+    try {
+      const { error } = await supabase
+        .from('user_verb_conjugation_progress')
+        .upsert(
+          { user_id: user.id, tense: TENSE_NUM[tenseKey], sub_stage: subStage, pronoun, correct_count: correctCount, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id,tense,sub_stage,pronoun' }
+        )
+      if (error) console.warn('[conj] save failed:', error.message)
+    } catch (e) { console.warn('[conj] save failed:', e?.message ?? e) }
+  }
+
+  // One-time migration of any legacy localStorage verb-ar-cj-* counts (plus the
+  // migration snapshot) into the DB — only when the user has no DB counts yet.
+  // Takes the higher of the two per pronoun so nothing is lost; marks done.
+  async function backfillConjProgress(userId) {
+    const flag = `verb-ar-cj-migrated-${userId}`
+    try { if (localStorage.getItem(flag)) return } catch {}
+
+    const { count, error: cErr } = await supabase
+      .from('user_verb_conjugation_progress')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+    if (cErr) { console.warn('[conj] backfill check failed:', cErr.message); return }
+    if ((count ?? 0) > 0) { try { localStorage.setItem(flag, '1') } catch {} ; return }
+
+    // Merge legacy localStorage + snapshot, taking the max per (tense, sub, pronoun).
+    const merged = {}
+    const put = (tense, sub, pron, val) => {
+      if (!(val > 0)) return
+      const k = `${tense}|${sub}|${pron}`
+      merged[k] = Math.max(merged[k] ?? 0, val)
+    }
+    try {
+      const prefix = `verb-ar-cj-${userId}-`
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (!key || !key.startsWith(prefix)) continue
+        const m = key.slice(prefix.length).match(/^(t[123])-([123])$/)
+        if (!m) continue
+        const tense = TENSE_NUM[m[1]], sub = Number(m[2])
+        let stored = null
+        try { stored = JSON.parse(localStorage.getItem(key)) } catch {}
+        if (stored) for (const pron of CONJ_PRONOUNS) put(tense, sub, pron, stored[pron] ?? 0)
+      }
+    } catch {}
+    for (const [tenseStr, subs] of Object.entries(CONJ_SNAPSHOT))
+      for (const [subStr, prons] of Object.entries(subs))
+        for (const pron of CONJ_PRONOUNS) put(Number(tenseStr), Number(subStr), pron, prons[pron] ?? 0)
+
+    const rows = Object.entries(merged).map(([k, correct_count]) => {
+      const [tense, sub_stage, pronoun] = k.split('|')
+      return { user_id: userId, tense: Number(tense), sub_stage: Number(sub_stage), pronoun, correct_count }
+    })
+    if (rows.length) {
+      const { error } = await supabase
+        .from('user_verb_conjugation_progress')
+        .upsert(rows, { onConflict: 'user_id,tense,sub_stage,pronoun' })
+      if (error) { console.warn('[conj] backfill upsert failed:', error.message); return }
+    }
+    try { localStorage.setItem(flag, '1') } catch {}
   }
 
   // Advance all verbs from fromSub → fromSub+1 in memory and DB when per-pronoun threshold is met
@@ -580,7 +689,7 @@ export default function VerbArTenseQuiz() {
         const key = question.pronoun.key
         const newCounts = { ...stage2PronounCounts, [key]: (stage2PronounCounts[key] ?? 0) + 1 }
         setStage2PronounCounts(newCounts)
-        savePronounCounts(question.tenseKey, 1, newCounts)
+        saveConjCount(question.tenseKey, 1, key, newCounts[key])
         if (PRONOUNS.every(p => (newCounts[p.key] ?? 0) >= STAGE2_PER_PRONOUN_THRESHOLD)) {
           advanceAllVerbsFromSub(question.tenseKey, 1)
         }
@@ -639,7 +748,7 @@ export default function VerbArTenseQuiz() {
         const key = question.pronoun.key
         const newCounts = { ...stage3PronounCounts, [key]: (stage3PronounCounts[key] ?? 0) + 1 }
         setStage3PronounCounts(newCounts)
-        savePronounCounts(question.tenseKey, 2, newCounts)
+        saveConjCount(question.tenseKey, 2, key, newCounts[key])
         if (PRONOUNS.every(p => (newCounts[p.key] ?? 0) >= STAGE2_PER_PRONOUN_THRESHOLD)) {
           advanceAllVerbsFromSub(question.tenseKey, 2)
         }
@@ -700,7 +809,7 @@ export default function VerbArTenseQuiz() {
         const key = question.pronoun.key
         const newCounts = { ...stage4PronounCounts, [key]: (stage4PronounCounts[key] ?? 0) + 1 }
         setStage4PronounCounts(newCounts)
-        savePronounCounts(question.tenseKey, 3, newCounts)
+        saveConjCount(question.tenseKey, 3, key, newCounts[key])
         if (PRONOUNS.every(p => (newCounts[p.key] ?? 0) >= STAGE2_PER_PRONOUN_THRESHOLD)) {
           advanceAllVerbsFromSub(question.tenseKey, 3)
         }

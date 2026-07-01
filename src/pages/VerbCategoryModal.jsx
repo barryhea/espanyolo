@@ -20,6 +20,9 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
   const [resetting,        setResetting]        = useState(false)
   const [resetTarget,      setResetTarget]      = useState(1)
   const [progressTab,      setProgressTab]      = useState(null)
+  // Persisted AR conjugation per-pronoun counts from the DB (was localStorage),
+  // keyed t1/t2/t3 → the most-advanced sub-stage's { pronoun: count } for that tense.
+  const [conjCounts,       setConjCounts]       = useState({})
 
   const prevCardIdRef = useRef(null)
 
@@ -83,6 +86,26 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
       }
     }
     setModalVerbProgress(progMap)
+
+    // AR conjugation per-pronoun progress now lives in Supabase (not localStorage).
+    // For each tense, use the counts from the most-advanced sub-stage that has data.
+    const { data: conjRows } = await supabase
+      .from('user_verb_conjugation_progress')
+      .select('tense, sub_stage, pronoun, correct_count')
+      .eq('user_id', user.id)
+    const grouped = {}
+    for (const r of conjRows ?? []) {
+      const g = `${r.tense}-${r.sub_stage}`
+      ;(grouped[g] ??= {})[r.pronoun] = r.correct_count ?? 0
+    }
+    const numToKey = { 1: 't1', 2: 't2', 3: 't3' }
+    const byTense = {}
+    for (const tense of [1, 2, 3]) {
+      for (let sub = 3; sub >= 1; sub--) {
+        if (grouped[`${tense}-${sub}`]) { byTense[numToKey[tense]] = grouped[`${tense}-${sub}`]; break }
+      }
+    }
+    setConjCounts(byTense)
     setModalLoading(false)
   }
 
@@ -368,15 +391,9 @@ export default function VerbCategoryModal({ card, onClose, user, navigate, categ
                     ))
                   : (() => {
                       const tKey = activeProgressTab === 2 ? 't1' : activeProgressTab === 3 ? 't2' : 't3'
-                      // Read the most recently saved per-pronoun counts for each sub-stage
-                      // and use whichever has the most recent non-null data.
-                      let pCounts = null
-                      for (let sub = 3; sub >= 1; sub--) {
-                        try {
-                          const stored = JSON.parse(localStorage.getItem(`verb-ar-cj-${user.id}-${tKey}-${sub}`) ?? 'null')
-                          if (stored) { pCounts = stored; break }
-                        } catch {}
-                      }
+                      // Persisted per-pronoun counts now come from the DB (loaded in
+                      // loadModalData), not localStorage.
+                      const pCounts = conjCounts[tKey] ?? null
                       return (
                         <PronounProgressView
                           level={activeProgressTab}

@@ -251,6 +251,8 @@ All conjugation stage-completion / results cards render through a single shared 
 
 There is **no** per-verb pass counter or per-sub-stage threshold in the conjugation flow. The old `SUB_THRESHOLD = {0:5,1:3,2:3,3:5}` per-verb counter was removed from `VerbArTenseQuiz.jsx`; conjugation now depends solely on the five-correct-per-pronoun gate, applied identically across all four sub-stages of all three tenses. The infinitive thresholds in `VerbQuiz.jsx` are unrelated and unchanged.
 
+**Conjugation per-pronoun counts are stored in Supabase, not localStorage.** The five-per-pronoun graduation counters live in the `user_verb_conjugation_progress` table (one row per `user_id, tense, sub_stage, pronoun`, integer `correct_count`), so they carry reliably across sessions and devices. `VerbArTenseQuiz.jsx` loads a sub-stage's counts from the DB on entry (`loadConjCounts`) and upserts the single incremented pronoun on each correct answer (`saveConjCount`, monotonic — never reset on a wrong answer). `VerbCategoryModal.jsx` reads them from the DB too (in `loadModalData`). A one-time client backfill (`backfillConjProgress`, flag `verb-ar-cj-migrated-<userId>` in localStorage) migrates any legacy `verb-ar-cj-*` localStorage counts plus a known snapshot into the DB when a user has no DB counts yet, taking the higher value per pronoun. The old `verb-ar-cj-<userId>-<tense>-<sub>` localStorage keys are no longer written or read (they are left in place, not cleared).
+
 **Notes on `VerbCategoryModal.jsx` resets:**
 - A level-1 reset writes: `current_stage=1, stage2_mastery=0, stage3_mastery=0, l4_score=0, drag_match_score=0, t1_score=0, t2_score=0, t3_score=0`
 - A level-2 reset writes: `current_stage=2, stage2_mastery=0, stage3_mastery=0, l4_score=0, drag_match_score=0, t1_score=0, t2_score=0, t3_score=0`
@@ -288,3 +290,36 @@ Persists user-defined quiz configurations so they can be replayed without reconf
 | `quiz_type` | *(no component yet)* | *(no component yet)* |
 | `configuration` | *(no component yet)* | *(no component yet)* |
 | `created_at` | *(no component yet)* | *(no component yet)* |
+
+---
+
+## `user_verb_conjugation_progress`
+
+Persistent AR tense conjugation per-pronoun progress (previously browser localStorage only). One row per `(user_id, tense, sub_stage, pronoun)`. Added in migration `20260701120000`.
+
+- `tense`: 1 = Present, 2 = Past, 3 = Future
+- `sub_stage`: 1 = Multiple Choice, 2 = Pronoun, 3 = Full Conjugation (Drag & Match is not persisted per pronoun)
+- `pronoun`: `yo | tu | el | nosotros | ellos`
+
+Graduation is 5 cumulative correct per pronoun; `correct_count` is monotonic (incremented on correct answers, never reset on wrong).
+
+**RLS:** enabled — users can only read, insert, update, and delete their own rows.
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `id` | UUID | `gen_random_uuid()` | Primary key |
+| `user_id` | UUID | — | FK → `auth.users.id` (cascade delete) |
+| `tense` | INTEGER | — | 1/2/3 (Present/Past/Future); CHECK IN (1,2,3) |
+| `sub_stage` | INTEGER | — | 1/2/3 (MC/Pronoun/Full Conjugation); CHECK IN (1,2,3) |
+| `pronoun` | TEXT | — | yo/tu/el/nosotros/ellos; CHECK constrained |
+| `correct_count` | INTEGER | `0` | Cumulative correct answers for this pronoun; CHECK `>= 0` |
+| `created_at` | TIMESTAMPTZ | `now()` | Creation timestamp |
+| `updated_at` | TIMESTAMPTZ | `now()` | Last update timestamp |
+
+Unique constraint on `(user_id, tense, sub_stage, pronoun)`.
+
+### Column access
+
+| Column | Read by | Written by |
+|--------|---------|------------|
+| `tense` / `sub_stage` / `pronoun` / `correct_count` | `VerbArTenseQuiz.jsx` (`loadConjCounts`), `VerbCategoryModal.jsx` (`loadModalData`) | `VerbArTenseQuiz.jsx` (`saveConjCount`, `backfillConjProgress`) |
