@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import NavBar from '../components/NavBar'
+import FilteredDictionaryModal from './FilteredDictionaryModal'
 import { PRONOUNS, shuffle, normalise } from '../utils/arConjugation'
 
 // AR Match Tree — Mastery Stage 1. Practice-only drag/tap quiz. One question per
@@ -268,6 +269,8 @@ export default function VerbMatchTree() {
   const [session, setSession]     = useState([])
   const [currentIdx, setCurrentIdx] = useState(0)
   const [results, setResults]     = useState([])
+  const [arVerbs, setArVerbs]     = useState([])    // all Verbs -AR (for the dictionary overlay)
+  const [showDictionary, setShowDictionary] = useState(false)
   const savedRef = useRef(false)
 
   useEffect(() => { if (user) loadQuiz() }, [user?.id])
@@ -279,6 +282,7 @@ export default function VerbMatchTree() {
       .select('id, spanish_infinitive, english, present_conjugations, past_conjugations, future_conjugations')
       .eq('category', 'Verbs -AR')
     if (error || !verbData?.length) { setPhase('error'); return }
+    setArVerbs(verbData)
 
     const verbIds = verbData.map(v => v.id)
     const { data: progress } = await supabase
@@ -411,12 +415,11 @@ export default function VerbMatchTree() {
       })
       .filter(row => row.total > 0)
     return (
+      <>
       <div style={s.page}><NavBar />
         <main style={{ ...s.main, maxWidth: '560px' }}>
           <div style={s.lockCard}>
-            <span style={s.tag}>Match Tree · Stage 1 · Practice</span>
-            <p style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0.4rem 0 0.1rem', color: '#111' }}>{correct} / {results.length} correct</p>
-            <p style={{ fontSize: '0.72rem', color: '#aaa', margin: '0 0 0.75rem' }}>This session's result (practice — no progress changed)</p>
+            <p style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0 0 0.6rem', color: '#111' }}>{correct} / {results.length} correct</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
               {byPronoun.map(row => (
                 <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -429,9 +432,25 @@ export default function VerbMatchTree() {
             </div>
           </div>
           <button style={{ ...s.primaryBtn, width: '100%' }} onClick={loadQuiz}>Play again</button>
-          <button style={s.blueBtn} onClick={() => navigate('/verbs')}>← Back to Verb Trainer</button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button style={{ ...s.blueBtn, flex: 1, width: 'auto' }} onClick={() => navigate('/verbs')}>← Back to Verb Trainer</button>
+            <button style={s.dictBtn} onClick={() => setShowDictionary(true)}>Verb Dictionary</button>
+          </div>
         </main>
       </div>
+
+      {/* Verb Dictionary — overlay on top of the results, filtered to Verbs -AR.
+          Dismissing returns to the results screen. */}
+      {showDictionary && (
+        <FilteredDictionaryModal
+          verbs={arVerbs}
+          title="Verbs -AR"
+          showEndings
+          initialTab="verbs"
+          onClose={() => setShowDictionary(false)}
+        />
+      )}
+      </>
     )
   }
 
@@ -479,6 +498,7 @@ const s = {
   progressLabel: { margin: 0, fontSize: '0.8rem', color: '#888', flexShrink: 0, minWidth: '32px', textAlign: 'right' },
   primaryBtn: { padding: '0.75rem 1.25rem', fontSize: '1rem', fontWeight: 600, backgroundColor: '#16a34a', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', textAlign: 'center' },
   blueBtn: { padding: '0.75rem 1.25rem', fontSize: '1rem', fontWeight: 600, backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'center' },
+  dictBtn: { flex: 1, padding: '0.75rem 1rem', fontSize: '1rem', fontWeight: 600, backgroundColor: '#f5f5f5', color: '#333', border: '1px solid #e5e5e5', borderRadius: '8px', cursor: 'pointer', textAlign: 'center' },
 
   card: { backgroundColor: '#fff', border: '1px solid #e5e5e5', borderRadius: '12px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' },
   cardHead: { display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center', textAlign: 'center' },
