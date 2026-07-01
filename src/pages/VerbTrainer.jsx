@@ -86,6 +86,29 @@ export default function VerbTrainer() {
   const [categoryStats, setCategoryStats] = useState({})
   const [categoryTense, setCategoryTense] = useState({})
   const [activeCard,    setActiveCard]    = useState(null)
+  // TEMPORARY diagnostic (remove after conjugation-progress migration): read-only
+  // export of the localStorage per-pronoun conjugation counts for the current user.
+  const [exportJson, setExportJson] = useState(null)
+
+  // Collect every `verb-ar-cj-<userId>-…` localStorage key (read-only — nothing is
+  // written, cleared, or modified) into one JSON object of key → stored counts.
+  function exportConjugationProgress() {
+    const out = {}
+    const prefix = user?.id ? `verb-ar-cj-${user.id}` : 'verb-ar-cj-'
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (!key || !key.startsWith('verb-ar-cj-')) continue
+        if (user?.id && !key.startsWith(prefix)) continue
+        const raw = localStorage.getItem(key)
+        try { out[key] = JSON.parse(raw) } catch { out[key] = raw }
+      }
+    } catch (e) {
+      setExportJson(`Could not read localStorage: ${e?.message ?? e}`)
+      return
+    }
+    setExportJson(JSON.stringify(out, null, 2))
+  }
 
   const location = useLocation()
 
@@ -309,6 +332,31 @@ export default function VerbTrainer() {
             <span style={styles.dictBtnSub}>All 70 verbs with conjugations</span>
             <span style={styles.dictBtnChevron}>›</span>
           </button>
+
+          {/* TEMPORARY — remove after conjugation-progress migration.
+              Read-only export of stored per-pronoun conjugation counts. */}
+          <button style={styles.exportBtn} onClick={exportConjugationProgress}>
+            Export conjugation progress
+          </button>
+          {exportJson !== null && (
+            <div style={styles.exportWrap}>
+              <div style={styles.exportHint}>
+                Read-only snapshot of stored conjugation counts — screenshot this. Tap to select all.
+              </div>
+              <pre
+                style={styles.exportPre}
+                onClick={e => {
+                  const sel = window.getSelection?.()
+                  const range = document.createRange()
+                  range.selectNodeContents(e.currentTarget)
+                  sel?.removeAllRanges()
+                  sel?.addRange(range)
+                }}
+              >
+                {exportJson || '(no verb-ar-cj- keys found for this user)'}
+              </pre>
+            </div>
+          )}
         </section>
       </main>
 
@@ -442,4 +490,38 @@ const styles = {
   dictBtnLabel:   { fontSize: '0.9rem', fontWeight: 600, color: '#111', flexShrink: 0 },
   dictBtnSub:     { fontSize: '0.75rem', color: '#aaa', flex: 1 },
   dictBtnChevron: { fontSize: '1.1rem', color: '#ccc', flexShrink: 0 },
+  // TEMPORARY diagnostic styles — remove with the export button after migration.
+  exportBtn: {
+    width: '100%',
+    marginTop: '0.75rem',
+    padding: '0.75rem 1rem',
+    background: '#fff',
+    border: '1px dashed #c084fc',
+    borderRadius: '10px',
+    color: '#7c3aed',
+    fontSize: '0.85rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    textAlign: 'center',
+  },
+  exportWrap: { marginTop: '0.6rem' },
+  exportHint: { fontSize: '0.7rem', color: '#888', marginBottom: '0.35rem', lineHeight: 1.4 },
+  exportPre: {
+    margin: 0,
+    padding: '0.75rem',
+    background: '#0f172a',
+    color: '#e2e8f0',
+    borderRadius: '10px',
+    fontSize: '0.7rem',
+    lineHeight: 1.5,
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-all',
+    overflowWrap: 'anywhere',
+    maxHeight: '55vh',
+    overflowY: 'auto',
+    WebkitOverflowScrolling: 'touch',
+    userSelect: 'text',
+    WebkitUserSelect: 'text',
+  },
 }
