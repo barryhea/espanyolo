@@ -63,12 +63,14 @@ function deriveArEndings(verbs) {
   return out
 }
 
-export default function FilteredDictionaryModal({ verbs, title, onClose, showEndings = false, initialTab = 'verbs' }) {
+export default function FilteredDictionaryModal({ verbs, title, onClose, showEndings = false, initialTab }) {
   const [full, setFull]       = useState([])   // full verb records (with conjugations)
   const [loading, setLoading] = useState(true)
   const [query, setQuery]     = useState('')
   const [expandedId, setExpandedId] = useState(null)
-  const [tab, setTab] = useState(showEndings && initialTab === 'endings' ? 'endings' : 'verbs')
+  // For the Verbs -AR dictionary the endings tab is the default; a caller can still
+  // force the verbs list by explicitly passing initialTab='verbs'.
+  const [tab, setTab] = useState(showEndings && initialTab !== 'verbs' ? 'endings' : 'verbs')
 
   const ids = useMemo(() => (verbs ?? []).map(v => v.id).filter(id => id != null), [verbs])
   const arEndings = useMemo(() => (showEndings ? deriveArEndings(full) : null), [showEndings, full])
@@ -104,8 +106,8 @@ export default function FilteredDictionaryModal({ verbs, title, onClose, showEnd
 
         {showEndings && (
           <div style={s.tabRow}>
-            <button style={tab === 'verbs'   ? s.tabActive : s.tab} onClick={() => setTab('verbs')}>Verbs</button>
             <button style={tab === 'endings' ? s.tabActive : s.tab} onClick={() => setTab('endings')}>-AR Endings</button>
+            <button style={tab === 'verbs'   ? s.tabActive : s.tab} onClick={() => setTab('verbs')}>Verbs</button>
           </div>
         )}
 
