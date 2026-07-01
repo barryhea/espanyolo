@@ -50,6 +50,7 @@ export default function VerbMasteryQuiz() {
   const inputRef  = useRef(null)
   const inputRef2 = useRef(null)
   const inputRef3 = useRef(null)
+  const savedRef  = useRef(false) // guards the one-per-session metric write
 
   useEffect(() => { if (user) loadQuiz() }, [user?.id])
 
@@ -91,8 +92,52 @@ export default function VerbMasteryQuiz() {
     setCurrentIdx(0)
     setResults([])
     resetInputs()
+    savedRef.current = false
     setQuestion(sess[0])
     setPhase('question')
+  }
+
+  // ── Practice metric: last-5 Mastery session results (Supabase, not localStorage) ──
+  // Build this session's result: timestamp, overall score, and per-tense (1/2/3) and
+  // per-pronoun correct/incorrect breakdown, so a future overview can analyse weakness.
+  function buildSessionResult(rs) {
+    const tNum = { t1: 1, t2: 2, t3: 3 }
+    const tense   = { 1: { correct: 0, incorrect: 0 }, 2: { correct: 0, incorrect: 0 }, 3: { correct: 0, incorrect: 0 } }
+    const pronoun = { yo: { correct: 0, incorrect: 0 }, tu: { correct: 0, incorrect: 0 }, el: { correct: 0, incorrect: 0 }, nosotros: { correct: 0, incorrect: 0 }, ellos: { correct: 0, incorrect: 0 } }
+    for (const r of rs) {
+      const bucket = r.correct ? 'correct' : 'incorrect'
+      const t = tNum[r.tenseKey]
+      if (tense[t]) tense[t][bucket] += 1
+      const pk = r.pronoun?.key
+      if (pronoun[pk]) pronoun[pk][bucket] += 1
+    }
+    return {
+      at: new Date().toISOString(),
+      correct: rs.filter(r => r.correct).length,
+      total: rs.length,
+      tense,
+      pronoun,
+    }
+  }
+
+  // Persist the session result, keeping only the 5 most recent per user (newest
+  // first). Practice metric only — never touches tense progression.
+  async function saveMasterySession(rs) {
+    if (!user?.id || !rs.length) return
+    const sessionResult = buildSessionResult(rs)
+    try {
+      const { data } = await supabase
+        .from('user_verb_mastery_results')
+        .select('recent_sessions')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      const existing = Array.isArray(data?.recent_sessions) ? data.recent_sessions : []
+      const recent_sessions = [sessionResult, ...existing].slice(0, 5)
+      const { error } = await supabase
+        .from('user_verb_mastery_results')
+        .upsert({ user_id: user.id, recent_sessions, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+      if (error) console.warn('[mastery] save failed:', error.message)
+    } catch (e) { console.warn('[mastery] save failed:', e?.message ?? e) }
   }
 
   function resetInputs() {
@@ -119,7 +164,12 @@ export default function VerbMasteryQuiz() {
 
   function handleNext() {
     const nextIdx = currentIdx + 1
-    if (nextIdx >= session.length) { setPhase('summary'); return }
+    if (nextIdx >= session.length) {
+      // Session complete — persist the result once (practice metric only).
+      if (!savedRef.current) { savedRef.current = true; saveMasterySession(results) }
+      setPhase('summary')
+      return
+    }
     setCurrentIdx(nextIdx)
     setQuestion(session[nextIdx])
     resetInputs()

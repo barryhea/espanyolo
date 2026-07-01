@@ -323,3 +323,39 @@ Unique constraint on `(user_id, tense, sub_stage, pronoun)`.
 | Column | Read by | Written by |
 |--------|---------|------------|
 | `tense` / `sub_stage` / `pronoun` / `correct_count` | `VerbArTenseQuiz.jsx` (`loadConjCounts`), `VerbCategoryModal.jsx` (`loadModalData`) | `VerbArTenseQuiz.jsx` (`saveConjCount`, `backfillConjProgress`) |
+
+---
+
+## `user_verb_mastery_results`
+
+Last-5 results metric for the **AR Mastery quiz** (`VerbMasteryQuiz.jsx`, route `/verb-mastery-quiz`). The Mastery quiz is a **practice-only** quiz for Verbs -AR: it draws Stage 4 "Full Conjugation" (typed EN→conjugation) questions mixed evenly across Present/Past/Future, is unlocked once every visible AR verb has `t1/t2/t3_cj_stage = 4`, and **never** modifies conjugation counts or tense progression. It records only this metric.
+
+One row per user (PK `user_id`) holding a `recent_sessions` JSONB array of the 5 most recent sessions (newest first). The client trims to 5 on write; a `CHECK` enforces `jsonb_array_length <= 5`. Added in migration `20260701130000`; wired up in `VerbMasteryQuiz.jsx`.
+
+Each element of `recent_sessions` is one completed session:
+
+```json
+{
+  "at": "<ISO-8601 timestamp>",
+  "correct": <int>, "total": <int>,
+  "tense":   { "1": {"correct":<int>,"incorrect":<int>},   // 1 Present, 2 Past, 3 Future
+               "2": {...}, "3": {...} },
+  "pronoun": { "yo": {"correct":<int>,"incorrect":<int>},
+               "tu": {...}, "el": {...}, "nosotros": {...}, "ellos": {...} }
+}
+```
+
+**RLS:** enabled — users can only read, insert, update, and delete their own rows.
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `user_id` | UUID | — | Primary key; FK → `auth.users.id` (cascade delete) |
+| `recent_sessions` | JSONB | `[]` | Up to 5 most recent Mastery session results (newest first); CHECK: array with `length <= 5` |
+| `created_at` | TIMESTAMPTZ | `now()` | Creation timestamp |
+| `updated_at` | TIMESTAMPTZ | `now()` | Last update timestamp |
+
+### Column access
+
+| Column | Read by | Written by |
+|--------|---------|------------|
+| `recent_sessions` | `VerbMasteryQuiz.jsx` (`saveMasterySession` read-modify-write; future overview screen) | `VerbMasteryQuiz.jsx` (`saveMasterySession`, on session completion) |
