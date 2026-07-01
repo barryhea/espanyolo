@@ -14,6 +14,7 @@ import { PRONOUNS, shuffle, normalise } from '../utils/arConjugation'
 // the Mastery quiz (Present, Past, Future all mastered for every AR verb).
 
 const DRAG_THRESHOLD = 8
+const SESSION_LENGTH = 20
 const TENSE_SLOTS = [
   { tense: 'past',    label: 'Past',    conjKey: 'past_conjugations'    },
   { tense: 'present', label: 'Present', conjKey: 'present_conjugations' },
@@ -295,15 +296,35 @@ export default function VerbMatchTree() {
     })
     if (!unlocked) { setPhase('locked'); return }
 
-    // One question per pronoun, each anchored on a random AR verb.
-    const sess = PRONOUNS.map(pr => {
-      const usable = visible.filter(v => v.past_conjugations?.[pr.key] && v.present_conjugations?.[pr.key] && v.future_conjugations?.[pr.key])
-      const verb = (usable.length ? usable : visible)[Math.floor(Math.random() * (usable.length || visible.length))]
-      const { correctByTense, chips } = buildForms(verb, pr.key)
-      return { pronoun: pr, verb, correctByTense, chips }
-    }).filter(q => q.chips.length >= 3)
+    // A SESSION_LENGTH-question session. Pronouns are randomised, never the same
+    // two questions in a row (5 pronouns ⇒ always ≥4 alternatives, so this cannot
+    // stall; a repeat is only allowed in the impossible case of no alternative).
+    // A pronoun that repeats uses a different verb than its previous appearance.
+    const usableFor = (pkey) => {
+      const u = visible.filter(v => v.past_conjugations?.[pkey] && v.present_conjugations?.[pkey] && v.future_conjugations?.[pkey])
+      return u.length ? u : visible
+    }
+    const sess = []
+    let prevKey = null
+    const lastVerbByPronoun = {}
+    for (let i = 0; i < SESSION_LENGTH; i++) {
+      const candidates = PRONOUNS.filter(p => p.key !== prevKey)
+      const prPool = candidates.length ? candidates : PRONOUNS
+      const pr = prPool[Math.floor(Math.random() * prPool.length)]
 
-    if (!sess.length) { setPhase('error'); return }
+      const base = usableFor(pr.key)
+      const diff = base.filter(v => v.id !== lastVerbByPronoun[pr.key])
+      const verbPool = diff.length ? diff : base
+      const verb = verbPool[Math.floor(Math.random() * verbPool.length)]
+
+      const { correctByTense, chips } = buildForms(verb, pr.key)
+      if (chips.length < 3) continue
+      sess.push({ pronoun: pr, verb, correctByTense, chips })
+      prevKey = pr.key
+      lastVerbByPronoun[pr.key] = verb.id
+    }
+
+    if (sess.length < 1) { setPhase('error'); return }
     setSession(sess)
     setCurrentIdx(0)
     setResults([])
@@ -381,6 +402,14 @@ export default function VerbMatchTree() {
 
   if (phase === 'summary') {
     const correct = results.filter(r => r.correct).length
+    // Aggregate per pronoun across all its appearances this session (a pronoun
+    // recurs several times over 20 questions): cumulative correct / total.
+    const byPronoun = PRONOUNS
+      .map(pr => {
+        const rs = results.filter(r => r.pronounKey === pr.key)
+        return { label: pr.label, correct: rs.filter(r => r.correct).length, total: rs.length }
+      })
+      .filter(row => row.total > 0)
     return (
       <div style={s.page}><NavBar />
         <main style={{ ...s.main, maxWidth: '560px' }}>
@@ -389,17 +418,14 @@ export default function VerbMatchTree() {
             <p style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0.4rem 0 0.1rem', color: '#111' }}>{correct} / {results.length} correct</p>
             <p style={{ fontSize: '0.72rem', color: '#aaa', margin: '0 0 0.75rem' }}>This session's result (practice — no progress changed)</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-              {results.map((r, i) => {
-                const pr = PRONOUNS.find(p => p.key === r.pronounKey)
-                return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <span style={{ width: '110px', fontSize: '0.85rem', color: '#555' }}>{pr?.label}</span>
-                    <span style={{ fontSize: '0.85rem', color: r.correct ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
-                      {r.correct ? 'All 3 correct ✓' : 'Some wrong ✗'}
-                    </span>
-                  </div>
-                )
-              })}
+              {byPronoun.map(row => (
+                <div key={row.label} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <span style={{ width: '110px', fontSize: '0.85rem', color: '#555' }}>{row.label}</span>
+                  <span style={{ fontSize: '0.85rem', color: row.correct === row.total ? '#16a34a' : '#d97706', fontWeight: 600 }}>
+                    {row.correct} / {row.total} correct
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
           <button style={{ ...s.primaryBtn, width: '100%' }} onClick={loadQuiz}>Play again</button>
