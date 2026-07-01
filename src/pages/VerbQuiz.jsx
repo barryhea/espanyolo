@@ -4,6 +4,7 @@ import { supabase } from '../utils/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { VERB_CATEGORIES } from '../utils/courseData'
 import NavBar from '../components/NavBar'
+import FilteredDictionaryModal from './FilteredDictionaryModal'
 
 function shuffle(arr) {
   const a = [...arr]
@@ -583,6 +584,7 @@ export default function VerbQuiz() {
 
   const [phase, setPhase] = useState('loading')
   const [allVerbs, setAllVerbs] = useState([])
+  const [showDictionary, setShowDictionary] = useState(false) // results-screen dictionary overlay
   const [roundVerbs, setRoundVerbs] = useState([])             // L1 current round
   const [session, setSession] = useState([])
   const [currentIdx, setCurrentIdx] = useState(0)
@@ -1284,6 +1286,7 @@ export default function VerbQuiz() {
     const progressPct = maxPts > 0 ? Math.round((pts / maxPts) * 100) : 0
 
     return (
+      <>
       <div style={styles.page}>
         <NavBar />
         <main style={{ ...styles.main, maxWidth: '820px' }}>
@@ -1350,6 +1353,9 @@ export default function VerbQuiz() {
             <button style={{ ...styles.primaryBtn, width: '100%', textAlign: 'center' }} onClick={loadQuiz}>
               Play again
             </button>
+            <button style={styles.secondaryBtn} onClick={() => setShowDictionary(true)}>
+              Verb Dictionary
+            </button>
             <div style={styles.summaryBtnRow}>
               <button style={styles.secondaryBtn} onClick={() => navigate('/verbs')}>
                 Progress
@@ -1364,6 +1370,17 @@ export default function VerbQuiz() {
           </div>
         </main>
       </div>
+
+      {/* Verb Dictionary — overlay above the results screen, filtered to the
+          just-quizzed category's verbs. Dismissing returns to the results. */}
+      {showDictionary && (
+        <FilteredDictionaryModal
+          verbs={allVerbs}
+          title={category.title}
+          onClose={() => setShowDictionary(false)}
+        />
+      )}
+      </>
     )
   }
 

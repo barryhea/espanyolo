@@ -73,6 +73,12 @@ Summarised from the last 30 commits. Grouped by feature area. Newest changes fir
 
 ---
 
+## Verb Trainer — Quiz (VerbQuiz)
+
+- Added a "Verb Dictionary" button to the quiz results/conclusion screen. It opens the reusable `FilteredDictionaryModal` as an overlay on top of the results (no navigation away), filtered to the just-quizzed category's verbs; dismissing it returns to the results screen intact.
+
+---
+
 ## Verb Trainer — Category Modal (VerbCategoryModal)
 
 - Added a "Verb Dictionary" entry to each category's options popup (Verbs -AR, Core Verbs, Patterned Irregulars, True Irregulars). It opens a new reusable `FilteredDictionaryModal` as an overlay (not a navigation) showing only that category's verbs, each expandable to its Present/Past/Future conjugation table — a condensed version of the full Verb Dictionary. Closing it returns to the category popup. The modal accepts a set of verbs to display, so it can be reused elsewhere. No quiz or progression logic changed
