@@ -51,6 +51,10 @@ export default function VerbCustomQuizSelect() {
     )
   }
 
+  // Top "Set all verbs to" row — a mutually exclusive bulk shortcut. globalKey holds
+  // a single value ('all' | 1 | 2 | 3 | 4), so choosing All Levels clears any single
+  // level and vice-versa (they can never both be active). It sets every verb's chip
+  // selection as a starting point, which the user can then freely customise per verb.
   function applyGlobal(key) {
     setGlobalKey(key)
     const newMap = {}
@@ -69,16 +73,15 @@ export default function VerbCustomQuizSelect() {
     })
   }
 
+  // Per-verb L1–L4 chips — free multi-select. Each chip toggles on/off
+  // independently, so any combination (e.g. L1+L3, or none) is allowed. Any manual
+  // change means the bulk row no longer describes the selection, so clear globalKey.
   function toggle(verbId, level) {
     setGlobalKey(null)
     setVerbLevels(prev => {
       const cur = new Set(prev[verbId] ?? [])
-      if (cur.has(level)) {
-        if (cur.size === 1) return prev
-        cur.delete(level)
-      } else {
-        cur.add(level)
-      }
+      if (cur.has(level)) cur.delete(level)
+      else cur.add(level)
       return { ...prev, [verbId]: cur }
     })
   }
@@ -87,11 +90,13 @@ export default function VerbCustomQuizSelect() {
     excluded.has(v.id) ? n : n + (verbLevels[v.id]?.size ?? 0), 0)
 
   function handleStart() {
+    // Build from the actual per-verb selection: skip excluded verbs and any verb
+    // with no levels selected, and serve exactly the chosen level mix per verb.
     const selections = verbs
-      .filter(v => !excluded.has(v.id))
+      .filter(v => !excluded.has(v.id) && (verbLevels[v.id]?.size ?? 0) > 0)
       .map(v => ({
         verb: v,
-        levels: [...(verbLevels[v.id] ?? new Set([1]))].sort(),
+        levels: [...verbLevels[v.id]].sort((a, b) => a - b),
       }))
     navigate('/verb-custom-quiz', { state: { selections, categoryTitle } })
   }
@@ -102,12 +107,12 @@ export default function VerbCustomQuizSelect() {
     const configuration = {
       categoryTitle,
       verbs: verbs
-        .filter(v => !excluded.has(v.id))
+        .filter(v => !excluded.has(v.id) && (verbLevels[v.id]?.size ?? 0) > 0)
         .map(v => ({
           id: v.id,
           spanish_infinitive: v.spanish_infinitive,
           english: v.english,
-          levels: [...(verbLevels[v.id] ?? new Set([1, 2, 3, 4]))].sort(),
+          levels: [...verbLevels[v.id]].sort((a, b) => a - b),
         })),
     }
     const { error } = await supabase.from('saved_quizzes').insert({
